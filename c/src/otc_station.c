@@ -1,0 +1,991 @@
+/* Station, set, constituent and validation accessors (SDK spec 4.4-4.7, 6.4).
+ * A station owns its parsed line; every pointer handed out is borrowed from it. */
+#include "otc_internal.h"
+
+/* --------------------------------------------------------------- building */
+
+void otc__fill_validation(otc_validation_t *v, const cJSON *row)
+{
+    const cJSON *prev = otc__jget(row, "previous_release");
+    memset(v, 0, sizeof *v);
+    v->struct_size = sizeof *v;
+    v->set_id = otc__jstr(row, "set_id");
+    v->reference_source = otc__jstr(row, "reference_source");
+    v->reference_station = otc__jstr(row, "reference_station");
+    v->reference_distance_km = otc__jnum(row, "reference_distance_km");
+    v->window = otc__jstr(row, "window");
+    v->time_mae_min = otc__jnum(row, "time_mae_min");
+    v->time_p95_min = otc__jnum(row, "time_p95_min");
+    v->time_bias_min = otc__jnum(row, "time_bias_min");
+    v->height_mae_m = otc__jnum(row, "height_mae_m");
+    v->range_error_m = otc__jnum(row, "range_error_m");
+    v->missed_events = otc__jint(row, "missed_events");
+    v->extra_events = otc__jint(row, "extra_events");
+    /* without previous_release its numbers read as missing (NaN, -1), not as zeros */
+    v->previous_release.time_mae_min = v->previous_release.time_p95_min = v->previous_release.time_bias_min = NAN;
+    v->previous_release.height_mae_m = v->previous_release.range_error_m = NAN;
+    v->previous_release.missed_events = v->previous_release.extra_events = -1;
+    if (cJSON_IsObject(prev)) {
+        v->has_previous_release = true;
+        v->previous_release.time_mae_min = otc__jnum(prev, "time_mae_min");
+        v->previous_release.time_p95_min = otc__jnum(prev, "time_p95_min");
+        v->previous_release.time_bias_min = otc__jnum(prev, "time_bias_min");
+        v->previous_release.height_mae_m = otc__jnum(prev, "height_mae_m");
+        v->previous_release.range_error_m = otc__jnum(prev, "range_error_m");
+        v->previous_release.missed_events = otc__jint(prev, "missed_events");
+        v->previous_release.extra_events = otc__jint(prev, "extra_events");
+    }
+}
+
+/* A string of the parsed line (borrowed from the station), or "" when absent. */
+static const char *borrowed(const cJSON *j, const char *key)
+{
+    const char *v = otc__jstr(j, key);
+    return v ? v : "";
+}
+
+void otc__fill_constituent(otc_constituent_t *c, const cJSON *j)
+{
+    memset(c, 0, sizeof *c);
+    c->struct_size = sizeof *c;
+    c->name = borrowed(j, "name");
+    c->source_name = borrowed(j, "source_name");
+    c->doodson = borrowed(j, "doodson");
+    c->kept_reason = borrowed(j, "kept_reason");
+    c->speed_deg_per_hour = otc__jnum(j, "speed_deg_per_hour");
+    c->amplitude_m = otc__jnum(j, "amplitude_m");
+    c->phase_deg = otc__jnum(j, "phase_deg");
+    c->amp_uncertainty_m = otc__jnum(j, "amp_uncertainty_m");
+    c->phase_uncertainty_deg = otc__jnum(j, "phase_uncertainty_deg");
+}
+
+static int set_ptr_cmp(const void *a, const void *b)
+{
+    const otc_set *x = *(otc_set *const *)a, *y = *(otc_set *const *)b;
+    const cJSON *p = otc__jstr_item(x->json, "set_id"), *q = otc__jstr_item(y->json, "set_id");
+    if (x->recommended != y->recommended) return x->recommended ? -1 : 1;
+    if (!p || !q) return p ? 1 : (q ? -1 : 0);
+    return otc__bytes_cmp(p->valuestring, otc__jstr_len(p), q->valuestring, otc__jstr_len(q));   /* in full (CR2 DR33) */
+}
+
+/* by window, stable (ties keep file order) */
+static void sort_by_window(const otc_validation_t **v, size_t n)
+{
+    size_t i, j;
+    for (i = 1; i < n; i++) {
+        const otc_validation_t *x = v[i];
+        j = i;
+        while (j > 0 && otc__strcmp_null(v[j - 1]->window, x->window) > 0) {
+            v[j] = v[j - 1];
+            j--;
+        }
+        v[j] = x;
+    }
+}
+
+static void free_sets(otc_station_t *st)
+{
+    size_t i;
+    if (!st->sets) return;   /* the calloc failed: there is nothing in it to free */
+    for (i = 0; i < st->n_sets; i++) {
+        free(st->sets[i].cons);
+        free((void *)st->sets[i].val);
+        free(st->sets[i].flags);
+        free(st->sets[i].drops);
+        free(st->sets[i].tb.ev);
+    }
+    free(st->sets);
+}
+
+void otc_station_free(otc_station_t *st)
+{
+    if (!st) return;
+    free(st->source_records);
+    free(st->offset_flags);
+    free_sets(st);
+    free(st->order_all);
+    free(st->order_usable);
+    free(st->val);
+    cJSON_Delete(st->root);
+    free(st);
+}
+
+static otc_status build_set(const otc_release *rel, size_t n_val, otc_validation_t *validation, otc_station_t *parent, otc_set *s, const cJSON *j, const cJSON *rec_id, const cJSON *vals)
+{
+    const cJSON *cons = otc__jget(j, "constituents"), *flags = otc__jget(j, "qc_flags");
+    const cJSON *drops = otc__jget(j, "dropped_constituents"), *x;
+    const cJSON *set_id = otc__jstr_item(j, "set_id");
+    size_t i;
+    s->json = j;
+    s->fallback.json = otc__jget(j, "fallback");
+    s->station = parent;
+    s->conv = otc__find_convention(rel, otc__jstr(j, "convention_id"));
+    s->lic = otc__find_licence(rel, otc__jstr(j, "licence_id"));
+    s->recommended = otc__jstr_same(rec_id, set_id);   /* in full: a NUL inside never matches less (CR2 DR33) */
+    s->no_constants = otc__parse_qc_status(otc__jstr(j, "qc_status")) == OTC_QC_STATUS_NO_CONSTANTS;
+    s->n_cons = cJSON_IsArray(cons) ? (size_t)cJSON_GetArraySize(cons) : 0;
+    s->cons = (otc_constituent_t *)calloc(s->n_cons ? s->n_cons : 1, sizeof *s->cons);
+    if (!s->cons) return OTC_E_NOMEM;
+    i = 0;
+    if (cJSON_IsArray(cons)) cJSON_ArrayForEach(x, cons) otc__fill_constituent(&s->cons[i++], x);
+    s->n_flags = cJSON_IsArray(flags) ? (size_t)cJSON_GetArraySize(flags) : 0;
+    s->flags = (otc_qc_flag *)calloc(s->n_flags ? s->n_flags : 1, sizeof *s->flags);
+    if (!s->flags) return OTC_E_NOMEM;
+    i = 0;
+    if (cJSON_IsArray(flags)) cJSON_ArrayForEach(x, flags) s->flags[i++].json = x;
+    s->n_drops = cJSON_IsArray(drops) ? (size_t)cJSON_GetArraySize(drops) : 0;
+    s->drops = (otc_dropped *)calloc(s->n_drops ? s->n_drops : 1, sizeof *s->drops);
+    if (!s->drops) return OTC_E_NOMEM;
+    i = 0;
+    if (cJSON_IsArray(drops)) cJSON_ArrayForEach(x, drops) s->drops[i++].json = x;
+    s->span.json = otc__jget(j, "record_span");
+    s->has_span = cJSON_IsObject(s->span.json);
+    s->datum.json = otc__jget(j, "datum");
+    s->has_datum = cJSON_IsObject(s->datum.json);
+    s->tb.json = otc__jget(j, "time_base");
+    s->has_tb = cJSON_IsObject(s->tb.json);
+    if (s->has_tb) {
+        const cJSON *ev = otc__jget(s->tb.json, "evidence");
+        s->tb.n_ev = cJSON_IsArray(ev) ? (size_t)cJSON_GetArraySize(ev) : 0;
+        s->tb.ev = (otc_time_base_evidence *)calloc(s->tb.n_ev ? s->tb.n_ev : 1, sizeof *s->tb.ev);
+        if (!s->tb.ev) return OTC_E_NOMEM;
+        i = 0;
+        if (cJSON_IsArray(ev)) cJSON_ArrayForEach(x, ev) s->tb.ev[i++].json = x;
+    }
+    s->build.json = otc__jget(otc__jget(j, "provenance"), "build");
+    s->has_build = cJSON_IsObject(s->build.json);
+    /* the station's validation rows for this set, by window */
+    s->val = (const otc_validation_t **)calloc(n_val ? n_val : 1, sizeof *s->val);
+    if (!s->val) return OTC_E_NOMEM;
+    i = 0;
+    if (cJSON_IsArray(vals)) {
+        cJSON_ArrayForEach(x, vals) {   /* validation[i] is the i-th row */
+            if (otc__jstr_same(otc__jstr_item(x, "set_id"), set_id)) s->val[s->n_val++] = &validation[i];
+            i++;
+        }
+    }
+    sort_by_window(s->val, s->n_val);
+    return OTC_OK;
+}
+
+static void bind_station_fields(otc_station_t *station, const otc__prepared_station_fields *prepared)
+{
+    station->source_records = prepared->source_records;
+    station->n_source_records = prepared->n_source_records;
+    station->offset_flags = prepared->offset_flags;
+    station->n_offset_flags = prepared->n_offset_flags;
+    station->offset_fallback = prepared->offset_fallback;
+    station->offset_vintage = prepared->offset_vintage;
+    station->offset_provenance = prepared->offset_provenance;
+    station->root = prepared->root;
+    station->rel = prepared->rel;
+    station->kind = prepared->kind;
+    station->sets = prepared->sets;
+    station->n_sets = prepared->n_sets;
+    station->order_all = prepared->order_all;
+    station->n_all = prepared->n_all;
+    station->order_usable = prepared->order_usable;
+    station->n_usable = prepared->n_usable;
+    station->rec = prepared->rec;
+    station->val = prepared->val;
+    station->n_val = prepared->n_val;
+}
+
+void otc__station_prepared_clear(otc__prepared_station_fields *prepared)
+{
+    if (!prepared) return;
+    if (prepared->destination) {
+        bind_station_fields(prepared->destination, prepared);
+        otc_station_free(prepared->destination);
+    }
+    memset(prepared, 0, sizeof *prepared);
+}
+
+otc_status otc__station_bind_prepared_fields(otc__prepared_station_fields *prepared, otc_station_t **out)
+{
+    otc_station_t *station;
+    if (!prepared || !out || !prepared->complete || !prepared->destination || !prepared->root) return OTC_E_INVALID_ARGUMENT;
+    station = prepared->destination;
+    bind_station_fields(station, prepared);
+    memset(prepared, 0, sizeof *prepared);
+    *out = station;
+    return OTC_OK;
+}
+
+otc_status otc__station_prepare_fields(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc__prepared_station_fields *prepared)
+{
+    otc_station_t *destination = (otc_station_t *)calloc(1, sizeof *destination);
+    const cJSON *sets = otc__jget(root, "constant_sets"), *vals = otc__jget(root, "validation"), *x;
+    const cJSON *rec_id = otc__jstr_item(root, "recommended_set_id");
+    size_t i;
+    otc_status rc = OTC_OK;
+    memset(prepared, 0, sizeof *prepared);
+    prepared->destination = destination;
+    if (!prepared->destination) { cJSON_Delete(root); return OTC_E_NOMEM; }
+    prepared->root = root;
+    prepared->rel = rel;
+    prepared->kind = kind;
+    {
+        const cJSON *records = otc__jget(root, "source_records"), *record;
+        const cJSON *off = otc__jget(root, "subordinate_offsets"), *flags = otc__jget(off, "qc_flags");
+        prepared->n_source_records = cJSON_IsArray(records) ? (size_t)cJSON_GetArraySize(records) : 0;
+        prepared->source_records = (otc_source_record *)calloc(prepared->n_source_records ? prepared->n_source_records : 1, sizeof *prepared->source_records);
+        prepared->n_offset_flags = cJSON_IsArray(flags) ? (size_t)cJSON_GetArraySize(flags) : 0;
+        prepared->offset_flags = (otc_qc_flag *)calloc(prepared->n_offset_flags ? prepared->n_offset_flags : 1, sizeof *prepared->offset_flags);
+        if (!prepared->source_records || !prepared->offset_flags) { return OTC_E_NOMEM; }
+        i = 0;
+        cJSON_ArrayForEach(record, records) { prepared->source_records[i].json = record; prepared->source_records[i++].rel = rel; }
+        i = 0;
+        cJSON_ArrayForEach(record, flags) prepared->offset_flags[i++].json = record;
+        prepared->offset_fallback.json = otc__jget(off, "fallback");
+        prepared->offset_vintage.json = otc__jget(off, "vintage");
+        prepared->offset_provenance.json = otc__jget(off, "provenance");
+    }
+
+    prepared->n_val = cJSON_IsArray(vals) ? (size_t)cJSON_GetArraySize(vals) : 0;
+    prepared->val = (otc_validation_t *)calloc(prepared->n_val ? prepared->n_val : 1, sizeof *prepared->val);
+    prepared->n_sets = cJSON_IsArray(sets) ? (size_t)cJSON_GetArraySize(sets) : 0;
+    prepared->sets = (otc_set *)calloc(prepared->n_sets ? prepared->n_sets : 1, sizeof *prepared->sets);
+    prepared->order_all = (otc_set **)calloc(prepared->n_sets ? prepared->n_sets : 1, sizeof *prepared->order_all);
+    prepared->order_usable = (otc_set **)calloc(prepared->n_sets ? prepared->n_sets : 1, sizeof *prepared->order_usable);
+    if (!prepared->val || !prepared->sets || !prepared->order_all || !prepared->order_usable) { return OTC_E_NOMEM; }
+    i = 0;
+    if (cJSON_IsArray(vals)) cJSON_ArrayForEach(x, vals) otc__fill_validation(&prepared->val[i++], x);
+    i = 0;
+    if (cJSON_IsArray(sets)) {
+        cJSON_ArrayForEach(x, sets) {
+            if ((rc = build_set(rel, prepared->n_val, prepared->val, prepared->destination, &prepared->sets[i], x, rec_id, vals)) != OTC_OK) break;
+            /* under commercial_only the recommended set is the effective one (spec 4.2, K-NC DR106) */
+            if (eff_pos != OTC__REC_FROM_LINE) prepared->sets[i].recommended = (long)i == eff_pos;
+            if (prepared->sets[i].recommended) prepared->rec = &prepared->sets[i];
+            prepared->order_all[i] = &prepared->sets[i];
+            i++;
+        }
+    }
+    if (rc != OTC_OK) {
+        prepared->n_sets = i + 1;
+        return rc;
+    }
+    prepared->n_all = prepared->n_sets;
+    if (prepared->n_all > 1) qsort(prepared->order_all, prepared->n_all, sizeof *prepared->order_all, set_ptr_cmp);
+    for (i = 0; i < prepared->n_all; i++)
+        if (!prepared->order_all[i]->no_constants) prepared->order_usable[prepared->n_usable++] = prepared->order_all[i];
+    prepared->complete = true;
+    return OTC_OK;
+}
+
+otc_status otc__station_build(const otc_release *rel, cJSON *root, otc_kind kind, long eff_pos, otc_station_t **out)
+{
+    otc__prepared_station_fields prepared;
+    otc_status status;
+    *out = NULL;
+    status = otc__station_prepare_fields(rel, root, kind, eff_pos, &prepared);
+    if (status == OTC_OK) status = otc__station_bind_prepared_fields(&prepared, out);
+    if (status != OTC_OK) otc__station_prepared_clear(&prepared);
+    return status;
+}
+
+/* --------------------------------------------------------- station fields */
+
+#define ST_STR(NAME, KEY)                                                                      \
+    otc_status NAME(const otc_station_t *st, char *buf, size_t len, size_t *needed)            \
+    {                                                                                          \
+        return st ? otc__copy_member(st->root, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+ST_STR(otc_station_station_id, "station_id")
+ST_STR(otc_station_name, "name")
+ST_STR(otc_station_country, "country")
+ST_STR(otc_station_timezone, "timezone")
+
+double otc_station_lat(const otc_station_t *st) { return st ? otc__jnum(st->root, "lat") : NAN; }
+double otc_station_lon(const otc_station_t *st) { return st ? otc__jnum(st->root, "lon") : NAN; }
+
+otc_station_type_t otc_station_type(const otc_station_t *st)
+{
+    return st ? otc__parse_station_type(otc__jstr(st->root, "type")) : OTC_STATION_TYPE_UNSET;
+}
+
+otc_kind otc_station_kind(const otc_station_t *st) { return st ? st->kind : OTC_KIND_UNSET; }
+
+otc_station_status_t otc_station_status(const otc_station_t *st)
+{
+    if (!st) return OTC_STATION_STATUS_UNSET;
+    /* a line with no status (or null) is an active station (CR2 DR28) */
+    return otc__jget(st->root, "status") ? otc__parse_station_status(otc__jstr(st->root, "status")) : OTC_STATION_STATUS_ACTIVE;
+}
+
+bool otc_station_is_reference(const otc_station_t *st) { return otc_station_type(st) == OTC_STATION_TYPE_REFERENCE; }
+bool otc_station_is_subordinate(const otc_station_t *st)
+{
+    return otc_station_type(st) == OTC_STATION_TYPE_SUBORDINATE;
+}
+bool otc_station_is_tide(const otc_station_t *st) { return otc_station_kind(st) == OTC_KIND_TIDE; }
+bool otc_station_is_current(const otc_station_t *st) { return otc_station_kind(st) == OTC_KIND_CURRENT; }
+
+static const cJSON *aliases_of(const otc_station_t *st)
+{
+    const cJSON *a = st ? otc__jget(st->root, "aliases") : NULL;
+    return cJSON_IsObject(a) ? a : NULL;
+}
+
+size_t otc_station_alias_system_count(const otc_station_t *st)
+{
+    const cJSON *a = aliases_of(st);
+    return a ? (size_t)cJSON_GetArraySize(a) : 0;
+}
+
+otc_status otc_station_alias_system_at(const otc_station_t *st, size_t i, char *buf, size_t len, size_t *needed)
+{
+    const cJSON *a = aliases_of(st);
+    if (!a || i >= (size_t)cJSON_GetArraySize(a)) return OTC_E_INVALID_ARGUMENT;
+    return otc__copy_str(cJSON_GetArrayItem(a, (int)i)->string, buf, len, needed);
+}
+
+size_t otc_station_alias_count(const otc_station_t *st, const char *system)
+{
+    const cJSON *v = system ? otc__jget(aliases_of(st), system) : NULL;
+    if (cJSON_IsString(v)) return 1;
+    return cJSON_IsArray(v) ? (size_t)cJSON_GetArraySize(v) : 0;
+}
+
+otc_status otc_station_alias_at(const otc_station_t *st, const char *system, size_t i, char *buf, size_t len,
+                                size_t *needed)
+{
+    const cJSON *v = system ? otc__jget(aliases_of(st), system) : NULL;
+    if (cJSON_IsString(v) && i == 0) return otc__copy_jstr(v, buf, len, needed);
+    if (cJSON_IsArray(v) && i < (size_t)cJSON_GetArraySize(v)) {
+        const cJSON *x = cJSON_GetArrayItem(v, (int)i);
+        if (cJSON_IsString(x)) return otc__copy_jstr(x, buf, len, needed);
+    }
+    return OTC_E_INVALID_ARGUMENT;
+}
+
+otc_status otc_station_raw_json(const otc_station_t *st, char *buf, size_t len, size_t *needed)
+{
+    return st ? otc__copy_json(st->root, buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+otc_status otc_station_recommended_set(const otc_station_t *st, const otc_set **out)
+{
+    if (!st || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = st->rec;
+    return st->rec ? OTC_OK : OTC_E_NOT_FOUND;
+}
+
+size_t otc_station_set_count(const otc_station_t *st, bool include_no_constants)
+{
+    if (!st) return 0;
+    return include_no_constants ? st->n_all : st->n_usable;
+}
+
+otc_status otc_station_set_at(const otc_station_t *st, bool include_no_constants, size_t i, const otc_set **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!st || !out || i >= otc_station_set_count(st, include_no_constants)) return OTC_E_INVALID_ARGUMENT;
+    *out = include_no_constants ? st->order_all[i] : st->order_usable[i];
+    return OTC_OK;
+}
+
+otc_status otc_station_set(const otc_station_t *st, const char *set_id, const otc_set **out)
+{
+    size_t i;
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!st || !out || !set_id) return OTC_E_INVALID_ARGUMENT;
+    for (i = 0; i < st->n_sets; i++) {
+        if (otc__jstr_is(otc__jstr_item(st->sets[i].json, "set_id"), set_id)) { *out = &st->sets[i]; return OTC_OK; }
+    }
+    return OTC_E_NOT_FOUND;
+}
+
+otc_status otc_station_offsets(const otc_station_t *st, otc_offsets_t *out)
+{
+    const cJSON *off;
+    if (!st || !out || out->struct_size < sizeof *out) return OTC_E_INVALID_ARGUMENT;
+    /* every field is set, also on NOT_FOUND: no value from an earlier call stays */
+    out->reference_station_id = NULL;
+    out->time_offset_high_min = out->time_offset_low_min = NAN;
+    out->height_offset_high = out->height_offset_low = NAN;
+    out->height_adjusted_type = OTC_HEIGHT_ADJUSTED_TYPE_UNSET;
+    out->licence_id = NULL;
+out->offset_id = out->source = out->source_version = out->source_record_id = NULL;
+out->source_type = OTC_SOURCE_TYPE_UNSET; out->qc_status = OTC_QC_STATUS_UNSET;
+out->qc_flags = NULL; out->qc_flags_count = 0;
+out->fallback = NULL; out->vintage = NULL; out->provenance = NULL;
+off = otc__jget(st->root, "subordinate_offsets");
+
+    if (!cJSON_IsObject(off)) return OTC_E_NOT_FOUND;
+    out->reference_station_id = otc__jstr(off, "reference_station_id");
+    out->time_offset_high_min = otc__jnum(off, "time_offset_high_min");
+    out->time_offset_low_min = otc__jnum(off, "time_offset_low_min");
+    out->height_offset_high = otc__jnum(off, "height_offset_high");
+    out->height_offset_low = otc__jnum(off, "height_offset_low");
+    out->height_adjusted_type = otc__parse_height_adjusted_type(otc__jstr(off, "height_adjusted_type"));
+    out->licence_id = otc__jstr(off, "licence_id");
+    out->offset_id = otc__jstr(off, "offset_id"); out->source = otc__jstr(off, "source");
+    out->source_version = otc__jstr(off, "source_version"); out->source_record_id = otc__jstr(off, "source_record_id");
+    out->source_type = otc__parse_source_type(otc__jstr(off, "source_type"));
+    out->qc_status = otc__parse_qc_status(otc__jstr(off, "qc_status"));
+    out->qc_flags = st->offset_flags; out->qc_flags_count = st->n_offset_flags;
+    if (st->offset_fallback.json) out->fallback = &st->offset_fallback;
+    if (st->offset_vintage.json) out->vintage = &st->offset_vintage;
+    if (st->offset_provenance.json) out->provenance = &st->offset_provenance;
+
+    return OTC_OK;
+}
+
+size_t otc_station_validation_count(const otc_station_t *st) { return st ? st->n_val : 0; }
+
+otc_status otc_station_validation_at(const otc_station_t *st, size_t i, const otc_validation_t **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!st || !out || i >= st->n_val) return OTC_E_INVALID_ARGUMENT;
+    *out = &st->val[i];
+    return OTC_OK;
+}
+
+/* ------------------------------------------------------------- tombstones */
+
+#define TB_STR(NAME, KEY)                                                                      \
+    otc_status NAME(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed)           \
+    {                                                                                          \
+        return t ? otc__copy_member(t->root, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+TB_STR(otc_tombstone_station_id, "station_id")
+TB_STR(otc_tombstone_name, "name")
+TB_STR(otc_tombstone_removed_in, "removed_in")
+TB_STR(otc_tombstone_merged_into, "merged_into")
+TB_STR(otc_tombstone_detail, "detail")
+
+otc_removed_reason otc_tombstone_removed_reason(const otc_tombstone_t *t)
+{
+    return t ? otc__parse_removed_reason(otc__jstr(t->root, "removed_reason")) : OTC_REMOVED_REASON_UNSET;
+}
+
+otc_station_status_t otc_tombstone_status(const otc_tombstone_t *t)
+{
+    return t ? otc__parse_station_status(otc__jstr(t->root, "status")) : OTC_STATION_STATUS_UNSET;
+}
+
+otc_status otc_tombstone_raw_json(const otc_tombstone_t *t, char *buf, size_t len, size_t *needed)
+{
+    return t ? otc__copy_json(t->root, buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+/* ------------------------------------------------------------------- sets */
+
+#define SET_STR(NAME, KEY)                                                                     \
+    otc_status NAME(const otc_set *s, char *buf, size_t len, size_t *needed)                   \
+    {                                                                                          \
+        return s ? otc__copy_member(s->json, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+SET_STR(otc_set_set_id, "set_id")
+SET_STR(otc_set_source, "source")
+SET_STR(otc_set_source_record_id, "source_record_id")
+SET_STR(otc_set_source_version, "source_version")
+
+otc_source_type otc_set_source_type(const otc_set *s)
+{
+    return s ? otc__parse_source_type(otc__jstr(s->json, "source_type")) : OTC_SOURCE_TYPE_UNSET;
+}
+otc_quantity otc_set_quantity(const otc_set *s)
+{
+    return s ? otc__parse_quantity(otc__jstr(s->json, "quantity")) : OTC_QUANTITY_UNSET;
+}
+otc_qc_status otc_set_qc_status(const otc_set *s)
+{
+    return s ? otc__parse_qc_status(otc__jstr(s->json, "qc_status")) : OTC_QC_STATUS_UNSET;
+}
+bool otc_set_is_recommended(const otc_set *s) { return s && s->recommended; }
+
+otc_status otc_set_raw_json(const otc_set *s, char *buf, size_t len, size_t *needed)
+{
+    return s ? otc__copy_json(s->json, buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+otc_status otc_set_record_span(const otc_set *s, const otc_record_span **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = s->has_span ? &s->span : NULL;
+    return s->has_span ? OTC_OK : OTC_E_NOT_FOUND;
+}
+otc_status otc_record_span_start(const otc_record_span *rs, char *buf, size_t len, size_t *needed)
+{
+    return rs ? otc__copy_member(rs->json, "start", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+otc_status otc_record_span_end(const otc_record_span *rs, char *buf, size_t len, size_t *needed)
+{
+    return rs ? otc__copy_member(rs->json, "end", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+int64_t otc_record_span_good_samples(const otc_record_span *rs) { return rs ? otc__jint(rs->json, "good_samples") : -1; }
+
+otc_status otc_set_datum(const otc_set *s, const otc_datum **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = s->has_datum ? &s->datum : NULL;
+    return s->has_datum ? OTC_OK : OTC_E_NOT_FOUND;
+}
+double otc_datum_msl_offset_m(const otc_datum *d) { return d ? otc__jnum(d->json, "msl_offset_m") : NAN; }
+size_t otc_datum_named_count(const otc_datum *d)
+{
+    const cJSON *n = d ? otc__jget(d->json, "named") : NULL;
+    return cJSON_IsObject(n) ? (size_t)cJSON_GetArraySize(n) : 0;
+}
+otc_status otc_datum_named_at(const otc_datum *d, size_t i, char *name, size_t len, size_t *needed, double *value)
+{
+    const cJSON *n, *x;
+    if (!d || !value || i >= otc_datum_named_count(d)) return OTC_E_INVALID_ARGUMENT;
+    n = otc__jget(d->json, "named");
+    x = cJSON_GetArrayItem(n, (int)i);
+    *value = cJSON_IsNumber(x) ? x->valuedouble : NAN;
+    return otc__copy_str(x->string, name, len, needed);
+}
+
+size_t otc_set_qc_flag_count(const otc_set *s) { return s ? s->n_flags : 0; }
+otc_status otc_set_qc_flag_at(const otc_set *s, size_t i, const otc_qc_flag **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out || i >= s->n_flags) return OTC_E_INVALID_ARGUMENT;
+    *out = &s->flags[i];
+    return OTC_OK;
+}
+otc_qc_flag_kind otc_qc_flag_flag(const otc_qc_flag *f)
+{
+    return f ? otc__parse_qc_flag(otc__jstr(f->json, "flag")) : OTC_QC_FLAG_UNSET;
+}
+otc_status otc_qc_flag_reason(const otc_qc_flag *f, char *buf, size_t len, size_t *needed)
+{
+    return f ? otc__copy_member(f->json, "reason", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+otc_status otc_qc_flag_values_json(const otc_qc_flag *f, char *buf, size_t len, size_t *needed)
+{
+    return f ? otc__copy_json(otc__jget(f->json, "values"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+size_t otc_set_dropped_count(const otc_set *s) { return s ? s->n_drops : 0; }
+otc_status otc_set_dropped_at(const otc_set *s, size_t i, const otc_dropped **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out || i >= s->n_drops) return OTC_E_INVALID_ARGUMENT;
+    *out = &s->drops[i];
+    return OTC_OK;
+}
+otc_status otc_dropped_name(const otc_dropped *d, char *buf, size_t len, size_t *needed)
+{
+    return d ? otc__copy_member(d->json, "name", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+otc_dropped_reason otc_dropped_dropped_reason(const otc_dropped *d)
+{
+    return d ? otc__parse_dropped_reason(otc__jstr(d->json, "dropped_reason")) : OTC_DROPPED_REASON_UNSET;
+}
+otc_status otc_dropped_detail(const otc_dropped *d, char *buf, size_t len, size_t *needed)
+{
+    return d ? otc__copy_member(d->json, "detail", buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+otc_status otc_set_convention(const otc_set *s, const otc_convention **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = s->conv;
+    return s->conv ? OTC_OK : OTC_E_NOT_FOUND;
+}
+otc_status otc_set_licence(const otc_set *s, const otc_licence **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = s->lic;
+    return s->lic ? OTC_OK : OTC_E_NOT_FOUND;
+}
+
+static const cJSON *prov_of(const otc_set *s)
+{
+    const cJSON *p = otc__jget(s->json, "provenance");
+    return cJSON_IsObject(p) ? p : NULL;
+}
+
+otc_status otc_set_provenance_field(const otc_set *s, const char *field, char *buf, size_t len, size_t *needed)
+{
+    const cJSON *v;
+    if (!s || !field) return OTC_E_INVALID_ARGUMENT;
+    v = otc__jget(prov_of(s), field);
+    if (cJSON_IsString(v)) return otc__copy_jstr(v, buf, len, needed);
+    return otc__copy_json(v, buf, len, needed);
+}
+
+otc_status otc_set_provenance_json(const otc_set *s, char *buf, size_t len, size_t *needed)
+{
+    const cJSON *p;
+    if (!s) return OTC_E_INVALID_ARGUMENT;
+    p = prov_of(s);
+    return otc__copy_json(p, buf, len, needed);   /* absent: OTC_E_NOT_FOUND, as for every other value (CR D34) */
+}
+
+#define PROV_STR(NAME, KEY)                                                                    \
+    otc_status NAME(const otc_set *s, char *buf, size_t len, size_t *needed)                   \
+    {                                                                                          \
+        return s ? otc__copy_member(prov_of(s), KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+#define PROV_JSON(NAME, KEY)                                                                   \
+    otc_status NAME(const otc_set *s, char *buf, size_t len, size_t *needed)                   \
+    {                                                                                          \
+        return s ? otc__copy_json(otc__jget(prov_of(s), KEY), buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+PROV_STR(otc_set_provenance_adapter_version, "adapter_version")
+PROV_STR(otc_set_provenance_selection_reason, "selection_reason")
+PROV_STR(otc_set_provenance_carried_from_release, "carried_from_release")
+PROV_JSON(otc_set_provenance_input_sha256_json, "input_sha256")
+PROV_JSON(otc_set_provenance_decision_json, "decision")
+
+otc_status otc_set_provenance_build(const otc_set *s, const otc_provenance_build **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = s->has_build ? &s->build : NULL;
+    return s->has_build ? OTC_OK : OTC_E_NOT_FOUND;
+}
+
+#define BUILD_STR(NAME, KEY)                                                                   \
+    otc_status NAME(const otc_provenance_build *b, char *buf, size_t len, size_t *needed)      \
+    {                                                                                          \
+        return b ? otc__copy_member(b->json, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+/* A build time; one that is not an RFC 3339 time with real calendar fields is
+ * not found (null), and the station still loads (spec 4.6, CR2 DR6). */
+#define BUILD_TIME(NAME, KEY)                                                                  \
+    otc_status NAME(const otc_provenance_build *b, char *buf, size_t len, size_t *needed)      \
+    {                                                                                          \
+        const char *v;                                                                         \
+        char t[21];                                                                            \
+        if (!b) return OTC_E_INVALID_ARGUMENT;                                                 \
+        v = otc__jstr(b->json, KEY);                                                           \
+        return otc__copy_str(v && otc__utc_time(v, t) ? v : NULL, buf, len, needed);           \
+    }
+BUILD_STR(otc_provenance_build_build_commit, "build_commit")
+BUILD_TIME(otc_provenance_build_built_at, "built_at")
+BUILD_TIME(otc_provenance_build_fetched_at, "fetched_at")
+BUILD_STR(otc_provenance_build_run_id, "run_id")
+
+otc_status otc_provenance_build_tool_versions_json(const otc_provenance_build *b, char *buf, size_t len,
+                                                   size_t *needed)
+{
+    return b ? otc__copy_json(otc__jget(b->json, "tool_versions"), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+/* ---------------------------------------------------------------- time base */
+
+/* time_base.correction, or NULL when it is null or absent */
+static const cJSON *correction_of(const otc_time_base_t *tb)
+{
+    const cJSON *c = tb ? otc__jget(tb->json, "correction") : NULL;
+    return cJSON_IsObject(c) ? c : NULL;
+}
+
+otc_status otc_set_time_base(const otc_set *s, const otc_time_base_t **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out) return OTC_E_INVALID_ARGUMENT;
+    *out = s->has_tb ? &s->tb : NULL;
+    return s->has_tb ? OTC_OK : OTC_E_NOT_FOUND;
+}
+
+otc_time_base_code_t otc_time_base_code(const otc_time_base_t *tb)
+{
+    return tb ? otc__parse_time_base_code(otc__jstr(tb->json, "code")) : OTC_TIME_BASE_CODE_UNSET;
+}
+
+#define TIMEBASE_STR(NAME, OBJ, KEY)                                                           \
+    otc_status NAME(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed)          \
+    {                                                                                          \
+        return tb ? otc__copy_member(OBJ, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+TIMEBASE_STR(otc_time_base_reason, tb->json, "reason")
+TIMEBASE_STR(otc_time_base_declared, tb->json, "declared")
+TIMEBASE_STR(otc_time_base_published, tb->json, "published")
+TIMEBASE_STR(otc_time_base_decided_in, tb->json, "decided_in")
+TIMEBASE_STR(otc_time_base_decided_build_commit, tb->json, "decided_build_commit")
+TIMEBASE_STR(otc_time_base_correction_from, correction_of(tb), "from")
+TIMEBASE_STR(otc_time_base_correction_to, correction_of(tb), "to")
+
+otc_status otc_time_base_correction_json(const otc_time_base_t *tb, char *buf, size_t len, size_t *needed)
+{
+    return tb ? otc__copy_json(correction_of(tb), buf, len, needed) : OTC_E_INVALID_ARGUMENT;
+}
+
+static const cJSON *months_of(const otc_time_base_t *tb)
+{
+    const cJSON *m = tb ? otc__jget(tb->json, "months_dropped") : NULL;
+    return cJSON_IsArray(m) ? m : NULL;
+}
+
+size_t otc_time_base_months_dropped_count(const otc_time_base_t *tb)
+{
+    const cJSON *m = months_of(tb);
+    return m ? (size_t)cJSON_GetArraySize(m) : 0;
+}
+
+otc_status otc_time_base_months_dropped_at(const otc_time_base_t *tb, size_t i, char *buf, size_t len, size_t *needed)
+{
+    const cJSON *x;
+    if (!tb || i >= otc_time_base_months_dropped_count(tb)) return OTC_E_INVALID_ARGUMENT;
+    x = cJSON_GetArrayItem(months_of(tb), (int)i);
+    return cJSON_IsString(x) ? otc__copy_jstr(x, buf, len, needed) : otc__copy_json(x, buf, len, needed);
+}
+
+size_t otc_time_base_evidence_count(const otc_time_base_t *tb) { return tb ? tb->n_ev : 0; }
+
+otc_status otc_time_base_evidence_at(const otc_time_base_t *tb, size_t i, const otc_time_base_evidence **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!tb || !out || i >= tb->n_ev) return OTC_E_INVALID_ARGUMENT;
+    *out = &tb->ev[i];
+    return OTC_OK;
+}
+
+#define EVIDENCE_STR(NAME, KEY)                                                                \
+    otc_status NAME(const otc_time_base_evidence *ev, char *buf, size_t len, size_t *needed)   \
+    {                                                                                          \
+        return ev ? otc__copy_member(ev->json, KEY, buf, len, needed) : OTC_E_INVALID_ARGUMENT; \
+    }
+EVIDENCE_STR(otc_time_base_evidence_comparator_kind, "comparator_kind")
+EVIDENCE_STR(otc_time_base_evidence_comparator_id, "comparator_id")
+EVIDENCE_STR(otc_time_base_evidence_detail, "detail")
+
+double otc_time_base_evidence_distance_km(const otc_time_base_evidence *ev)
+{
+    return ev ? otc__jnum(ev->json, "distance_km") : NAN;
+}
+
+double otc_time_base_evidence_lag_min(const otc_time_base_evidence *ev)
+{
+    return ev ? otc__jnum(ev->json, "lag_min") : NAN;
+}
+
+size_t otc_set_validation_count(const otc_set *s) { return s ? s->n_val : 0; }
+otc_status otc_set_validation_at(const otc_set *s, size_t i, const otc_validation_t **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out || i >= s->n_val) return OTC_E_INVALID_ARGUMENT;
+    *out = s->val[i];
+    return OTC_OK;
+}
+
+size_t otc_set_constituent_count(const otc_set *s) { return s ? s->n_cons : 0; }
+otc_status otc_set_constituent_at(const otc_set *s, size_t i, const otc_constituent_t **out)
+{
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out || i >= s->n_cons) return OTC_E_INVALID_ARGUMENT;
+    *out = &s->cons[i];
+    return OTC_OK;
+}
+otc_status otc_set_constituent(const otc_set *s, const char *name, const otc_constituent_t **out)
+{
+    const cJSON *cons = s ? otc__jget(s->json, "constituents") : NULL, *x;
+    size_t i;
+    if (out) *out = NULL;   /* a failed call leaves no value behind */
+    if (!s || !out || !name) return OTC_E_INVALID_ARGUMENT;
+    if (!name[0]) return OTC_E_NOT_FOUND;   /* "" means absent in a constituent: it is no name to find */
+    /* the name in full, from the line: a constituent with no name is not "" (R2-073), and a name
+     * with a NUL inside is not the part before it (CR2 DR33) */
+    i = 0;
+    if (!cJSON_IsArray(cons)) cons = NULL;
+    cJSON_ArrayForEach(x, cons) {   /* s->cons[i] is the i-th item */
+        if (i < s->n_cons && otc__jstr_is(otc__jstr_item(x, "name"), name)) {
+            *out = &s->cons[i];
+            return OTC_OK;
+        }
+        i++;
+    }
+    return OTC_E_NOT_FOUND;
+}
+otc_status otc_constituent_raw_json(const otc_set *s, size_t i, char *buf, size_t len, size_t *needed)
+{
+    const cJSON *cons;
+    if (!s || i >= s->n_cons) return OTC_E_INVALID_ARGUMENT;
+    cons = otc__jget(s->json, "constituents");
+    return otc__copy_json(cJSON_GetArrayItem(cons, (int)i), buf, len, needed);
+}
+
+int otc_station_recommended_is_fallback(const otc_station_t *st)
+{
+    const cJSON *v = st ? otc__jget(st->root, "recommended_is_fallback") : NULL;
+    return cJSON_IsBool(v) ? cJSON_IsTrue(v) : -1;
+}
+otc_status otc_set_fallback(const otc_set *set, const otc_fallback **out)
+{
+    if (out) *out = NULL;
+    if (!set || !out) return OTC_E_INVALID_ARGUMENT;
+    if (!set->fallback.json) return OTC_E_NOT_FOUND;
+    *out = &set->fallback; return OTC_OK;
+}
+size_t otc_station_source_record_count(const otc_station_t *st) { return st ? st->n_source_records : 0; }
+otc_status otc_station_source_record_at(const otc_station_t *st, size_t index, const otc_source_record **out)
+{
+    if (out) *out = NULL;
+    if (!st || !out || index >= st->n_source_records) return OTC_E_INVALID_ARGUMENT;
+    *out = &st->source_records[index]; return OTC_OK;
+}
+
+otc_fallback_reason_t otc_fallback_reason(const otc_fallback *v) { return v ? otc__parse_fallback_reason(otc__jstr(v->json, "reason")) : OTC_FALLBACK_REASON_UNSET; }
+
+otc_status otc_fallback_basis(const otc_fallback *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "basis", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_fallback_otc_finding(const otc_fallback *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "otc_finding", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_fallback_preferred_set_id(const otc_fallback *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "preferred_set_id", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_fallback_raw_json(const otc_fallback *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(v->json, buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_source(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_source_version(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source_version", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_source_record_id(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source_record_id", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_source_role otc_source_record_role(const otc_source_record *v) { return v ? otc__parse_source_role(otc__jstr(v->json, "role")) : OTC_SOURCE_ROLE_UNSET; }
+
+otc_source_disposition otc_source_record_disposition(const otc_source_record *v) { return v ? otc__parse_source_disposition(otc__jstr(v->json, "disposition")) : OTC_SOURCE_DISPOSITION_UNSET; }
+
+otc_status otc_source_record_detail(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "detail", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_licence_id(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "licence_id", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_upstream_licence_id(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "upstream_licence_id", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_published_set_ids_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "published_set_ids"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+size_t otc_source_record_published_set_id_count(const otc_source_record *v) { const cJSON *a = v ? otc__jget(v->json, "published_set_ids") : NULL; return cJSON_IsArray(a) ? (size_t)cJSON_GetArraySize(a) : 0; }
+otc_status otc_source_record_published_set_id_at(const otc_source_record *v, size_t i, char *buf, size_t len, size_t *needed) { const cJSON *a = v ? otc__jget(v->json, "published_set_ids") : NULL; if (!v || i >= otc_source_record_published_set_id_count(v)) return OTC_E_INVALID_ARGUMENT; return otc__copy_jstr(cJSON_GetArrayItem(a, (int)i), buf, len, needed); }
+
+otc_status otc_source_record_provenance_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "provenance"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_original_metadata_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { if (!v) return OTC_E_INVALID_ARGUMENT; return otc__jget(v->json, "original_metadata") ? otc__copy_json(otc__jget(v->json, "original_metadata"), buf, len, needed) : otc__copy_str("{}", buf, len, needed); }
+
+otc_status otc_source_record_original_harmonics_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "original_harmonics"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_source_record_licence(const otc_source_record *v, const otc_licence **out) { if (out) *out = NULL; if (!v || !out) return OTC_E_INVALID_ARGUMENT; *out = otc__find_licence(v->rel, otc__jstr(v->json, "licence_id")); return *out ? OTC_OK : OTC_E_NOT_FOUND; }
+
+otc_status otc_source_record_upstream_licence(const otc_source_record *v, const otc_licence **out) { if (out) *out = NULL; if (!v || !out) return OTC_E_INVALID_ARGUMENT; *out = otc__find_licence(v->rel, otc__jstr(v->json, "upstream_licence_id")); return *out ? OTC_OK : OTC_E_NOT_FOUND; }
+
+otc_status otc_source_record_raw_json(const otc_source_record *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(v->json, buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+double otc_historical_offset_vintage_publication_year(const otc_historical_offset_vintage *v) { return v ? otc__jnum(v->json, "publication_year") : NAN; }
+
+otc_status otc_historical_offset_vintage_source_lifecycle(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source_lifecycle", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_removal_events_json(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "removal_events"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_current_validity(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "current_validity", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_current_accuracy(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "current_accuracy", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_reference_2020_equivalence(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "reference_2020_equivalence", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_vintage_reference_2020_equivalence_sha256(const otc_historical_offset_vintage *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "reference_2020_equivalence_sha256", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_source_manifest_sha256(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "source_manifest_sha256", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_input_sha256_json(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "input_sha256"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+size_t otc_historical_offset_provenance_input_sha256_count(const otc_historical_offset_provenance *v) { const cJSON *a = v ? otc__jget(v->json, "input_sha256") : NULL; return cJSON_IsArray(a) ? (size_t)cJSON_GetArraySize(a) : 0; }
+otc_status otc_historical_offset_provenance_input_sha256_at(const otc_historical_offset_provenance *v, size_t i, char *buf, size_t len, size_t *needed) { const cJSON *a = v ? otc__jget(v->json, "input_sha256") : NULL; if (!v || i >= otc_historical_offset_provenance_input_sha256_count(v)) return OTC_E_INVALID_ARGUMENT; return otc__copy_jstr(cJSON_GetArrayItem(a, (int)i), buf, len, needed); }
+
+otc_status otc_historical_offset_provenance_book(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "book", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+double otc_historical_offset_provenance_annual_table_row(const otc_historical_offset_provenance *v) { return v ? otc__jnum(v->json, "annual_table_row") : NAN; }
+
+double otc_historical_offset_provenance_printed_page(const otc_historical_offset_provenance *v) { return v ? otc__jnum(v->json, "printed_page") : NAN; }
+
+double otc_historical_offset_provenance_pdf_page(const otc_historical_offset_provenance *v) { return v ? otc__jnum(v->json, "pdf_page") : NAN; }
+
+otc_status otc_historical_offset_provenance_raw_row_text(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "raw_row_text", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_raw_values_json(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "raw_values_json", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_id_crosswalk_json(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "id_crosswalk"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_reference_binding_json(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_json(otc__jget(v->json, "reference_binding"), buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+
+otc_status otc_historical_offset_provenance_acceptance_report_sha256(const otc_historical_offset_provenance *v, char *buf, size_t len, size_t *needed) { return v ? otc__copy_member(v->json, "acceptance_report_sha256", buf, len, needed) : OTC_E_INVALID_ARGUMENT; }
+/* Source-bound NOAA2020 profiles. Current validity is never inferred. */
+static int digest_string(const cJSON *v)
+{
+    size_t i;
+    if (!cJSON_IsString(v) || otc__jstr_len(v) != 64) return 0;
+    for (i = 0; i < 64; i++) if (!((v->valuestring[i] >= 'a' && v->valuestring[i] <= 'f') || (v->valuestring[i] >= '0' && v->valuestring[i] <= '9'))) return 0;
+    return 1;
+}
+static int hashes(const cJSON *v)
+{
+    const cJSON *x, *y;
+    if (!cJSON_IsArray(v) || !cJSON_GetArraySize(v)) return 0;
+    cJSON_ArrayForEach(x, v) {
+        if (!digest_string(x)) return 0;
+        for (y = v->child; y != x; y = y->next) if (otc__jstr_same(x, y)) return 0;
+    }
+    return 1;
+}
+static int nonempty(const cJSON *o, const char *key)
+{
+    const char *s = otc__jstr(o, key);
+    if (!s) return 0;
+    for (; *s; s++) if (*s != ' ' && *s != '\t' && *s != '\r' && *s != '\n') return 1;
+    return 0;
+}
+static int subset_equal(const cJSON *actual, const cJSON *expected)
+{
+    const cJSON *v;
+    if (!cJSON_IsObject(actual)) return 0;
+    cJSON_ArrayForEach(v, expected) if (!cJSON_Compare(cJSON_GetObjectItemCaseSensitive(actual, v->string), v, 1)) return 0;
+    return 1;
+}
+int otc__historical_valid(const cJSON *off)
+{
+    const cJSON *vintage = otc__jget(off, "vintage"), *prov = otc__jget(off, "provenance"), *fallback = otc__jget(off, "fallback"), *flags = otc__jget(off, "qc_flags"), *flag;
+    const char *id = otc__jstr(off, "offset_id"), *text = NULL;
+    cJSON *expected = NULL, *raw = NULL;
+    int valid = 0;
+    if (id && !strcmp(id, "noaa-2020-atlantic-table2-2513")) text = "{\"offset_id\":\"noaa-2020-atlantic-table2-2513\",\"source\":\"noaa\",\"source_type\":\"official\",\"source_version\":\"annual-tide-tables-2020\",\"source_record_id\":\"annual-tide-tables-2020/atlantic/Table2/2513\",\"qc_status\":\"flagged\",\"reference_station_id\":\"OTC-a6c00a3f\",\"height_adjusted_type\":\"R\",\"time_offset_high_min\":4,\"time_offset_low_min\":15,\"height_offset_high\":0.84,\"height_offset_low\":1.0,\"datum\":{\"basis\":{\"mllw\":{\"kind\":\"published\",\"method\":\"source\",\"source_name\":\"MLLW\"}},\"chart_datum\":\"mllw\",\"named\":{\"mllw\":0.0},\"zero\":\"chart_datum\"},\"vintage\":{\"publication_year\":2020,\"source_lifecycle\":\"retired\",\"current_validity\":\"unestablished\",\"current_accuracy\":\"unverified\",\"removal_events\":[{\"evidence_sha256\":\"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61\",\"name\":\"Lockwoods Folly Inlet (r)\",\"operation\":\"Removed\",\"source_clock_timestamp\":\"2026-02-18T14:09:46\",\"source_timezone\":null}]},\"provenance\":{\"source_manifest_sha256\":\"667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7\",\"book\":\"atlantic\",\"annual_table_row\":2513,\"printed_page\":345,\"pdf_page\":351,\"raw_row_text\":\"  2513     Lockwoods Folly Inlet . . . . . . . . . . . . . . . . . . . . . . .         33° 55'     78° 14'     +0 04      +0 15     *0.84     *1.00    4.2    4.8     2.3\"}}";
+    if (id && !strcmp(id, "noaa-2020-pacific-table2-517")) text = "{\"offset_id\":\"noaa-2020-pacific-table2-517\",\"source\":\"noaa\",\"source_type\":\"official\",\"source_version\":\"annual-tide-tables-2020\",\"source_record_id\":\"annual-tide-tables-2020/pacific/Table2/517\",\"qc_status\":\"flagged\",\"reference_station_id\":\"OTC-ee4593cd\",\"height_adjusted_type\":\"A\",\"time_offset_high_min\":-35,\"time_offset_low_min\":-31,\"height_offset_high\":-0.06096,\"height_offset_low\":0.0,\"datum\":{\"basis\":{\"mllw\":{\"kind\":\"published\",\"method\":\"source\",\"source_name\":\"MLLW\"}},\"chart_datum\":\"mllw\",\"named\":{\"mllw\":0.0},\"zero\":\"chart_datum\"},\"vintage\":{\"publication_year\":2020,\"source_lifecycle\":\"retired\",\"current_validity\":\"unestablished\",\"current_accuracy\":\"unverified\",\"removal_events\":[{\"evidence_sha256\":\"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61\",\"name\":\"San Francisco Bar (r)\",\"operation\":\"Removed\",\"source_clock_timestamp\":\"2026-02-18T14:09:50\",\"source_timezone\":null},{\"evidence_sha256\":\"c100d0fbc5482ec24f5c99d912be73306bd2dea079690f08edc5f58a821bcd61\",\"name\":\"San Francisco Bar\",\"operation\":\"Removed\",\"source_clock_timestamp\":\"2026-07-06T11:17:37\",\"source_timezone\":null}]},\"provenance\":{\"source_manifest_sha256\":\"667eec5b3fd25f99d46f24864766726094961d7db5fa104ca12450f3ecd0fdf7\",\"book\":\"pacific\",\"annual_table_row\":517,\"printed_page\":284,\"pdf_page\":302,\"raw_row_text\":\"   517     San Francisco Bar . . . . . . . . . . . . . . . . . . . . . . . . .         37° 46'     122° 38'     -0 35       -0 31      -0.2        0.0    3.9    5.6     3.0\"}}";
+    if (!text || !nonempty(off, "licence_id") || !cJSON_IsArray(flags) || cJSON_GetArraySize(flags) != 1) return 0;
+    flag = cJSON_GetArrayItem(flags, 0);
+    if (!otc__jstr_is(otc__jstr_item(flag, "flag"), "fallback:historical_offsets") || !nonempty(flag, "reason") || !otc__jstr_is(otc__jstr_item(fallback, "reason"), "historical_offsets") || !nonempty(fallback, "basis") || !nonempty(fallback, "otc_finding") || cJSON_GetObjectItemCaseSensitive(fallback, "preferred_set_id")) return 0;
+    expected = otc__json_parse(text, strlen(text));
+    if (!expected) return 0;
+    valid = subset_equal(off, expected) && subset_equal(vintage, otc__jget(expected, "vintage")) && subset_equal(prov, otc__jget(expected, "provenance"));
+    /* Nested vintages/provenance allow additive metadata, so compare their prescribed subset separately. */
+    if (!valid) {
+        const cJSON *x;
+        valid = cJSON_IsObject(off);
+        cJSON_ArrayForEach(x, expected) if (strcmp(x->string, "vintage") && strcmp(x->string, "provenance") && !cJSON_Compare(cJSON_GetObjectItemCaseSensitive(off, x->string), x, 1)) valid = 0;
+        valid = valid && subset_equal(vintage, otc__jget(expected, "vintage")) && subset_equal(prov, otc__jget(expected, "provenance"));
+    }
+    cJSON_Delete(expected);
+    if (!valid || !hashes(otc__jget(prov, "input_sha256")) || !digest_string(otc__jget(prov, "acceptance_report_sha256"))) return 0;
+    { const char *eq = otc__jstr(vintage, "reference_2020_equivalence");
+      const cJSON *sha = cJSON_GetObjectItemCaseSensitive(vintage, "reference_2020_equivalence_sha256");
+      if (!eq || (strcmp(eq, "not_checked") && strcmp(eq, "matched_at_publisher_precision") && strcmp(eq, "disagrees"))) return 0;
+      if (!strcmp(eq, "not_checked") ? sha != NULL : !digest_string(sha)) return 0; }
+    { const cJSON *cross = otc__jget(prov, "id_crosswalk"), *binding = otc__jget(prov, "reference_binding");
+      const char *legacy = !strcmp(id, "noaa-2020-atlantic-table2-2513") ? "TEC2869" : "TWC0509";
+      const char *noaa = !strcmp(id, "noaa-2020-atlantic-table2-2513") ? "8661070" : "9414290";
+      if (!hashes(otc__jget(cross, "evidence_sha256")) || !hashes(otc__jget(binding, "evidence_sha256")) || !otc__jstr_is(otc__jstr_item(cross, "legacy_id"), legacy) || !otc__jstr_is(otc__jstr_item(cross, "status"), "inferred") || !cJSON_IsFalse(otc__jget(cross, "modern_alias_verified")) || !otc__jstr_is(otc__jstr_item(binding, "noaa_id"), noaa) || !otc__jstr_is(otc__jstr_item(binding, "station_id"), otc__jstr(off, "reference_station_id")) || !otc__jstr_is(otc__jstr_item(binding, "mapping_status"), "primary_name_position")) return 0; }
+    text = otc__jstr(prov, "raw_values_json");
+    if (!text) return 0;
+    raw = otc__json_parse(text, strlen(text));
+    valid = cJSON_IsObject(raw);
+    cJSON_Delete(raw);
+    return valid;
+}
+
+size_t otc_offsets_qc_flag_count(const otc_offsets_t *offsets)
+{
+    return offsets && offsets->struct_size >= sizeof *offsets ? offsets->qc_flags_count : 0;
+}
+otc_status otc_offsets_qc_flag_at(const otc_offsets_t *offsets, size_t index, const otc_qc_flag **out)
+{
+    if (out) *out = NULL;
+    if (!out || !offsets || offsets->struct_size < sizeof *offsets || index >= offsets->qc_flags_count) return OTC_E_INVALID_ARGUMENT;
+    *out = &offsets->qc_flags[index]; return OTC_OK;
+}

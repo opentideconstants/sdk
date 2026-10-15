@@ -1,0 +1,67 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-quantity-mismatch",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-quantity-mismatch",
+   "title": "heights on a current set, currents on a water-level set",
+   "spec": "4.2 step 3",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0016",
+      "stop": "2010-03-01T01:00:00Z"
+     },
+     "expect": {
+      "error": "quantity_mismatch"
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2010-03-01T01:00:00Z"
+     },
+     "expect": {
+      "error": "quantity_mismatch"
+     },
+     "op": "currents"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

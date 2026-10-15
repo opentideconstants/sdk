@@ -1,0 +1,105 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-set-speed",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-set-speed",
+   "title": "OTC-P-0001's M2 set speed is 8e-8 deg/h off the table's (within the build's 1e-7): the speed comes from the table (late in the year the difference is ~1e-5 m)",
+   "spec": "4.3, 3.3",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "station_id": "OTC-P-0001",
+      "times": [
+       "2010-03-01T03:00:00Z",
+       "2010-12-31T21:00:00Z",
+       "2010-12-31T23:00:00Z"
+      ]
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T03:00:00Z",
+         "height_m": 0.7635303529858263,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-12-31T21:00:00Z",
+         "height_m": -0.3668449937368138,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2010-12-31T23:00:00Z",
+         "height_m": 0.13696533383560996,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "heights_at"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2010-03-01T03:00:00Z",
+          "2010-12-31T21:00:00Z",
+          "2010-12-31T23:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,1215 @@
+/// <reference lib="esnext.disposable" preserve="true" />
+import type * as prediction from './predict/engine.js';
+import type {HeightSeries,ExtremeList,CurrentSeries,CurrentEventList,DatumInfo,Ranges} from './predict/results.js';
+// Symbol.dispose and Symbol.asyncDispose below: the published client.d.ts keeps
+// this lib reference, so a consumer without ESNext.Disposable or @types/node
+// still typechecks it (R2-248).
+import {
+    checkDatestamp, compareDatestamps, DEFAULT_BASE_URL, formatMajor, isDatestamp, SUPPORTED_FORMAT_MAJORS, USER_AGENT,
+} from "./constants.js";
+import {
+    cachedDatestamps, cachedIndex, ensureRelease, fetchChecked, fetchSha256, genericPointerMajor, getIndex, getPointer,
+    loadCached, log, openedCacheFiles, parseVerified, prefetchDir, readPointer, readVerified, relDir, releaseNames, syncZenodo, usable, verifyCached,
+    checkBytes, checkSha256, type Ctx, type PointerEntry, type SyncDir,
+} from "./core.js";
+import {
+    CacheError, ChecksumError, FileError, FileExistsError, InvalidArgumentError, InvalidReleaseError, NetworkError, OfflineError,
+    OpenTideConstantsError, PinnedReleaseError, ReaderTooOldError, ReleaseNotFoundError, UnsupportedError, UnsupportedFormatError,
+} from "./errors.js";
+import { headerFromMeta, parseSha256, releaseFromJson, releaseFromJsonl, scanJsonlReader, splitReleaseName } from "./loader.js";
+import type { BlockingResult, NodeMod } from "./node-api.js";
+import { isNode, type Platform } from "./platform.js";
+import type { ConstantSet, Release, Station } from "./release.js";
+import { noteReleaseVersionDoi } from "./release.js";
+import type {
+    DownloadOptions, FileInfo, Format, LoadedFrom, Mode, NearOptions, NearestOptions, Nearby, OnNetworkError, OpenOptions,
+    PruneOptions, ReleaseInfo, SearchOptions, StationFilters, Tombstone, UpdateResult,
+} from "./types.js";
+
+
+/** Releases the file handle of a swapped-out release that nobody holds any more. */
+const CLOSE_ON_COLLECT = new FinalizationRegistry<() => void>((close) => {
+    try { close(); } catch { /* the handle is gone with the process */ }
+});
+
+const FORMATS: readonly Format[] = ["json", "json.gz", "jsonl"];
+const PREPARED_CLIENT = Symbol('private prepared Client fields');
+type ClientExtra = {
+        lastError: OpenTideConstantsError | null; pinned: boolean; file: FileSource | null; cacheRoot: string | null;
+    autoUpdate: boolean; interval: number;
+};
+interface AcquiredClient {
+    readonly sourceOptions: OpenOptions;
+    readonly ctx: Ctx;
+    readonly node: NodeMod | null;
+    readonly release: Release;
+    readonly loadedFrom: LoadedFrom;
+    readonly extra: ClientExtra;
+}
+/** @internal Fresh native context and held owners prepared before private materialization. */
+export interface PreparedClientFields extends AcquiredClient {
+    readonly [PREPARED_CLIENT]: true;
+    readonly lastCheck: number;
+    readonly all: WeakRef<Release>[];
+    readonly closed: boolean;
+    readonly newerFormatMajor: number | null;
+}
+function isPreparedClient(input: OpenOptions | PreparedClientFields): input is PreparedClientFields { return PREPARED_CLIENT in input; }
+function clientTiming(release: Release) {
+    // a monotonic clock, as in Python and Ruby: a wall clock stepped back must not stop the checks (CR2 R2-119)
+    const lastCheck = performance.now();
+    const all = [new WeakRef(release)];
+    return { lastCheck, all };
+}
+/** @internal Existing acquisition and native held-owner preparation outside B07. */
+export async function prepareClientFields(options: OpenOptions = {}): Promise<PreparedClientFields> {
+    return OpenTideConstants[PREPARED_CLIENT](options);
+}
+/** @internal Native brand allocation with previously prepared fields only. */
+export function clientFromPrepared(fields: PreparedClientFields): OpenTideConstants {
+    return OpenTideConstants[PREPARED_CLIENT](fields);
+}
+
+const ARGUMENT_RECEIVER = Symbol('private canonical argument receiver');
+
+/** @internal Exact existing receiver guard and capability fields; no operation or acquisition. */
+export function clientArgumentReceiver(client: OpenTideConstants) {
+    return OpenTideConstants[ARGUMENT_RECEIVER](client);
+}
+/** The range of the timeout option, in every SDK (spec 5.7, CR2 DR19). */
+const TIMEOUT_MIN_S = 0.001;
+const TIMEOUT_MAX_S = 1e6;
+
+/** @internal Exact existing release-information field phase. */
+export function toInfo(e: PointerEntry): ReleaseInfo {
+    return Object.freeze({
+        datestamp: e.datestamp, format_version: e.format_version, concept_doi: e.concept_doi,
+        zenodo_version_doi: e.zenodo_version_doi, content_sha256: e.content_sha256,
+        files: Object.freeze(e.files.map((f) => Object.freeze({ ...f }))),
+    });
+}
+
+/** @internal Exact existing returned update fields; effects remain with the caller. */
+export function updateResultOf(updated: boolean, from: string, to: string): UpdateResult {
+    return Object.freeze({ updated, from, to });
+}
+
+function optBool(v: unknown, name: string): boolean | null {
+    if (v === undefined || v === null) return null;
+    if (typeof v !== "boolean") throw new InvalidArgumentError(`${name} must be a boolean`);
+    return v;
+}
+
+/** A positive, finite number of seconds, or null when absent (spec 4.2: 0 would mean "no time at all"). */
+function optSeconds(v: unknown, name: string): number | null {
+    if (v === undefined || v === null) return null;
+    if (typeof v !== "number" || !Number.isFinite(v) || v <= 0) throw new InvalidArgumentError(`${name} must be a number of seconds greater than 0; got ${JSON.stringify(v)}`);
+    return v;
+}
+
+/**
+ * The timeout: 0.001 to 1e6 seconds, or null when absent (spec 5.7, CR2 DR19). The upper bound keeps every timer
+ * below the setTimeout limit (2^31 - 1 ms, about 24.8 days), above which Node fires the timer after 1 ms.
+ */
+function optTimeout(v: unknown): number | null {
+    const t = optSeconds(v, "timeout");
+    if (t !== null && (t < TIMEOUT_MIN_S || t > TIMEOUT_MAX_S)) {
+        throw new InvalidArgumentError(`timeout must be from ${TIMEOUT_MIN_S} to ${TIMEOUT_MAX_S} seconds; got ${JSON.stringify(v)}`);
+    }
+    return t;
+}
+
+/** True for an absolute http or https URL with a host. */
+function isHttpUrl(v: string): boolean {
+    try {
+        const u = new URL(v);
+        return (u.protocol === "http:" || u.protocol === "https:") && u.hostname !== "";
+    } catch {
+        return false;
+    }
+}
+
+function optStr(v: unknown, name: string): string | null {
+    if (v === undefined || v === null) return null;
+    if (typeof v !== "string") throw new InvalidArgumentError(`${name} must be a string`);
+    return v;
+}
+
+/**
+ * A local open, and verify on it, needs a row for every release file it reads (names), checked before any file is
+ * hashed (spec 5.3, CR3 DR73); a .json.gz (opened) also needs the OTC_{D}.json row (CR3 DR77). A missing row is
+ * checksum_mismatch "not listed", with file naming it.
+ */
+function needRows(opened: string, names: readonly string[], rows: ReadonlyMap<string, string>, shaName: string,
+    path: NodeMod["nodePath"]): void {
+    const all = opened.endsWith(".json.gz") ? [...names, path.basename(opened).slice(0, -3)] : names;
+    for (const n of all) {
+        if (!rows.has(n)) throw new ChecksumError(`${n} is not listed in ${shaName}`, { file: path.join(path.dirname(opened), n), expected: null, actual: null });
+    }
+}
+
+/** The decompressed bytes of a local OTC_{D}.json.gz (gzPath) against the OTC_{D}.json row (spec 5.3, CR3 DR77). */
+function checkJsonBytes(gzPath: string, actual: string, expected: string): void {
+    if (actual === expected) return;
+    const file = gzPath.slice(0, -3);
+    throw new ChecksumError(`${file} (decompressed from ${gzPath}): SHA-256 ${actual}, expected ${expected}`, { file, expected, actual });
+}
+
+interface FileSource {
+    path: string;
+    dataPaths: string[];
+    shaPath: string | null;
+}
+
+/**
+ * @internal The SDK error a failed automatic update check reported from its worker (codes as spec 4.8). A failure
+ * with no SDK code (a bug, a module that failed to load, a DataCloneError) is io, never network: network is only for
+ * transport failures, and io adds no new code (spec 5.6, CR2 DR5). The worker's original error is the cause.
+ */
+export function errorFromWorker(r: BlockingResult): OpenTideConstantsError {
+    const m = r.message ?? "the automatic update check failed";
+    let cause: Error | undefined;
+    if (r.cause) {
+        cause = new Error(r.cause.message);
+        cause.name = r.cause.name;
+        if (r.cause.stack !== undefined) cause.stack = r.cause.stack;
+    }
+    switch (r.code) {
+        case "network": return new NetworkError(m, { url: r.url ?? null, status: r.status ?? null, cause });
+        case "release_not_found": return new ReleaseNotFoundError(m, { cause });
+        case "offline_unavailable": return new OfflineError(m, { cause });
+        case "unsupported_format": return new UnsupportedFormatError(m, { cause });
+        case "reader_too_old": return new ReaderTooOldError(m, { cause });
+        case "invalid_release": return new InvalidReleaseError(m, { cause });
+        case "checksum_mismatch": return new ChecksumError(m, { file: r.path ?? "", expected: r.expected ?? null, actual: r.actual ?? null, cause });
+        case "cache": return new CacheError(m, { path: r.path ?? null, cause });
+        case "invalid_argument": return new InvalidArgumentError(m);
+        default: return new FileError(m, { path: r.path ?? "", cause });
+    }
+}
+
+/** A Node SyncDir over a cache release directory. */
+function nodeDir(node: NodeMod, dir: string): SyncDir {
+    const p = (name: string) => node.nodePath.join(dir, name);
+    return {
+        read: (name) => node.readIfExists(p(name)),
+        size: (name) => node.statSize(p(name)),
+        lineReader: (name) => node.openLineReader(p(name)),
+        writeIndex: (bytes) => node.writeAtomicSync(p("index-v1.json"), bytes),
+        removeIndex: () => node.removeFileSync(p("index-v1.json")),
+    };
+}
+
+/** @internal Exact option-validation phase; no native acquisition. */
+export function validateOpenOptions(options: OpenOptions = {}) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("options must be an object");
+    const release = options.release ?? "latest";
+    if (release !== "latest") checkDatestamp(release);
+    const mode: Mode = options.mode ?? "eager";
+    if (mode !== "eager" && mode !== "stream") throw new InvalidArgumentError(`mode must be "eager" or "stream"; got ${JSON.stringify(mode)}`);
+    const onNetworkError: OnNetworkError = options.onNetworkError ?? "use_cache";
+    if (onNetworkError !== "use_cache" && onNetworkError !== "raise") throw new InvalidArgumentError(`onNetworkError must be "use_cache" or "raise"`);
+    const timeout = optTimeout(options.timeout);
+    const autoUpdate = optBool(options.autoUpdate, "autoUpdate") ?? false;
+    const interval = optSeconds(options.updateInterval, "updateInterval") ?? 86_400;
+    const verifyOnOpen = optBool(options.verifyOnOpen, "verifyOnOpen") ?? false;
+    // spec 4.2 (K-NC DR106): a boolean; left out or undefined is false, and null is not a boolean
+    const commercialBasis = options.commercialBasis ?? "strict";
+    if (!["strict", "as_published_upstream"].includes(commercialBasis) || options.commercialBasis === null) throw new InvalidArgumentError("commercialBasis must be strict or as_published_upstream");
+    const historicalOffsetsPolicy = options.historicalOffsetsPolicy ?? "fallback";
+    if (!["fallback", "exclude"].includes(historicalOffsetsPolicy) || options.historicalOffsetsPolicy === null) throw new InvalidArgumentError("historicalOffsetsPolicy must be fallback or exclude");
+    const commercialOnly: unknown = options.commercialOnly;
+    if (commercialOnly !== undefined && typeof commercialOnly !== "boolean") {
+        throw new InvalidArgumentError(`commercialOnly must be a boolean; got ${JSON.stringify(commercialOnly)}`);
+    }
+    const file = optStr(options.file, "file");
+    // A file client reads no pointer and opens no socket, so these options would be silently ignored (CR D31,
+    // spec 4.2). The variable OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
+    if (file !== null && (release !== "latest" || (optBool(options.offline, "offline") ?? false) || onNetworkError !== "use_cache")) {
+        throw new InvalidArgumentError("file cannot be combined with release, offline or onNetworkError");
+    }
+    const suffix = optStr(options.userAgent, "userAgent");
+    // the suffix goes into a header: no control character (C0, DEL, C1), and latin-1 only, the characters Node
+    // can send in a header (a raw TypeError at the first request otherwise) (spec 4.2, 5.7, CR2 DR20)
+    if (suffix !== null && /[\u0000-\u001f\u007f-\u009f]|[^\u0000-\u00ff]/u.test(suffix)) {
+        throw new InvalidArgumentError(`userAgent has a control or non-latin-1 character: ${JSON.stringify(suffix)}`);
+    }
+
+    return { release, mode, onNetworkError, timeout, autoUpdate, interval, verifyOnOpen, commercialBasis, historicalOffsetsPolicy, commercialOnly, file, suffix };
+}
+
+/** @internal Exact existing environment/default/capability phase, before cache acquisition. */
+export function resolveOpenNativeOptions(options: OpenOptions, validated: ReturnType<typeof validateOpenOptions>,
+    platform: Pick<Platform, 'name' | 'env'>, node: Pick<NodeMod, 'checkReadable' | 'defaultCacheRoot'> | null) {
+    const { file, autoUpdate } = validated;
+    if (!node && file !== null) throw new UnsupportedError("file needs a file system (Node)");
+    if (!node && autoUpdate) throw new UnsupportedError("autoUpdate needs Node (a browser cannot block for the check)");
+    // the environment variable forces offline with 1, true, yes or on, in any case, trimmed (spec 4.2, CR D15)
+    const envOffline = ["1", "true", "yes", "on"].includes((platform.env("OPENTIDECONSTANTS_OFFLINE") ?? "").trim().toLowerCase());
+    const offline = envOffline || (optBool(options.offline, "offline") ?? false);
+    let baseUrl = optStr(options.baseUrl, "baseUrl") ?? platform.env("OPENTIDECONSTANTS_BASE_URL") ?? DEFAULT_BASE_URL;
+    if (!baseUrl.endsWith("/")) baseUrl += "/";
+    // network settings are checked here, before any network access (spec 4.2, CR D19)
+    if (!isHttpUrl(baseUrl)) throw new InvalidArgumentError(`baseUrl must be an absolute http or https URL; got ${JSON.stringify(baseUrl)}`);
+    const proxy = optStr(options.proxy, "proxy");
+    if (proxy !== null && !isHttpUrl(proxy)) throw new InvalidArgumentError(`proxy must be an absolute http or https URL; got ${JSON.stringify(proxy)}`);
+    if (proxy !== null) {
+        const u = new URL(proxy);
+        try {
+            decodeURIComponent(u.username);
+            decodeURIComponent(u.password);
+        } catch (e) {
+            throw new InvalidArgumentError(`the proxy's user or password is not valid percent-encoding (${(e as Error).message})`);
+        }
+    }
+    const caFile = optStr(options.caFile, "caFile");
+    if (caFile !== null && node) node.checkReadable(caFile);
+    // without caFile, SSL_CERT_FILE is checked the same way: io here, never retried, never a fallback (CR2 DR20)
+    const sslCertFile = caFile === null && node ? platform.env("SSL_CERT_FILE") : null;
+    if (sslCertFile) node?.checkReadable(sslCertFile);
+    const cacheDir = optStr(options.cacheDir, "cacheDir");
+    // Node: a directory. Browser: cacheDir names a separate Cache Storage cache next to the default one.
+    const cacheRoot = node ? cacheDir ?? platform.env("OPENTIDECONSTANTS_CACHE_DIR") ?? node.defaultCacheRoot() : null;
+    return { offline, baseUrl, proxy, caFile, cacheDir, cacheRoot };
+}
+
+/**
+ * The OpenTideConstants client: options, the cache, HTTP and the current Release (spec 3, 4.2).
+ *
+ * ```ts
+ * const otc = await OpenTideConstants.open();
+ * otc.stationByAlias("noaa", "9414290")?.recommendedSet?.constituent("M2")?.amplitude_m;
+ * ```
+ */
+
+export class OpenTideConstants {
+    /** @internal Native argument guard bridge; symbol is private to this module. */
+    static [ARGUMENT_RECEIVER](client: OpenTideConstants) {
+        client.#check();
+        return { node: client.#node !== null, store: client.#ctx.store !== null };
+    }
+    #ctx: Ctx;
+    #node: NodeMod | null;
+    #release: Release;
+    #loadedFrom: LoadedFrom;
+    #lastError: OpenTideConstantsError | null;
+    #pinned: boolean;
+    #file: FileSource | null;
+    #cacheRoot: string | null;
+    #autoUpdate: boolean;
+    #interval: number;
+    #lastCheck: number;
+    /** Every release this client loaded, weakly: a swapped-out one stays valid while the caller holds it (T4). */
+    #all: WeakRef<Release>[];
+    #closed = false;
+    #newerFormatMajor: number | null = null;
+
+    private constructor(...args: [PreparedClientFields] | [Ctx, NodeMod | null, Release, LoadedFrom, ClientExtra]) {
+        if (args.length === 1) {
+            const fields = args[0];
+            this.#ctx = fields.ctx;
+            this.#node = fields.node;
+            this.#release = fields.release;
+            this.#loadedFrom = fields.loadedFrom;
+            this.#lastError = fields.extra.lastError;
+            this.#pinned = fields.extra.pinned;
+            this.#file = fields.extra.file;
+            this.#cacheRoot = fields.extra.cacheRoot;
+            this.#autoUpdate = fields.extra.autoUpdate;
+            this.#interval = fields.extra.interval;
+            this.#lastCheck = fields.lastCheck;
+            this.#all = fields.all;
+            this.#closed = fields.closed;
+            this.#newerFormatMajor = fields.newerFormatMajor;
+            return;
+        }
+        const [ctx, node, release, loadedFrom, extra] = args;
+        this.#ctx = ctx;
+        this.#node = node;
+        this.#release = release;
+        this.#loadedFrom = loadedFrom;
+        this.#lastError = extra.lastError;
+        this.#pinned = extra.pinned;
+        this.#file = extra.file;
+        this.#cacheRoot = extra.cacheRoot;
+        this.#autoUpdate = extra.autoUpdate;
+        this.#interval = extra.interval;
+        const timing = clientTiming(release);
+        this.#lastCheck = timing.lastCheck;
+        this.#all = timing.all;
+    }
+
+    /** Open a release: the latest (default), a pinned datestamp, or a local file (Node). Spec 4.2, 5.2. */
+    static async open(options: OpenOptions = {}): Promise<OpenTideConstants> {
+        const acquired = await OpenTideConstants.#acquire(options);
+        return new OpenTideConstants(acquired.ctx, acquired.node, acquired.release, acquired.loadedFrom, acquired.extra);
+    }
+
+    /** @internal Module-private bridge; native effects run only in its preparation arm. */
+    static [PREPARED_CLIENT](input: OpenOptions): Promise<PreparedClientFields>;
+    /** @internal */
+    static [PREPARED_CLIENT](input: PreparedClientFields): OpenTideConstants;
+    /** @internal */
+    static [PREPARED_CLIENT](input: OpenOptions | PreparedClientFields): Promise<PreparedClientFields> | OpenTideConstants {
+        if (isPreparedClient(input)) return new OpenTideConstants(input);
+        return OpenTideConstants.#prepare(input);
+    }
+
+    static async #prepare(options: OpenOptions): Promise<PreparedClientFields> {
+        const acquired = await OpenTideConstants.#acquire(options);
+        const timing = clientTiming(acquired.release);
+        return { [PREPARED_CLIENT]: true, ...acquired, ...timing, closed: false, newerFormatMajor: null };
+    }
+
+    static async #acquire(options: OpenOptions): Promise<AcquiredClient> {
+        const validated = validateOpenOptions(options);
+        const { release, mode, onNetworkError, timeout, autoUpdate, interval, verifyOnOpen, commercialBasis, historicalOffsetsPolicy, commercialOnly, file, suffix } = validated;
+
+        // "#node" is node.ts under the "node" condition and no-node.ts elsewhere (package.json "imports"), so browser code
+        // never imports node.ts (CR T64)
+        const node: NodeMod | null = isNode() ? (await import("#node")).nodeApi : null;
+        const platform: Platform = node ? node.nodePlatform() : (await import("./browser.js")).browserPlatform();
+        const { offline, baseUrl, proxy, caFile, cacheDir, cacheRoot } = resolveOpenNativeOptions(options, validated, platform, node);
+        const ctx: Ctx = {
+            platform, store: await platform.cache(node ? cacheRoot : cacheDir === null ? null : `opentideconstants-v1:${cacheDir}`), baseUrl, offline, timeout,
+            proxy, caFile,
+            userAgent: suffix ? `${USER_AGENT} ${suffix}` : USER_AGENT,
+            onNetworkError, logger: options.logger ?? null, mode, commercialBasis, historicalOffsetsPolicy, commercialOnly: commercialOnly === true,
+        };
+        const extra = { lastError: null as OpenTideConstantsError | null, pinned: release !== "latest", file: null as FileSource | null, cacheRoot, autoUpdate, interval };
+
+        if (file !== null && node) {
+            const { rel, from, src } = OpenTideConstants.#openFile(node, file, mode, (m) => log(ctx, "warn", m), ctx.commercialOnly, ctx.commercialBasis ?? "strict", ctx.historicalOffsetsPolicy ?? "fallback");
+            return { sourceOptions: options, ctx, node, release: rel, loadedFrom: from, extra: { ...extra, pinned: true, file: src } };
+        }
+        const store = ctx.store;
+        if (!store) throw new OfflineError("no cache");
+        await store.mkdirs("releases");
+        await store.mkdirs("pointer");
+
+        let d: string;
+        let from: LoadedFrom;
+        let rel: Release;
+        if (release !== "latest") {
+            from = await ensureRelease(ctx, release, null);
+            d = release;
+            ({ rel, from } = await OpenTideConstants.#loadOrHeal(ctx, node, d, from, verifyOnOpen));
+        } else if (offline) {
+            const got = await OpenTideConstants.#loadNewestCached(ctx, node, verifyOnOpen);
+            if (!got) throw new OfflineError("offline and no release is cached");
+            ({ d, rel } = got);
+            from = "cache";
+        } else {
+            try {
+                const entry = await getPointer(ctx);
+                from = await ensureRelease(ctx, entry.datestamp, entry);
+                d = entry.datestamp;
+                ({ rel, from } = await OpenTideConstants.#loadOrHeal(ctx, node, d, from, verifyOnOpen, entry.files, entry.zenodo_version_doi));
+            } catch (e) {
+                let got: { d: string; rel: Release } | null = null;
+                if (e instanceof NetworkError && onNetworkError === "use_cache") {
+                    try {
+                        got = await OpenTideConstants.#loadNewestCached(ctx, node, verifyOnOpen);
+                    } catch (fallback) {
+                        // the caller gets the network error; the failed fallback is logged (PK10 T35)
+                        log(ctx, "warn", `cannot fall back to the cache: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
+                    }
+                }
+                if (!got) throw e;
+                log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using cached release ${got.d}`);
+                ({ d, rel } = got);
+                from = "cache_after_error";
+                extra.lastError = e as NetworkError;
+            }
+        }
+        return { sourceOptions: options, ctx, node, release: rel, loadedFrom: from, extra };
+    }
+
+    /** Node cached verification hashes exact file bytes with one bounded positional reader at a time. */
+    static #cachedReadHash(ctx: Ctx, node: NodeMod | null):
+        ((rel: string) => Promise<{ digest: string; bytesRead: number } | null>) | undefined {
+        const store = ctx.store;
+        if (!node || !store) return undefined;
+        return async (rel) => {
+            const file = store.describe(rel);
+            try {
+                // Only cached hashing opts into the private native strict-close hook; ordinary readers keep close().
+                const reader = node.openLineReader(file) as ReturnType<NodeMod["openLineReader"]> & { closeStrict(): void };
+                try {
+                    const sha = node.createSha256State();
+                    let bytesRead = 0;
+                    for (;;) {
+                        const chunk = reader.read(bytesRead, 65536);
+                        if (chunk.length === 0) break;
+                        sha.update(chunk);
+                        bytesRead += chunk.length;
+                    }
+                    return { digest: sha.digest(), bytesRead };
+                } finally {
+                    // As with readFileSync, a close failure overrides a read failure before the cache error is wrapped.
+                    reader.closeStrict();
+                }
+            } catch (e) {
+                const cause = e instanceof FileError && e.cause !== undefined ? e.cause : e;
+                if (typeof cause === "object" && cause !== null && "code" in cause
+                    && (cause.code === "ENOENT" || cause.code === "ENOTDIR")) return null;
+                throw new CacheError(`cannot read ${file}`, { path: file, cause });
+            }
+        };
+    }
+
+    /** Load a cached release, hashing its files first with verifyOnOpen (spec 5.3). */
+    static async #loadChecked(ctx: Ctx, node: NodeMod | null, d: string, verify: boolean,
+        pointerFiles: readonly FileInfo[] | null = null, versionDoi: string | null = null): Promise<Release> {
+        const rel = await OpenTideConstants.#loadStored(ctx, node, d, pointerFiles, versionDoi);
+        if (verify) {
+            try {
+                await verifyCached(ctx, d, false, OpenTideConstants.#cachedReadHash(ctx, node));
+            } catch (e) {
+                rel._close();
+                throw e;
+            }
+        }
+        return rel;
+    }
+
+    /** A cached release that fails its size or SHA-256 check or does not parse; a format this SDK cannot read is not. */
+    static #corrupt(e: unknown): e is ChecksumError | InvalidReleaseError {
+        return e instanceof ChecksumError || e instanceof InvalidReleaseError;
+    }
+
+    /**
+     * Remove a corrupt cached release (spec 5.2 step 6): `.verified` first, so it is no longer trusted, then the bad
+     * file (the one the error names, or the data files of this mode). A failure to delete is logged; it never hides
+     * the original error.
+     */
+    static async #heal(ctx: Ctx, d: string, e: ChecksumError | InvalidReleaseError): Promise<void> {
+        log(ctx, "warn", `the cached release ${d} is corrupt (${e.message}); removing it from the cache`);
+        const store = ctx.store;
+        if (!store) return;
+        const n = releaseNames(d);
+        const file = e instanceof ChecksumError && e.file ? e.file.split(/[\\/]/).pop() ?? null : null;
+        const present = new Set(await store.list(relDir(d)).catch(() => [] as string[]));
+        const bad = file ? [file] : ctx.mode === "eager" && present.has(n.json) ? [n.json] : [n.jsonl, n.meta];
+        for (const name of [".verified", ...bad]) {
+            await store.remove(`${relDir(d)}/${name}`).catch((x: unknown) => log(ctx, "warn", `cannot delete ${store.describe(`${relDir(d)}/${name}`)}: ${x instanceof Error ? x.message : String(x)}`));
+        }
+    }
+
+    /**
+     * Load release d after ensureRelease said where it came from. A cached copy that is corrupt is healed and, online,
+     * downloaded again once (spec 4.8, 5.2 step 6, 5.3); offline, or right after a download, the error is raised.
+     */
+    static async #loadOrHeal(ctx: Ctx, node: NodeMod | null, d: string, from: LoadedFrom, verify: boolean,
+        pointerFiles: readonly FileInfo[] | null = null, versionDoi: string | null = null): Promise<{ rel: Release; from: LoadedFrom }> {
+        try {
+            // after a download of latest, release.files is the pointer entry (spec 4.3.1, CR3 DR100)
+            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify, from === "download" ? pointerFiles : null, versionDoi), from };
+        } catch (e) {
+            if (!OpenTideConstants.#corrupt(e)) throw e;
+            await OpenTideConstants.#heal(ctx, d, e);
+            if (ctx.offline || from !== "cache") throw e;
+            log(ctx, "warn", `downloading release ${d} again`);
+            const again = await ensureRelease(ctx, d, null);
+            return { rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify, null, versionDoi), from: again };
+        }
+    }
+
+    /**
+     * Load the newest cached release this SDK reads (spec 5.2 steps 1, 5 and 6). A candidate that fails its check or
+     * does not parse is healed and the next older one is tried; one whose format this SDK cannot read is skipped.
+     * Null when none loads: the caller raises its original error.
+     */
+    static async #loadNewestCached(ctx: Ctx, node: NodeMod | null, verify: boolean): Promise<{ d: string; rel: Release } | null> {
+        const store = ctx.store;
+        if (!store) return null;
+        for (const d of await cachedDatestamps(ctx)) {
+            if (!usable(ctx.mode, d, new Set(await store.list(relDir(d))), await readVerified(store, d))) continue;
+            try {
+                return { d, rel: await OpenTideConstants.#loadChecked(ctx, node, d, verify) };
+            } catch (e) {
+                if (e instanceof UnsupportedFormatError || e instanceof ReaderTooOldError) {
+                    log(ctx, "info", `the cached release ${d} is not readable: ${e.message}`);
+                    continue;
+                }
+                if (!OpenTideConstants.#corrupt(e)) throw e;
+                await OpenTideConstants.#heal(ctx, d, e);
+            }
+        }
+        return null;
+    }
+
+    static async #loadStored(ctx: Ctx, node: NodeMod | null, d: string, pointerFiles: readonly FileInfo[] | null = null,
+        versionDoi: string | null = null): Promise<Release> {
+        const store = ctx.store;
+        if (!store) throw new OfflineError("no cache");
+        const v = await readVerified(store, d);
+        if (!v) throw new ChecksumError(`release ${d} is not verified in the cache`, { file: store.describe(`${relDir(d)}/.verified`), expected: null, actual: null });
+        const warn = (m: string) => log(ctx, "warn", m);
+        const dir = node ? nodeDir(node, store.describe(relDir(d))) : await prefetchDir(store, d, ctx.mode, warn, v);
+        // Metadata just read remains authoritative for this session even when the receipt lock is held elsewhere.
+        const sessionReceipt = versionDoi === null ? v : { ...v, zenodo_version_doi: versionDoi };
+        return loadCached(dir, sessionReceipt, d, ctx.mode, warn, ctx.commercialOnly, pointerFiles, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
+    }
+
+    /** Open a local file (spec 4.2, 4.3.1). */
+    static #openFile(node: NodeMod, file: string, mode: Mode, warn: (message: string) => void,
+        commercialOnly: boolean, commercialBasis: "strict" | "as_published_upstream", historicalOffsetsPolicy: "fallback" | "exclude"): { rel: Release; from: LoadedFrom; src: FileSource } {
+        const path = node.nodePath;
+        const full = path.resolve(file);
+        const dir = path.dirname(full);
+        const name = path.basename(full);
+        // the name must be OTC_<D><ext> with a valid datestamp (spec 4.2, CR D18)
+        const parts = splitReleaseName(name);
+        const kind = parts && (parts.ext === "json" || parts.ext === "json.gz" || parts.ext === "jsonl") ? parts.ext : null;
+        if (!parts || !kind) throw new InvalidArgumentError(`file must be named OTC_<datestamp>.json, .json.gz or .jsonl; got ${name}`);
+        // a .json or .json.gz file has no lines to seek to: never load it eagerly in silence (CR T94, spec 4.2)
+        if (mode === "stream" && kind !== "jsonl") throw new InvalidArgumentError("stream mode needs .jsonl and .meta.json");
+        if (!node.exists(full)) throw new FileError(`cannot open ${full}: no such file`, { path: full });
+        const stem = `OTC_${parts.datestamp}`;
+        const dataNames = kind === "jsonl" ? [name, `${stem}.meta.json`] : [name];
+        const shaPath = path.join(dir, `${stem}.sha256`);
+        if (kind === "jsonl" && mode === "stream") {
+            const lr = node.openLineReader(full);
+            try {
+                const metaName = `${stem}.meta.json`;
+                const meta = node.readFileOrIo(path.join(dir, metaName));
+                let header: ReturnType<typeof headerFromMeta> | null = null;
+                let headerError: unknown | null = null;
+                try { header = headerFromMeta(meta); } catch (e) { headerError = e; }
+                // Hash exactly the bytes used to build the index, through this one owned descriptor. Saved
+                // validation errors must wait for JSONL and META authentication, as with the eager byte path.
+                const hash = node.createSha256State();
+                const scanned = scanJsonlReader(header, lr.read, (chunk) => hash.update(chunk));
+                const actualSha = hash.digest();
+                const shaBytes = node.readIfExists(shaPath);
+                let files: FileInfo[];
+                let from: LoadedFrom;
+                if (shaBytes) {
+                    const rows = parseSha256(shaBytes, shaPath);
+                    needRows(full, dataNames, rows, `${stem}.sha256`, path);
+                    checkBytes(name, actualSha, scanned.bytesRead, rows.get(name) ?? null, null);
+                    checkBytes(metaName, node.sha256Sync(meta), meta.length, rows.get(metaName) ?? null, null);
+                    files = [...rows].map(([n, sha]) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: sha }));
+                    from = "file";
+                } else {
+                    files = dataNames.map((n) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: null }));
+                    from = "file_unverified";
+                }
+                files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+                if (headerError !== null) throw headerError;
+                if (scanned.error !== null) throw scanned.error;
+                const rel = releaseFromJsonl(meta, null, { eager: false, files, preparedIndex: { entries: scanned.entries },
+                    reader: lr.read, close: lr.close, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+                return { rel, from, src: { path: full, dataPaths: dataNames.map((n) => path.join(dir, n)), shaPath: shaBytes ? shaPath : null } };
+            } catch (e) {
+                lr.close();
+                throw e;
+            }
+        }
+        const bytes = new Map<string, Uint8Array>();
+        for (const n of dataNames) bytes.set(n, node.readFileOrIo(path.join(dir, n)));
+        const shaBytes = node.readIfExists(shaPath);
+        let files;
+        let from: LoadedFrom;
+        let jsonSha: string | null = null;
+        if (shaBytes) {
+            const rows = parseSha256(shaBytes, shaPath);
+            // every release file the open reads needs a row, before any is hashed (spec 5.3, CR3 DR73), and a .json.gz
+            // also the .json row that its decompressed bytes are checked against (CR3 DR77)
+            needRows(path.join(dir, name), dataNames, rows, `${stem}.sha256`, path);
+            for (const [n, b] of bytes) checkBytes(n, node.sha256Sync(b), b.length, rows.get(n) ?? null, null);
+            if (kind === "json.gz") jsonSha = rows.get(`${stem}.json`) as string;
+            files = [...rows].map(([n, sha]) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: sha }));
+            from = "file";
+        } else {
+            files = dataNames.map((n) => ({ name: n, url: null, size: node.statSize(path.join(dir, n)), sha256: null }));
+            from = "file_unverified";
+        }
+        files.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+        const data = bytes.get(name) as Uint8Array;
+        let rel: Release;
+        if (kind === "jsonl") {
+            const meta = bytes.get(`${stem}.meta.json`) as Uint8Array;
+            rel = releaseFromJsonl(meta, data, { eager: true, files, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy });
+        } else {
+            let json = data;
+            if (kind === "json.gz") {
+                try {
+                    json = node.gunzipSync(data);
+                } catch (e) {
+                    throw new InvalidReleaseError(`${name} does not decompress`, { cause: e });
+                }
+                if (jsonSha !== null) checkJsonBytes(full, node.sha256Sync(json), jsonSha);
+            }
+            rel = releaseFromJson(json, files, null, warn, commercialOnly, commercialBasis, historicalOffsetsPolicy);
+        }
+        return { rel, from, src: { path: full, dataPaths: dataNames.map((n) => path.join(dir, n)), shaPath: shaBytes ? shaPath : null } };
+    }
+
+    // ------------------------------------------------------------------ automatic update (spec 5.6)
+
+    #current(): Release {
+        this.#check();
+        // offline, and after close,, the automatic check does not run at all (spec 5.6, CR D6)
+        if (this.#autoUpdate && !this.#pinned && !this.#ctx.offline && this.#node && performance.now() - this.#lastCheck >= this.#interval * 1000) {
+            this.#lastCheck = performance.now();
+            this.#autoUpdateNow(this.#node);
+        }
+        return this.#release;
+    }
+
+    #autoUpdateNow(node: NodeMod): void {
+        const ctx = this.#ctx;
+        let res: BlockingResult;
+        try {
+            res = node.runBlocking(new URL("./auto-update-worker.js", import.meta.url), {
+                baseUrl: ctx.baseUrl, cacheRoot: this.#cacheRoot, timeout: ctx.timeout, proxy: ctx.proxy, caFile: ctx.caFile,
+                userAgent: ctx.userAgent, mode: ctx.mode, offline: ctx.offline,
+            });
+        } catch (e) {
+            // the worker could not start (no Worker, SharedArrayBuffer or Atomics.wait): never escapes the query (R2-125)
+            this.#autoUpdateFailed(e);
+            return;
+        }
+        // a failed check keeps the current release, logs, and records the error as lastError (spec 4.3, 5.6; T29)
+        if (!res.ok || typeof res.datestamp !== "string") {
+            this.#lastError = errorFromWorker(res);
+            log(ctx, "warn", `automatic update check failed: ${res.message ?? "unknown error"}`);
+            return;
+        }
+        this.#reachedPointer();
+        const from = this.#release.datestamp;
+        if (compareDatestamps(res.datestamp, from) <= 0) {
+            if (!this.#file && res.datestamp === from) noteReleaseVersionDoi(this.#release, res.versionDoi ?? null);
+            log(ctx, "debug", `automatic update check: ${from} is current`);
+            return;
+        }
+        const store = ctx.store;
+        if (!store) return;
+        try {
+            const vb = node.readIfExists(node.nodePath.join(store.describe(relDir(res.datestamp)), ".verified"));
+            const v = vb ? parseVerified(vb, res.datestamp) : null;
+            if (!v) throw new ChecksumError(`release ${res.datestamp} is not verified in the cache`, { file: store.describe(relDir(res.datestamp)), expected: null, actual: null });
+            const sessionReceipt = res.versionDoi == null ? v : { ...v, zenodo_version_doi: res.versionDoi };
+            const rel = loadCached(nodeDir(node, store.describe(relDir(res.datestamp))), sessionReceipt, res.datestamp, ctx.mode, (m) => log(ctx, "warn", m),
+                ctx.commercialOnly, res.how === "download" ? res.files ?? null : null, ctx.commercialBasis, ctx.historicalOffsetsPolicy);
+            this.#swap(rel, res.how === "download" ? "download" : "cache");
+            log(ctx, "info", `updated from ${from} to ${res.datestamp}`);
+        } catch (e) {
+            this.#autoUpdateFailed(e);
+        }
+    }
+
+    /**
+     * An automatic update that failed keeps the current release, logs the failure with its stack, and records it as
+     * lastError: an SDK error as it is, anything else as io with the original as its cause (spec 5.6, CR2 DR5). A
+     * failure here is local (the worker did the network part), so it is never network.
+     */
+    #autoUpdateFailed(e: unknown): void {
+        const err = e instanceof OpenTideConstantsError ? e
+            : new FileError(`automatic update failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`,
+                { path: this.#cacheRoot ?? "", cause: e });
+        this.#lastError = err;
+        const stack = e instanceof Error && e.stack ? e.stack : String(e);
+        log(this.#ctx, "warn", `automatic update failed: ${err.message}\n${stack}`);
+    }
+
+    #swap(rel: Release, from: LoadedFrom): void {
+        const old = this.#release;
+        this.#release = rel;
+        this.#loadedFrom = from;
+        this.#lastError = null;
+        // the old release keeps its file handle while someone holds it, and loses it when it is collected (T4)
+        CLOSE_ON_COLLECT.register(old, old._closer());
+        this.#all = [...this.#all.filter((r) => r.deref() !== undefined), new WeakRef(rel)];
+    }
+
+    /** A check (manual or automatic) that reaches the latest pointer clears lastError; loadedFrom does not change (spec 4.3, CR2 DR4). */
+    #reachedPointer(): void {
+        this.#lastError = null;
+    }
+
+    /** Note the selected entry's DOI for its cached release and, when it matches, the current session. */
+    async #observeEntry(entry: PointerEntry): Promise<void> {
+        if (entry.zenodo_version_doi === null) return;
+        if (!this.#file && entry.datestamp === this.#release.datestamp) noteReleaseVersionDoi(this.#release, entry.zenodo_version_doi);
+        const ctx = this.#ctx;
+        if (!ctx.store) return;
+        try {
+            const verified = await readVerified(ctx.store, entry.datestamp);
+            if (verified) await syncZenodo(ctx, verified, entry);
+        } catch (e) {
+            log(ctx, "warn", `cannot update the .verified of ${entry.datestamp}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }
+
+    /** After close, every query and release-management call is io (spec 4.2, CR D21). */
+    #check(): void {
+        if (this.#closed) throw new FileError("the release is closed", { path: this.#file?.path ?? `release ${this.#release.datestamp}` });
+    }
+
+    // ------------------------------------------------------------------ release management (spec 4.3)
+
+    /** The loaded release. After close it stays readable: the closed Release, whose metadata stays readable (CR2 DR32). */
+async heights(station: Station|string, options: prediction.HeightWindowOptions): Promise<HeightSeries> { return this.#current().heights(station,options); }
+async heightsAt(station: Station|string, times: readonly Date[], options: prediction.HeightOptions = {}): Promise<HeightSeries> { return this.#current().heightsAt(station,times,options); }
+async extremes(station: Station|string, options: Omit<prediction.HeightWindowOptions,'stepS'>): Promise<ExtremeList> { return this.#current().extremes(station,options); }
+async currents(station: Station|string, options: prediction.CurrentWindowOptions): Promise<CurrentSeries> { return this.#current().currents(station,options); }
+async currentEvents(station: Station|string, options: Omit<prediction.CurrentWindowOptions,'stepS'>): Promise<CurrentEventList> { return this.#current().currentEvents(station,options); }
+datums(station: Station|string, options: prediction.DatumOptions = {}): DatumInfo|readonly DatumInfo[]|null { return this.#current().datums(station,options); }
+ranges(station: Station|string, options: prediction.RangeOptions = {}): Ranges { return this.#current().ranges(station,options); }
+get release(): Release {
+
+        return this.#closed ? this.#release : this.#current();
+    }
+
+    /** Where the loaded release came from. */
+    get loadedFrom(): LoadedFrom {
+        return this.#loadedFrom;
+    }
+
+    /**
+     * The error that made the client fall back to the cache, or the failure of the last automatic update; null after
+     * any check (manual or automatic) reaches the latest pointer, or when there is none (spec 4.3, CR2 DR4).
+     */
+    get lastError(): OpenTideConstantsError | null {
+        return this.#lastError;
+    }
+
+    /** Every release from OTC_index.json, newest first. */
+    async releases(): Promise<readonly ReleaseInfo[]> {
+        this.#check();
+        const ctx = this.#ctx;
+        if (ctx.offline) {
+            const idx = await cachedIndex(ctx);
+            if (!idx) throw new OfflineError("offline and the release index is not cached");
+            for (const entry of idx) await this.#observeEntry(entry);
+            return Object.freeze(idx.map(toInfo));
+        }
+        let idx: PointerEntry[];
+        try {
+            idx = await getIndex(ctx);
+        } catch (e) {
+            // a network error with use_cache gives the cached index (spec 5.2 step 5); lastError is not touched
+            let cached: PointerEntry[] | null = null;
+            if (e instanceof NetworkError && ctx.onNetworkError === "use_cache") {
+                try {
+                    cached = await cachedIndex(ctx);
+                } catch (fallback) {
+                    log(ctx, "warn", `cannot read the cached release index: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
+                }
+            }
+            if (!cached) throw e;
+            log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); using the cached release index`);
+            for (const entry of cached) await this.#observeEntry(entry);
+            return Object.freeze(cached.map(toInfo));
+        }
+        // Every selected catalog entry refreshes eligible session metadata and best-effort cache notes (spec 4.3).
+        for (const entry of idx) await this.#observeEntry(entry);
+        return Object.freeze(idx.map(toInfo));
+    }
+
+    /**
+     * The latest release this SDK reads: a conditional GET of the latest pointer (OTC_latest-f{MAJOR}.json, or
+     * OTC_latest.json after a 404), and of OTC_index.json too when the pointer's release is not readable (spec 5.2
+     * steps 2 and 2a, CR D23). It does not switch to it.
+     */
+    async latest(): Promise<ReleaseInfo> {
+        this.#check();
+        if (this.#ctx.offline) throw new OfflineError("offline: latest needs the network");
+        const entry = await getPointer(this.#ctx);
+        this.#reachedPointer();
+        await this.#observeEntry(entry);
+        return toInfo(entry);
+    }
+
+    /**
+     * The newest release this SDK reads that is newer than the loaded one, or null (spec 4.3, 5.2 step 2a). It also
+     * reads OTC_latest.json and sets `newerFormatMajor` when that names a format major newer than this SDK reads.
+     */
+    async checkForUpdate(): Promise<ReleaseInfo | null> {
+        this.#check();
+        const ctx = this.#ctx;
+        if (ctx.offline) throw new OfflineError("offline: checkForUpdate needs the network");
+        // newerFormatMajor is set before an unsupported_format or reader_too_old is raised, and keeps its old value
+        // when OTC_latest.json cannot be read (spec 7.4, CR D10)
+        let read: { entry: PointerEntry; generic: PointerEntry | null } | null = null;
+        let tooNew: OpenTideConstantsError | null = null;
+        try {
+            read = await readPointer(ctx);
+            this.#reachedPointer();
+            await this.#observeEntry(read.entry);
+        } catch (e) {
+            if (!(e instanceof UnsupportedFormatError || e instanceof ReaderTooOldError)) throw e;
+            tooNew = e;
+        }
+        let major: number | null = null;
+        let known = true;
+        if (read?.generic) {
+            major = Number.isNaN(formatMajor(read.generic.format_version)) ? null : formatMajor(read.generic.format_version);
+        } else {
+            try {
+                major = await genericPointerMajor(ctx);
+            } catch (e) {
+                if (!(e instanceof OpenTideConstantsError)) throw e;
+                known = false;
+                log(ctx, "warn", `cannot read OTC_latest.json: ${e.message}`);
+            }
+        }
+        if (known) {
+            const newer = major !== null && major > Math.max(...SUPPORTED_FORMAT_MAJORS) ? major : null;
+            if (newer !== null) log(ctx, "warn", `a newer format (${newer}) exists; upgrade opentideconstants to read it`);
+            this.#newerFormatMajor = newer;
+        }
+        if (tooNew || !read) throw tooNew ?? new UnsupportedFormatError("no readable release");
+        const entry = read.entry;
+        return compareDatestamps(entry.datestamp, this.#release.datestamp) > 0 ? toInfo(entry) : null;
+    }
+
+    /**
+     * The format major of the newest release on the server when this SDK cannot read it, or null. Set by
+     * `checkForUpdate` (spec 7.4).
+     */
+    get newerFormatMajor(): number | null {
+        return this.#newerFormatMajor;
+    }
+
+    /** Download and switch to a newer release. A Release held from before keeps showing the old one. */
+    async update(): Promise<UpdateResult> {
+        this.#check();
+        if (this.#pinned) throw new PinnedReleaseError(this.#file ? "the client was opened on a file" : "the client was opened on a pinned release");
+        // offline: no socket, the same as latest and checkForUpdate (spec 5.5, CR D6)
+        if (this.#ctx.offline) throw new OfflineError("offline: update needs the network");
+        const from = this.#release.datestamp;
+        const entry = await getPointer(this.#ctx);
+        this.#reachedPointer();
+        // a close() while update waited wins: update is io, and no release is swapped in after close (R2-128)
+        this.#check();
+        await this.#observeEntry(entry);
+        this.#check();
+        if (compareDatestamps(entry.datestamp, from) <= 0) return updateResultOf(false, from, from);
+        const got = await OpenTideConstants.#loadOrHeal(this.#ctx, this.#node, entry.datestamp, await ensureRelease(this.#ctx, entry.datestamp, entry), false,
+            entry.files, entry.zenodo_version_doi);
+        if (this.#closed) got.rel._close();
+        this.#check();
+        this.#swap(got.rel, got.from);
+        log(this.#ctx, "info", `updated from ${from} to ${entry.datestamp}`);
+        return updateResultOf(true, from, entry.datestamp);
+    }
+
+    /** Write a release into a folder the caller chooses (Node only; spec 4.3.2). Returns the paths written. */
+    async download(options: DownloadOptions): Promise<readonly string[]> {
+        this.#check();
+        const node = this.#node;
+        if (!node) throw new UnsupportedError("download needs a file system (Node)");
+        const { to, release, formats, overwrite } = validateDownloadOptions(options);
+        const ctx = this.#ctx;
+        const store = ctx.store;
+        if (!store) throw new OfflineError("no cache");
+
+        let d: string;
+        let entry: PointerEntry | null = null;
+        if (release !== "latest") d = release;
+        else if (ctx.offline) {
+            const c = (await cachedDatestamps(ctx))[0];
+            if (!c) throw new OfflineError("offline and no release is cached");
+            d = c;
+        } else {
+            try {
+                entry = await getPointer(ctx);
+                d = entry.datestamp;
+            } catch (e) {
+                // onNetworkError as when a client opens latest (spec 4.3.2, CR D22): use_cache writes the newest cached
+                // readable release; raise, or nothing usable cached, raises the network error
+                let c: string | undefined;
+                if (e instanceof NetworkError && ctx.onNetworkError === "use_cache") {
+                    try {
+                        c = (await cachedDatestamps(ctx))[0];
+                    } catch (fallback) {
+                        log(ctx, "warn", `cannot fall back to the cache: ${fallback instanceof Error ? fallback.message : String(fallback)}`);
+                    }
+                }
+                if (!c) throw e;
+                log(ctx, "warn", `network error (${e instanceof Error ? e.message : String(e)}); writing cached release ${c}`);
+                d = c;
+            }
+        }
+        const n = releaseNames(d);
+        const cdir = store.describe(relDir(d));
+        const verified = await readVerified(store, d);
+        // the cached OTC_{D}.sha256 of a verified release, when it can be trusted; else it is fetched again (CR2 DR40)
+        let shaBytes: Uint8Array | null = null;
+        let rows: Map<string, string> | null = null;
+        let present = false;
+        if (verified) {
+            try {
+                shaBytes = node.readIfExists(node.nodePath.join(cdir, n.sha));
+                present = shaBytes !== null;
+                if (shaBytes) rows = await checkSha256(ctx, d, entry, shaBytes);
+            } catch (e) {
+                if (!(e instanceof FileError || e instanceof InvalidReleaseError || e instanceof ChecksumError)) throw e;
+                log(ctx, "warn", `the cached ${n.sha} cannot be used (${e.message}); fetching it again`);
+                rows = null;
+            }
+        }
+        if (!rows) {
+            if (ctx.offline) throw new OfflineError(`release ${d} is not cached${present ? ` with a usable ${n.sha}` : ""} and the client is offline`);
+            ({ bytes: shaBytes, rows } = await fetchSha256(ctx, d, entry));
+        }
+        const wanted = [...new Set(formats.map((f) => (f === "json" ? n.json : f === "json.gz" ? n.gz : n.jsonl)))];
+        wanted.push(n.meta);
+        for (const w of wanted) {
+            if (rows.has(w)) continue;
+            // the eager data file is always published, so a .sha256 without its row is a bad list, as for an eager open
+            // (CR2 DR15, DR42)
+            if (w === n.json) throw new ChecksumError(`${w} is not listed in ${n.sha}`, { file: w, expected: null, actual: null });
+            throw new ReleaseNotFoundError(`${w} is not part of release ${d}`);
+        }
+        wanted.push(n.sha);
+        node.mkdirp(to);
+        const expected = (name: string) => (name === n.sha ? node.sha256Sync(shaBytes as Uint8Array) : rows.get(name) ?? null);
+        const todo: string[] = [];
+        for (const name of wanted) {
+            const existing = node.readIfExists(node.nodePath.join(to, name));
+            if (existing === null) todo.push(name);
+            else if (node.sha256Sync(existing) !== expected(name)) {
+                if (!overwrite) throw new FileExistsError(node.nodePath.join(to, name));
+                todo.push(name);
+            }
+        }
+        const data = new Map<string, Uint8Array>();
+        for (const name of todo) {
+            if (name === n.sha) continue;
+            const cached = verified ? node.readIfExists(node.nodePath.join(cdir, name)) : null;
+            if (cached && node.sha256Sync(cached) === rows.get(name)) {
+                data.set(name, cached);
+                continue;
+            }
+            if (ctx.offline) throw new OfflineError(`${name} is not cached and the client is offline`);
+            data.set(name, await fetchChecked(ctx, name, rows, entry));
+        }
+        // check, then rename, all or nothing (spec 4.3.2, CR2 DR17); OTC_{D}.sha256 goes into place last
+        const files: [string, Uint8Array][] = todo.filter((name) => name !== n.sha).map((name) => [name, data.get(name) as Uint8Array]);
+        if (todo.includes(n.sha)) files.push([n.sha, shaBytes as Uint8Array]);
+        return Object.freeze(node.writeAllInto(to, files, (m) => log(ctx, "warn", m)));
+    }
+
+    /** Hash the release files again and compare them with OTC_{D}.sha256 (spec 4.3). */
+    async verify(): Promise<true> {
+        this.#check();
+        const f = this.#file;
+        if (f && this.#node) {
+            const node = this.#node;
+            if (!f.shaPath) throw new ChecksumError("no OTC_{D}.sha256 next to the file", { file: f.path, expected: null, actual: null });
+            const rows = parseSha256(node.readFileOrIo(f.shaPath), f.shaPath);
+            const path = node.nodePath;
+            // read every file first: a file that is gone is io, before any row check (CR2 DR44)
+            const data = f.dataPaths.map((p) => [p, node.readFileOrIo(p)] as const);
+            needRows(f.path, f.dataPaths.map((p) => path.basename(p)), rows, path.basename(f.shaPath), path);   // spec 5.3, CR3 DR73, DR77
+            for (const [p, bytes] of data) {
+                const actual = node.sha256Sync(bytes);
+                const exp = rows.get(path.basename(p)) ?? null;
+                if (actual !== exp) throw new ChecksumError(`${p}: SHA-256 ${actual}, expected ${exp}`, { file: p, expected: exp, actual });
+                // a .json.gz: its decompressed bytes against the .json row, as at open (CR3 DR77)
+                if (p.endsWith(".json.gz")) {
+                    let json: Uint8Array;
+                    try {
+                        json = node.gunzipSync(bytes);
+                    } catch (e) {
+                        throw new InvalidReleaseError(`${path.basename(p)} does not decompress`, { cause: e });
+                    }
+                    checkJsonBytes(p, node.sha256Sync(json), rows.get(path.basename(p).slice(0, -3)) as string);
+                }
+            }
+            return true;
+        }
+        return verifyCached(this.#ctx, this.#release.datestamp, true, OpenTideConstants.#cachedReadHash(this.#ctx, this.#node), openedCacheFiles(this.#release));
+    }
+
+    /**
+     * The cached, verified datestamps, newest first (Node only). A cache operation: on a client opened with `file`
+     * it lists the configured cache (`cacheDir` or the default), never the file's folder (spec 4.3, CR D33).
+     */
+    cachedReleases(): readonly string[] {
+        this.#check();
+        const node = this.#node;
+        const store = this.#ctx.store;
+        if (!node || !store) throw new UnsupportedError("cachedReleases needs a file system (Node)");
+        const dir = store.describe("releases");
+        return Object.freeze(node.listDir(dir)
+            .filter((d) => {
+                if (!isDatestamp(d)) return false;
+                const path = node.nodePath.join(dir, d, ".verified");
+                let bytes: Uint8Array | null;
+                try { bytes = node.readIfExists(path); }
+                catch (e) { throw new CacheError(`cannot read ${path}`, { path, cause: e }); }
+                if (bytes === null) return false;
+                try { return parseVerified(bytes, d) !== null; }
+                catch (e) {
+                    if (e instanceof InvalidReleaseError) return false;
+                    throw e;
+                }
+            })
+            .sort((a, b) => compareDatestamps(b, a)));
+    }
+
+    /** Use the existing receipt predicate for a partial recheck and the source-qualified race hook. */
+    static #partialVerified(node: NodeMod, d: string, file: string, requireDatestamp: boolean): boolean {
+        const bytes = node.readIfExists(file);
+        if (bytes === null) return false;
+        try {
+            if (requireDatestamp) {
+                const document: unknown = JSON.parse(new TextDecoder().decode(bytes));
+                if (typeof document !== "object" || document === null || !("datestamp" in document) || document.datestamp !== d) return false;
+            }
+            return parseVerified(bytes, d) !== null;
+        } catch (e) {
+            if (e instanceof InvalidReleaseError || e instanceof SyntaxError) return false;
+            throw e;
+        }
+    }
+
+    /**
+     * Remove cached releases, keeping the newest `keep` and the loaded one. Returns the datestamps removed. A release
+     * directory that cannot be removed stops prune with `cache`; the CacheError's `removed` lists the releases removed
+     * before it (CR2 DR18). Like cachedReleases, it works on the configured cache also on a client opened with `file`
+     * (CR D33).
+     */
+    prune(options: PruneOptions = {}): readonly string[] {
+        this.#check();
+        // a JavaScript caller can pass null or a non-object; neither is a raw TypeError
+        const keep = validatePruneOptions(options);
+        const node = this.#node;
+        const store = this.#ctx.store;
+        if (!node || !store) throw new UnsupportedError("prune needs a file system (Node)");
+        const all = this.cachedReleases();
+        const loaded = this.#file ? null : this.#release.datestamp;
+        const removed = all.slice(keep).filter((d) => d !== loaded);
+        // a directory that cannot be removed is a cache error that stops prune; its removed lists the releases removed
+        // before it (spec 4.3, CR2 DR18). The release lock is taken without waiting: a release that another process
+        // holds (a lock younger than 120 s) is kept, and the lock of a crashed process is taken over (spec 5.4, CR2 DR3).
+        const done: string[] = [];
+        for (const d of removed) {
+            const p = store.describe(relDir(d));
+            try {
+                if (!node.tryLockSync(p)) {
+                    log(this.#ctx, "info", `prune: ${d} is locked by another process; it is kept`);
+                    continue;
+                }
+                node.removeDirSync(p);
+            } catch (e) {
+                throw new CacheError(`cannot remove ${p} (removed before it: ${done.join(", ") || "none"})`, { path: p, removed: done, cause: e });
+            }
+            done.push(d);
+        }
+        const verified = new Set(all);
+        for (const d of node.listDir(store.describe("releases")).filter(isDatestamp).sort((a, b) => compareDatestamps(b, a))) {
+            if (verified.has(d) || d === loaded) continue;
+            node.prunePartialSync(store.describe(relDir(d)),
+                (file, requireDatestamp) => OpenTideConstants.#partialVerified(node, d, file, requireDatestamp),
+                (level, message) => log(this.#ctx, level, message));
+        }
+        return Object.freeze(done);
+    }
+
+    /** Close the client and every release it loaded (stream mode holds a file handle). */
+    close(): void {
+        // close every release, also when one fails; the first failure is raised after (PK13 T14)
+        this.#closed = true;
+        let first: unknown = null;
+        for (const ref of this.#all) {
+            try {
+                ref.deref()?._close();
+            } catch (e) {
+                first ??= e;
+            }
+        }
+        this.#all = [];
+        if (first !== null) throw first;
+    }
+
+    [Symbol.dispose](): void {
+        this.close();
+    }
+
+    async [Symbol.asyncDispose](): Promise<void> {
+        this.close();
+    }
+
+    // ------------------------------------------------------------------ queries, forwarded to the current release
+
+    station(stationId: string): Station | null {
+        return this.#current().station(stationId);
+    }
+
+    requireStation(stationId: string): Station {
+        return this.#current().requireStation(stationId);
+    }
+
+    tombstone(stationId: string): Tombstone | null {
+        return this.#current().tombstone(stationId);
+    }
+
+    stationByAlias(system: string, aliasId: string): Station | null {
+        return this.#current().stationByAlias(system, aliasId);
+    }
+
+    stations(filters: StationFilters = {}): readonly Station[] {
+        return this.#current().stations(filters);
+    }
+
+    iterStations(filters: StationFilters = {}): Generator<Station, void, undefined> {
+        return this.#current().iterStations(filters);
+    }
+
+    search(options: SearchOptions): readonly Station[] {
+        return this.#current().search(options);
+    }
+
+    near(options: NearOptions): readonly Nearby<Station>[] {
+        return this.#current().near(options);
+    }
+
+    nearest(options: NearestOptions): Nearby<Station> | null {
+        return this.#current().nearest(options);
+    }
+
+    referenceStation(station: Station): Station | null {
+        return this.#current().referenceStation(station);
+    }
+
+    subordinatesOf(station: Station): readonly Station[] {
+        return this.#current().subordinatesOf(station);
+    }
+
+    attribution(stations?: readonly (Station | null)[] | null): string {
+        return this.#current().attribution(stations);
+    }
+}
+
+export type { ConstantSet };
+
+/** @internal Exact existing validation-only phase. */
+export function validateDownloadOptions(options: DownloadOptions) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("download needs an options object with to");
+    const to = optStr(options.to, "to");
+    if (!to) throw new InvalidArgumentError("to is required");
+    const release = options.release ?? "latest";
+    if (release !== "latest") checkDatestamp(release);
+    const formats = options.formats ?? ["jsonl"];
+    if (!Array.isArray(formats) || formats.length === 0 || formats.some((f) => !FORMATS.includes(f))) {
+        throw new InvalidArgumentError(`formats must be a non-empty list of ${FORMATS.join(", ")}`);
+    }
+    const overwrite = optBool(options.overwrite, "overwrite") ?? false;
+    return { to, release, formats, overwrite };
+}
+
+/** @internal Exact existing validation-only phase. */
+export function validatePruneOptions(options: PruneOptions = {}) {
+    const o: unknown = options;
+    if (o !== null && o !== undefined && typeof o !== "object") throw new InvalidArgumentError("prune options must be an object");
+    const keep = (o === null || o === undefined ? undefined : options.keep) ?? 3;
+    if (typeof keep !== "number" || !Number.isInteger(keep) || keep < 0) throw new InvalidArgumentError("keep must be a non-negative integer");
+    return keep;
+}

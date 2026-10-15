@@ -1,0 +1,166 @@
+# Conformance fixture releases
+
+Synthetic OpenTideConstants releases for the SDK conformance suite (SDK spec §7.1). Every release is format 1.0, except the releases that test other versions (`bad/format-minor`, `bad/format-major`, `bad/min-reader`, `reader/`'s `20991231.4` and `major/`'s `20991231.3`).
+
+**Licence: CC0-1.0.** All station names, ids, providers and numbers are made up for tests. They are not tidal data. Do not use them to predict tides.
+
+Do not edit these files by hand. Change `conformance/tools/build_fixtures.py`, then run:
+
+```
+uv run conformance/tools/build_fixtures.py           # writes every root and fixtures.json
+uv run conformance/tools/build_fixtures.py --check   # regenerates, compares byte for byte, validates, checks every bad fixture
+```
+
+`--check` downloads `otc-1.0.schema.json` and `otc-index-1.0.schema.json` from the site repository at a pinned commit and checks their SHA-256. Each format 1.0 release is validated against the schema (the `.json`, the `.meta.json` against `#/$defs/meta`, each `.jsonl` line against `#/$defs/station`). A higher-minor release is read tolerantly against 1.0. A release that no 1.0 reader reads (`min_reader_version` 1.99, or format 2.0) must be a valid 1.0 release apart from its two version fields. Every `OTC_index.json` and every pointer is validated against the index schema. `--schema-dir DIR` uses local copies of the two schemas.
+
+## Layout
+
+Each directory is a server root: the fixture HTTP server serves one of them as `base_url`.
+
+| Directory | What it holds | Expected outcome |
+|---|---|---|
+| `good/` | releases `20991231` and `20991231.2` (two releases on the same day), with `OTC_latest.json`, `OTC_latest-f1.json` and `OTC_index.json` pointing to `20991231.2` | both load |
+| `order/` | releases `20991231.2` and `20991231.10`, with the pointers on `20991231.10`: numeric counter order (.10 after .2) differs from string order (§4.3.1). Same content as `good/`'s `20991231.2` apart from the datestamp | both load |
+| `v1/` | release `20991231.3` with the annotation stations below; version DOI `10.5072/zenodo.3` and `zenodo_material` in its index entry | loads |
+| `reader/` | releases `20991231.2` and `20991231.3` (format 1.0) and `20991231.4` (format and `min_reader_version` `1.99`); the pointers name `20991231.4` | `.4`: `reader_too_old`; `latest` for a 1.0 reader is `.3` (one GET of `OTC_index.json`) |
+| `major/` | releases `20991231` and `20991231.2` (format 1.0) and `20991231.3` (format 2.0); `OTC_latest.json` and `OTC_latest-f2.json` name `.3`, `OTC_latest-f1.json` names `.2` | `.3`: `unsupported_format`; `latest` is `.2`; `check_for_update` reports `newer_format_major` 2 |
+| `bad/wrong-sha256/` | every station data file differs from its SHA-256 (same size, one byte changed) | `checksum_mismatch` |
+| `bad/truncated/` | the `.json`, `.json.gz` and `.jsonl` files are cut to half their size | `checksum_mismatch` |
+| `bad/pointer-mismatch/` | the files match `.sha256`, but the pointer and the index give other SHA-256 values | `checksum_mismatch` |
+| `bad/format-major/` | `format_version` `2.0` (pointer `OTC_latest-f2.json`, no `-f1`) | `unsupported_format` |
+| `bad/format-minor/` | `format_version` `1.1` (`min_reader_version` `1.0`) with unknown fields at every level, an unknown alias system, and a set on `OTC-T-0010` with `qc_status` `excluded` | loads; the unknown fields are in `raw`; the status is `other` |
+| `bad/unresolved-convention/` | a set whose `convention_id` does not exist | `invalid_release` |
+| `bad/min-reader/` | the only release has `min_reader_version` `1.99` | `reader_too_old` |
+| `bad/no-build/` | `OTC-T-0004`'s set has no `provenance.build` (malformed 1.0; valid once it is put back) | loads; `build` is null |
+| `bad/min-reader-malformed/`, `bad/format-version-malformed/` | `min_reader_version` `"2"`, `format_version` `"1.x"` (not MAJOR.MINOR; the index entry is valid) | `invalid_release` (D9) |
+| `bad/active-and-removed-same-id/`, `bad/duplicate-set-id/`, `bad/duplicate-convention-id/` | an id that is both active and a tombstone; two sets with one `set_id`; two conventions with one id | `invalid_release` (D5) |
+| `bad/unresolved-reference-station/`, `bad/unresolved-offsets-licence/` | `subordinate_offsets` naming a station or a licence that does not exist | `invalid_release` |
+| `bad/station-id-not-string/`, `bad/lat-string/`, `bad/aliases-not-object/`, `bad/qc-flags-not-array/`, `bad/convention-without-id/`, `bad/created-not-string/`, `bad/source-versions-not-object/` | one value of the wrong type (schema-invalid) | `invalid_release` |
+| `bad/gz-differs/` | honest digests, but the `.json.gz` decompresses to other data than the `.json` | `checksum_mismatch` (reference reader only) |
+| `bad/jsonl-differs/` | honest digests, but a `.jsonl` line differs from the `.json` station | `invalid_release` (reference reader only) |
+| `bad/meta-differs/` | honest digests, but the `.meta.json` differs from the `.json` without stations | `invalid_release` (reference reader only) |
+| `bad/size-mismatch/` | the pointer and the index give the `.jsonl` one byte more than its size; every SHA-256 is right | `checksum_mismatch` |
+| `bad/sums-extra-file/` | `OTC_20991231.sha256` lists a file that the pointer does not list | `checksum_mismatch` |
+| `bad/sha256-file-differs/` | the pointer's SHA-256 of `OTC_20991231.sha256` is not the file's | `checksum_mismatch` |
+| `bad/sums-disagree/` | `OTC_20991231.sha256` gives another SHA-256 for the `.jsonl` than the pointer, which the file matches | `checksum_mismatch` |
+| `bad/unresolved-licence/` | a set whose `licence_id` does not exist | `invalid_release` |
+| `bad/unresolved-recommended/` | a `recommended_set_id` that names no set of the station | `invalid_release` |
+| `bad/duplicate-alias/` | two stations with the same `noaa` alias id | `invalid_release` |
+| `bad/duplicate-station-id/` | `OTC-T-0020` twice | `invalid_release` |
+| `bad/lat-nan/` | a `lat` of `NaN` (not JSON) | `invalid_release` |
+| `bad/jsonl-wrong-sha256/` | only the `.jsonl` has one byte changed (same size) | `checksum_mismatch` |
+| `bad/index-invalid/` | a good release whose `OTC_index.json` entry has a `content_sha256` that is not a digest | loads; the index fails `otc-index-1.0` |
+| `bad/recommended-set-id-number/`, `bad/station-name-number/`, `bad/station-timezone-number/`, `bad/offsets-number-string/`, `bad/validation-number-string/`, `bad/validation-count-fraction/`, `bad/constituent-amplitude-string/`, `bad/datum-msl-string/`, `bad/good-samples-string/`, `bad/set-source-version-number/`, `bad/time-base-correction-string/`, `bad/qc-flag-values-not-object/`, `bad/qc-flag-value-string/`, `bad/evidence-not-objects/`, `bad/evidence-number-string/`, `bad/source-version-number/`, `bad/source-version-null/`, `bad/constant-sets-object/`, `bad/constant-sets-not-objects/`, `bad/constant-sets-null-item/` | one known field of the wrong JSON type (review round 2, PK-R2-05) | `invalid_release` |
+| `bad/status-number/` | OTC-T-0010's `status` is the number 5: a status that is present but not a string (review round 2, CR2 DR43) | `invalid_release` |
+| `bad/lat-overflow-literal/`, `bad/lon-overflow-literal/`, `bad/lat-huge-int/`, `bad/constituent-amplitude-inf/`, `bad/constituent-amplitude-huge-int/` | a number that is not finite as a double (`1e400`, an integer of 401 digits) | `invalid_release` |
+| `bad/invalid-utf8/`, `bad/lone-surrogate/` | a station name with the byte 0xFF, or with the escape `\ud800` alone (CR D17) | `invalid_release` |
+| `bad/constituent-name-twice/`, `bad/duplicate-licence-id/`, `bad/tombstone-twice/` | a constituent name twice in one set (CR2 DR22), a repeated `licence_id`, a repeated tombstone (CR D5) | `invalid_release` |
+| `bad/proto-keys/` | format `1.1`: an alias system `__proto__` and `constructor`, and a set source `constructor` | loads; the names work like any other |
+| `bad/too-new-broken/` | `min_reader_version` `1.99`, and its data is not valid 1.0 | `reader_too_old` (the version gate comes first) |
+| `bad/sha256-dup-name/` | `OTC_20991231.sha256` lists the `.jsonl` twice, first with a wrong SHA-256, then with the right one | `invalid_release` (CR2 DR14) |
+| `bad/sha256-invalid-utf8/` | `OTC_20991231.sha256` has a row whose name is not UTF-8 | `invalid_release` (CR2 DR14) |
+| `bad/sha256-no-json-row/` | `OTC_20991231.sha256` and the pointer list the `.json.gz` but not the `.json` (the `.json` file is still there) | `checksum_mismatch` "not listed" in eager mode (CR2 DR15); stream mode loads |
+| `bad/pointer-file-no-sha256/` | the pointer and index entry for `OTC_20991231.sha256` have no `sha256` (the pointers and the index fail `otc-index-1.0`) | `invalid_release` (CR2 DR12) |
+| `bad/licence-attribution-null/`, `bad/licence-attribution-not-string/`, `bad/licence-provider-not-string/` | the `eot20` licence's `attribution` is null, or the number 5; its `provider` is the number 7 (schema-invalid) | `invalid_release` (CR2 DR2) |
+| `bad/licence-provider-null/` | the `eot20` licence and a new licence `anon` have a null `provider` (malformed 1.0; valid once a provider is put back) | loads; the attribution prints each one's text alone, unmerged (CR D2 b) |
+| `bad/licence-provider-null-nc/` | `bad/licence-provider-null` with `anon` non-commercial (`commercial_use` false, `restriction`, `terms_url`) | loads; the non-commercial notice names it by its `licence_id` (K-NC DR105) |
+| `bad/licence-commercial-use-missing/`, `bad/licence-commercial-use-null/`, `bad/licence-commercial-use-string/` | the `noaa` licence has no `commercial_use`, a null one, or the string `"false"` | `invalid_release` (K-NC DR104) |
+| `bad/licence-nc-no-restriction/`, `bad/licence-nc-no-terms-url/`, `bad/licence-nc-no-spdx/` | the `noaa` licence has `commercial_use` false and no `restriction`, no `terms_url`, or no `spdx` | `invalid_release` (K-NC DR104) |
+| `bad/licence-restriction-not-string/`, `bad/licence-terms-url-not-string/`, `bad/licence-restriction-null/`, `bad/licence-terms-url-null/` | the commercial `noaa` licence has a `restriction` or `terms_url` that is the number 5, or null | `invalid_release` (K-NC DR104; a null by CR3 DR71) |
+| `bad/created-impossible/`, `bad/created-leap-second/`, `bad/created-out-of-range/` | `release.created` is `2099-02-30T00:00:00Z`, `2099-12-31T23:59:60Z`, or `0001-01-01T00:00:00+01:00` (before year 1 in UTC) | `invalid_release` (CR2 DR6: never rolled over) |
+| `bad/record-span-feb-31/`, `bad/record-span-feb-29/`, `bad/record-span-hour-24/` | `OTC-T-0010`'s `record_span` has `2090-02-31`, `2097-02-29` (not a leap year) or hour `24` | `invalid_release` (CR2 DR6) |
+
+The reference reader checks that the files of one release agree (`.json.gz` with `.json`, `.jsonl` and `.meta.json` with `.json`). The SDKs do not (decision D37): each file is checked against `OTC_{D}.sha256`, so a release whose files disagree is a pipeline defect, and only the reference reader has cases for it. Each rule of the reference reader decides the outcome of at least one bad fixture, so turning a rule off fails `--check` (review round 1, B2-T1). Three rules repeat another check and cannot be turned off alone: the SHA-256 of `OTC_{D}.sha256` against the pointer (step 4.2 hashes it again), and the schema checks of the `.meta.json` and the `.jsonl` lines (they must equal the `.json`, which is validated in full). The range rule for `created` and `record_span` (years 1 to 9999 in UTC, CR2 DR6) decides `bad/created-out-of-range/`; the format checker covers the impossible fields. The pointer and too-new-file checks are covered by builder mutants (a wrong per-major pointer, a `.jsonl` that differs in a too-new release).
+
+`fixtures.json` lists the same roots, releases and expected outcomes in machine-readable form.
+
+Each release has `OTC_{D}.json`, `.json.gz`, `.jsonl`, `.meta.json` and `.sha256` (`sha256sum` format, sorted by name; it does not list itself).
+
+## Pointer and index files
+
+`OTC_latest.json` and `OTC_latest-f{MAJOR}.json` hold one entry; `OTC_index.json` holds `{"releases": [entry, ...]}`, newest first. An entry follows `otc-index-1.0.schema.json`:
+
+```json
+{"datestamp": "20991231.2", "format_version": "1.0", "min_reader_version": "1.0", "created": "…",
+ "concept_doi": "10.5072/zenodo.1", "zenodo_version_doi": "10.5072/zenodo.2", "content_sha256": "…",
+ "files": [{"name": "OTC_20991231.2.json", "url": "OTC_20991231.2.json", "size": 123, "sha256": "…"}, …]}
+```
+
+`files` lists every release file, the `.sha256` file included. In the fixtures each `url` is relative, so the same files work under any `base_url`. An SDK resolves `url` against the URL of the pointer it read, by the normal rules for relative URLs, so absolute URLs in a real pointer work the same way. `content_sha256` is a stand-in digest: the SDKs only pass it through.
+
+## What the stations cover (`good/`, `order/`)
+
+| Station | Covers |
+|---|---|
+| `OTC-T-0001` San Francisco | reference station with two sets (official `noaa`, recommended, with every `provenance.build` field; gauge `gesla-fit`, `flagged` with an `unverified` time base); aliases in all seven systems; validation with `previous_release` as an object, as `null` and missing; dropped constituents (`rayleigh` with `not_separable_from`); provenance with a field the typed object does not have (`tcd_sha256`); every optional field |
+| `OTC-T-0002` South San Francisco | the recommended carried-over set (`flagged`, `carried_over`, `carried_from_release` `20991230`) and a `no_constants` set (`fit_unusable`, `record_issues`) |
+| `OTC-T-0003` Alameda | subordinate, `R` (ratio) offsets only, `recommended_set_id` null, offsets `licence_id` `kartverket` (not the licence of its reference station's recommended set, `noaa`, so its attribution needs both) |
+| `OTC-T-0004` Oakland Pier | subordinate, `A` (additive) offsets, with its own set |
+| `OTC-T-0005` Old Pier | tombstone (`duplicate` of `OTC-T-0001`) |
+| `OTC-T-0006` Tromsø | local-phase convention (UTC+1); a name with ø |
+| `OTC-T-0007`, `OTC-T-0008` | latitude 0.0, longitude 179.9 and −179.9 (either side of the antimeridian) |
+| `OTC-T-0009` Polar Station | latitude 89.9 |
+| `OTC-T-0010` Equator Station | latitude 0.0, longitude 9.0 |
+| `OTC-T-0011` Ålesund, `OTC-T-0012` Łeba, `OTC-T-0013` Straße | accented names and letters that do not decompose; time bases `corrected` (with `correction` and `months_dropped`), `disputed` (`flagged`) and `verified` |
+| `OTC-T-0014`, `OTC-T-0015` Harbour | two stations with the same name |
+| `OTC-T-0016` Harbour Point, `OTC-T-0017` North Harbour, `OTC-T-0018` Seaharbour | prefix, word-start and substring matches for search ranking |
+| `OTC-T-0019` Test Current Pass | a current station: a `current` set with `current_bins` and no water-level constituents |
+| `OTC-T-0020` Minimal Station | missing optional fields (no aliases, validation, record span, datum, QC flags, time base; provenance with only `build`) |
+| `OTC-T-0021` Closing Pier | active in `20991231`, a tombstone (`merged` into `OTC-T-0022`) in `20991231.2` |
+| `OTC-T-0022` New Pier | only in `20991231.2` |
+
+The licences are not in `licence_id` order. Every gauge set has a `time_base` and `record_span.good_hours`; the model and official sets have no `time_base`. Release `20991231` has a null `concept_doi`, a build commit and a changelog URL. Release `20991231.2` has the concept DOI `10.5072/zenodo.1` (test prefix `10.5072`), the version DOI `10.5072/zenodo.2` in its index entry, and leaves out the optional build commit and changelog URL.
+
+## The annotation stations (`v1/`, release `20991231.3`)
+
+| Station | Covers |
+|---|---|
+| `OTC-T-0101` Six Ok Harbour | two `ok` sets: an official set with every `provenance.build` field, a gauge set with a `verified` time base and only `build.build_commit` |
+| `OTC-T-0102` Six Flagged Point | an `ok` set with a `corrected` time base and a `flagged` set with an `unverified` time base |
+| `OTC-T-0103` Six Mixed Quay | an `ok` official set and a `no_constants` gauge set (`too_short`): `gesla-fit` is not a usable source here |
+| `OTC-T-0104` Six Empty Reef | only a `no_constants` set (`fit_unusable`): no recommended set |
+| `OTC-T-0105` Six Carried Pier | a `flagged` set carried over from `20991231.2` |
+| `OTC-T-0106` Six Jma Port | a JMA set (`owner` `jma`, `redistribution` `redistribute` and the other JMA provenance keys, read through `raw`), with its own licence |
+| `OTC-T-0108` | a tombstone, `removed_reason` `merged`, `merged_into` `OTC-T-0101` |
+
+The `reader/` and `major/` releases hold only `OTC-T-0101`.
+
+Roots for the cross-SDK value rules of review round 1 (each loads):
+
+| Root | What it has |
+|---|---|
+| `values/` | `release.created` with an offset and a fraction (`2099-12-31T02:00:00.5+02:00`), a non-number in `validation.previous_release`, a station name with a NUL inside and one that ends in NUL |
+| `values-kept-reason/` | a constituent `kept_reason` of 48 bytes (the schema sets no maxLength) |
+| `values-source-name/` | a constituent `source_name` of 31 characters that are 62 UTF-8 bytes |
+| `values-nul/` | `good/`'s `20991231.2` with a NUL inside `OTC-T-0001`'s `xtide` alias, its first `gesla` alias and both set_ids (so its `recommended_set_id` and validation rows too); the part before each NUL is no value (review round 2, PK-R2-08) |
+| `fold/` | station names for the fold rules of D12 (final sigma, h t n k with stroke, eng and kra, the middle dot, NBSP) |
+| `chain/` | release `20991231.2`: subordinate stations with offsets only one, two and three links from their reference station `OTC-T-0171`, each link with its own offsets licence (`harbour-c` has the provider of `harbour-a`); `OTC-T-0175`, a subordinate with its own recommended set on that chain; `OTC-T-0176`, whose reference station is `OTC-T-0175`, where the attribution walk stops (CR2 DR1) |
+| `knc/` | release `20991231.2` (the release object, conventions and tables of `good/`'s): seven licences, two of them non-commercial (`nc-test`, `nc-test-2`, one provider) and one commercial with `restriction` and `terms_url` (`c-terms`); ten stations `OTC-T-0181` to `OTC-T-0190` whose sets are in recommendation-rank order, for the non-commercial notice and `commercial_only` (K-NC DR104 to DR106; SDK spec 7.1) |
+| `knc-predict/` | release `20991231.2`: `knc/` plus only the additions of the `commercial_only` prediction cases (prediction spec 6.5): a published `mllw` chart datum on `OTC-T-0185/a-noaa` and `OTC-T-0181/x-nc`; equal offsets (`R`, 0.9, +20 min) at `OTC-T-0186`, `0187`, `0188` and `0190`; subordinate current stations `OTC-T-0191` (entry licence `nc-test`) and `OTC-T-0192` (`noaa`), bin 1 on `OTC-T-0181` bin 1. `knc/` keeps its hashes. No case opens `knc/` and `knc-predict/` in the same cache (one release, one datestamp) |
+| `nogz/` | a release that publishes `.json`, `.jsonl` and `.meta.json` and no `.json.gz` |
+
+## The prediction fixtures (`predict/`, `predict-bad/`; prediction spec 6.5)
+
+`predict/` holds release `20991231.7`, format 1.0 under the pinned schema, for the prediction cases. It has two made-up astro tables: `otc-test-predict-a` for 2000 to 2030 (conventions `predict-greenwich-v1`, `predict-local-utc1-v1` with phases referred to UTC+1, and `predict-tamura-v1` with `v0_model` `tamura_iho2006`) and `otc-test-predict-b` for 2020 to 2100 (`predict-large-v1`, the large-amplitude cases only). V0+u runs on continuously from one 1 January to the next, with a made-up u and f, except the jumps the New Year cases need: K1 and O1 +5 degrees at 2010, -4.05 at 2011 and +5 at 2012, M2 -3 at 2012, and M2's f +0.03 from 2013. The rows `XRA` to `XRG` are fast made-up constituents for the close-root designs (with M6, which makes the flat crossing of the five-slack bin); `MN4` is in no set. The tables are built with no sine or cosine, so the files are the same on every platform.
+
+The stations `OTC-P-0001` to `OTC-P-0062` (and the tombstone `OTC-P-0097`) cover every case: the basic station (six constituents, NOAA-style published datums with an `otc_lat`), stations in `Europe/Oslo` and `Australia/Lord_Howe`, the designed stations (`OTC-P-0005` to `OTC-P-0011`: M2 alone; a high 200 s before 2010; the K1/O1 New Year station; a high and a low 3 min apart in one step; three extremes in one step; two highs 20 min apart; the sub-second pair and triples), the large amplitudes (`OTC-P-0012` sets, `OTC-P-0013` bins), currents (`OTC-P-0016` to `OTC-P-0021`, including the designed slack bins), subordinate tide stations by the event method and by folding (`OTC-P-0030` to `OTC-P-0049`, with zero and negative ratios and the reference stations of the error cases) and subordinate current stations (`OTC-P-0050`, `OTC-P-0051`), the datum cases (`OTC-P-0052` to `OTC-P-0054`), references with no usable set for the offset paths (`OTC-P-0055` to `OTC-P-0059`), a reference whose zero is not its chart datum (`OTC-P-0060`, `named[chart_datum]` 0.85) with an event-path subordinate that has its own datum (`OTC-P-0061`), and offsets with a fractional second (`OTC-P-0062`: +12.345 and -7.29 min). `OTC-P-0001`'s M2 set speed is 8e-8 deg/h off the table's, within the build's 1e-7, so an SDK that takes the speed from the set fails. `conformance/tests/test_build_fixtures_predict.py` scans h' (or W) at 0.01 s around each designed event, with the release's own table, and checks the stated design.
+
+Each `predict-bad/<name>/` is `predict/` with one change. An SDK loads each, because it reads `astro_tables` and the constants only when it predicts and is a tolerant reader of range faults; the reference reader loads each with that tolerance listed (`tolerate_prediction`), and a root outside `bad/` and `predict-bad/` must need none.
+
+| Root | Change | Found when |
+|---|---|---|
+| `predict-bad/no-astro-table/` | table A is not in `astro_tables`, and `predict-local-utc1-v1` has no `astro_table_id` (schema-invalid) | predicting: `no_astro_table` |
+| `predict-bad/unsupported-constituent/` | table A has no M4 row | predicting: `unsupported_constituent` |
+| `predict-bad/astro-negative-speed/` | table A's M2 speed is -28.9841042 | first use of the table: `invalid_argument` |
+| `predict-bad/astro-negative-speed-unused/` | table A's MN4 speed (a row no set uses) is negative | first use of the table: `invalid_argument` |
+| `predict-bad/astro-short-v0u/` | table A's M2 `v0u_deg` is one entry short | first use of the table: `invalid_argument` |
+| `predict-bad/extremes-negative-amplitude/` | `OTC-P-0005`'s M2 amplitude is -1.0 | it predicts (highs and lows swapped) |
+| `predict-bad/current-reference-missing/` | `OTC-P-0059`'s `current_offsets` reference is `OTC-P-9999`, which is not in the release (`current_offsets` are raw in 1.0) | predicting: `reference_unavailable` |
+| `predict-bad/current-reference-removed/` | `OTC-P-0059`'s `current_offsets` reference is `OTC-P-0097`, a tombstone (`current_offsets` are raw in 1.0) | predicting: `reference_unavailable` |
+| `predict-bad/unknown-adjusted-type/` | format 1.1: `height_adjusted_type` `X` (read as `other`) at `OTC-P-0030`, `0035` and `0049` | predicting: `invalid_argument` naming `X` |
+
+`conformance/tools/predict_calls.json` lists the prediction calls, expectations and outcomes. `build_fixtures.py` writes it; `--check` compares it with a fresh generation and prints each named band exception and deferred band check. Revision 29 section 6.3 permits band 3 only for `predict-extremes/single-constituent` and `predict-extremes/negative-amplitude`. Both use `OTC-P-0005/noaa`, astro table `otc-test-predict-a`, and [2010-03-01T00:00:00Z, 2010-03-31T00:00:00Z). Their roots are `predict` and `predict-bad/extremes-negative-amplitude`; their M2 amplitudes are 1.0 m and -1.0 m. Each machine declaration states the exact scope, band, reason and numeric event-time tolerance of 1 s. Missing, inconsistent or out-of-scope declarations fail. Both actual term sets undergo native checks; `strict: null` and `swap_of` do not grant an exception. Bands 1, 2 and 4 remain checked.
+
+K2b-pin must preserve these declarations and implement the event-time comparison. Pair items by index; require whole-second RFC 3339 UTC strings ending in `Z`; compare integral Unix seconds within 1 s. Counts, order, types and metadata stay exact. Heights and other numeric tolerances stay unchanged. For the negative mirror, copy the positive strict expected times, swap high/low types and negate heights; keep the negative case metadata. Do not compare with another call actual rounded time. Both independent 5 s derivative scans still yield 116 extremes. This fixture declaration does not implement the driver comparator.
+
+Eight designed-ripple event steps remain deferred to the KP1-H strict oracle band proof. `band_coverage` lists each case and step and sets `scientific_gate_ready` to false. K2b-pin must refuse complete scientific gate acceptance until those proofs exist. These deferred paths are not exceptions. The native fixture check covers the remaining resolvable event steps; successful harmonic extremes are checked even when strict mode refuses negative amplitudes. KP1-H computes strict expectations, and K2b-pin performs ordered/matrix lowering and final runtime comparisons.

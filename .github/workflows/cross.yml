@@ -1,0 +1,229 @@
+name: Cross-SDK cases
+
+# Spec §5.4, §5.5, §6.2 (phase step S4): the four SDKs share one cache and one
+# stream index. Every case in conformance/cross/ runs once for each ordered
+# pair of SDKs (writer, reader), with the fixture server stopped for the
+# offline reads.
+
+on:
+  push:
+    paths:
+      - "python/**"
+      - "ruby/**"
+      - "js/**"
+      - "c/**"
+      - "swift/**"
+      - "conformance/**"
+      - ".github/workflows/cross.yml"
+      - ".gitattributes"
+  pull_request:
+    paths:
+      - "python/**"
+      - "ruby/**"
+      - "js/**"
+      - "c/**"
+      - "swift/**"
+      - "conformance/**"
+      - ".github/workflows/cross.yml"
+      - ".gitattributes"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every run step uses bash, on Windows too. The default Windows shell (pwsh)
+# exits with the status of the last command only, so a failing command
+# earlier in a step is lost. GitHub runs `shell: bash` as bash -eo pipefail.
+defaults:
+  run:
+    shell: bash
+
+# A newer push to the same branch or pull request cancels the older run;
+# every run on main finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # The suite's own checks: the fold table generator, the fold rules, and the
+  # driver and server self-tests (conformance/tests). The self-tests of the C
+  # runners (c/build, c/build-fetch), the Node runner (js/dist) and the browser
+  # runner (Playwright) skip when those are not built, so they are built first,
+  # and a skip for that reason fails the job (R2-360).
+  suite:
+    name: suite self-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - name: The fold table is a fresh generation (Unicode 16.0.0)
+        run: uv run conformance/tools/gen_fold_table.py --check
+      - name: The fold table gives the expected folded names
+        run: uv run conformance/tools/test_name_fold.py
+      - name: Build the TypeScript SDK and the browser for its runner
+        working-directory: js
+        run: |
+          npm ci
+          npm run build
+          npx playwright install --with-deps chromium
+      - name: Build the C runners, without and with otc_fetch
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
+          cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_FETCH=OFF
+          cmake --build c/build --parallel
+          cmake -S c -B c/build-fetch -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_FETCH=ON
+          cmake --build c/build-fetch --parallel
+      - name: Driver and server self-tests
+        run: |
+          uv run --python 3.12 --with "pytest>=8,<9" --with jsonschema==4.25.1 --with rfc3339-validator==0.1.4 --with rfc3986-validator==0.1.1 python -m pytest conformance/tests -v -rs -p no:cacheprovider | tee pytest.log
+          if grep -E "^SKIPPED .*(build the C runner|js/dist is not built|no Playwright|no ruby|no node)" pytest.log; then
+            echo "a self-test skipped because a runner was not built"
+            exit 1
+          fi
+
+  # The C SDK is paused, and its own workflow (c.yml) builds and tests it. The
+  # cross-SDK cases here run Python, Ruby and TypeScript without building C.
+  cross:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with: { ruby-version: "3.3" }
+      # The Ruby runner claims localtime only when tzinfo can load zone data; Windows has no
+      # system zone files, so it also needs tzinfo-data there.
+      - name: Zone data for the Ruby runner
+        run: |
+          gem install tzinfo --no-document
+          if [ "${{ runner.os }}" = Windows ]; then gem install tzinfo-data --no-document; fi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - name: Build the TypeScript SDK
+        working-directory: js
+        run: npm ci && npm run build
+      - name: The case files are current
+        run: |
+          python conformance/tools/build_cases.py --check
+          python conformance/driver.py --check-cases
+      - name: The fixtures are current and valid (format 1.0 and its index schema)
+        run: uv run conformance/tools/build_fixtures.py --check
+      - name: supported-formats.json matches each SDK's SUPPORTED_FORMAT_VERSION
+        run: python conformance/tools/check_supported_formats.py
+      - name: Cross-SDK cases (Python, Ruby, TypeScript)
+        shell: bash
+        run: |
+          python conformance/driver.py \
+            --cross python="python conformance/runners/python/runner.py" \
+            --cross ruby="ruby conformance/runners/ruby/runner.rb" \
+            --cross typescript="node conformance/runners/node/runner.mjs" \
+            --report cross-report.json
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cross-report-${{ matrix.os }}
+          path: cross-report.json
+          if-no-files-found: error
+
+  # The accepted Swift source requires Apple Security and SwiftPM 6.4.
+  # This separate hosted gate qualifies macOS 26; it does not claim Linux/iOS support.
+  swift-cross:
+    name: macOS 26 / Swift 6.4.0 / four SDKs
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with: { ruby-version: "3.3" }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: js/package-lock.json
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - name: Select the exact Swift.org toolchain
+        run: |
+          curl --fail --location https://download.swift.org/swiftly/darwin/swiftly.pkg -o "$RUNNER_TEMP/swiftly.pkg"
+          installer -pkg "$RUNNER_TEMP/swiftly.pkg" -target CurrentUserHomeDirectory
+          "$HOME/.swiftly/bin/swiftly" init --skip-install --no-modify-profile --quiet-shell-followup --assume-yes
+          "$HOME/.swiftly/bin/swiftly" install --use --assume-yes 6.4.0
+          ruby -e 'File.open(ENV.fetch("GITHUB_PATH"), "a") { |file| file.puts(File.join(ENV.fetch("HOME"), ".swiftly", "bin")) }'
+      - name: Record and require the selected native compiler
+        run: |
+          sw_vers
+          xcodebuild -version
+          command -v swift
+          ruby -ropen3 -e 'output, status = Open3.capture2e("swift", "--version"); puts output; abort "Swift 6.4.0 is required" unless status.success? && output.match?(/Swift version 6\.4(?:\.0)?(?:\s|\()/)'
+          "$HOME/.swiftly/bin/swiftly" use
+      - name: Build the other native runners
+        run: |
+          gem install tzinfo --no-document
+          npm ci --prefix js
+          npm run build --prefix js
+      - name: Build the native Swift SDK and runner
+        run: |
+          swift build --package-path swift -Xswiftc -warnings-as-errors
+          swift build --package-path conformance/runners/otc-swift -Xswiftc -warnings-as-errors
+      - name: Check every API and its default mutation tests
+        run: |
+          python conformance/runners/python/check_api.py
+          ruby conformance/runners/ruby/check_api.rb
+          npm run check:api --prefix js
+          python c/tools/check_manifest.py
+          # The extractor must come from the toolchain that built the module (swiftly 6.4.0), not the selected Xcode.
+          # shellcheck disable=SC2016  # the single quotes hold Ruby code
+          resource=$(swift -print-target-info | ruby -rjson -e 'print JSON.parse($stdin.read).fetch("paths").fetch("runtimeResourcePath")')
+          OTC_SWIFT_SYMBOLGRAPH_EXTRACT="$resource/../../bin/swift-symbolgraph-extract"
+          test -x "$OTC_SWIFT_SYMBOLGRAPH_EXTRACT"
+          export OTC_SWIFT_SYMBOLGRAPH_EXTRACT
+          swift run --skip-build --package-path conformance/runners/otc-swift CheckAPI
+          python conformance/driver.py --check-cases
+      - name: Run the native Swift vectors and full profile
+        run: |
+          python conformance/tools/run_vectors.py --runner 'swift run --skip-build --package-path conformance/runners/otc-swift Runner' --no-expected-failures --report swift-vectors.json
+          python conformance/driver.py --runner 'swift run --skip-build --package-path conformance/runners/otc-swift Runner' --profile swift --all-steps --no-expected-failures --report swift-profile.json
+      - name: Require all thirteen managed I/O cases
+        run: |
+          python conformance/driver.py --runner 'swift run --skip-build --package-path conformance/runners/otc-swift Runner' --profile swift --only '^(net/offline-cached|update/swap|net/proxy-option|load/files-file-sha256-complete|cache/files-from-verified|cache/dr100-pinned-eager-rows|cache/dr100-update-rows|update/auto|update/last-error-cleared-auto|net/500-use-cache|net/listed-file-404-sent-once|download/then-open|download/latest-network-error-use-cache)$' --all-steps --no-expected-failures --report swift-io.json
+          ruby -rjson -e 'report = JSON.parse(File.read("swift-io.json")); abort "all thirteen I/O cases must pass without skips" unless report.fetch("counts") == {"PASS" => 13, "FAIL" => 0, "SKIP" => 0, "XFAIL" => 0, "XPASS" => 0}'
+      - name: Cross-SDK cases with native Swift writer and reader roles
+        run: |
+          python conformance/driver.py \
+            --cross python="python conformance/runners/python/runner.py" \
+            --cross ruby="ruby conformance/runners/ruby/runner.rb" \
+            --cross typescript="node conformance/runners/node/runner.mjs" \
+            --cross swift="swift run --skip-build --package-path conformance/runners/otc-swift Runner" \
+            --no-expected-failures --report swift-cross.json
+      - name: Upload the native qualification reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: swift-native-macos-26
+          path: |
+            swift-vectors.json
+            swift-profile.json
+            swift-io.json
+            swift-cross.json
+          if-no-files-found: error

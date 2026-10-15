@@ -1,0 +1,1064 @@
+require "fileutils"
+require "monitor"
+require "json"
+require "uri"
+require "zlib"
+require "digest"
+
+class OpenTideConstants
+    FORMATS = %w[json json.gz jsonl].freeze
+    MODES = %w[eager stream].freeze
+    ON_NETWORK_ERROR = %w[use_cache raise].freeze
+
+    # The current release, with an interval check when automatic updates apply.
+    # After close the stored release metadata stays readable without an update.
+    def release
+        maybe_auto_update
+        @release
+    end
+    # Where the release came from: :download, :cache, :cache_after_error, :file or :file_unverified.
+    attr_reader :loaded_from
+    # The error behind loaded_from :cache_after_error, or the error of the
+    # last automatic update that failed (spec §5.6); nil after any check
+    # (manual or automatic) reaches the latest pointer, or when there is none
+    # (CR2 DR4).
+    attr_reader :last_error
+    # The format major of a release on the server that this SDK cannot read
+    # (newer than every supported major), as check_for_update last saw it; or nil.
+    attr_reader :newer_format_major
+
+    # The original constructor validation/default phase, before acquisition.
+    module ConstructorArguments
+        ResolvedOptions = Struct.new(:requested, :mode, :on_network_error, :offline, :auto_update, :verify_on_open, :commercial_only, :commercial_basis, :historical_offsets_policy, :update_interval, :base_url, :cache_dir, :logger, keyword_init: true)
+        private
+
+        def constructor_options(release: :latest, file: nil, cache_dir: nil, offline: false, mode: :eager, base_url: nil, timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, on_network_error: :use_cache, auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false, commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback, environment: ENV)
+            # A file client reads no pointer and opens no socket, so these options
+            # would be silently ignored (CR D31, spec §4.2). The variable
+            # OPENTIDECONSTANTS_OFFLINE is not an option and does not conflict.
+            if file && (release != :latest || offline != false || on_network_error != :use_cache)
+                raise InvalidArgumentError, "file cannot be combined with release, offline or on_network_error"
+            end
+            requested = check_release_arg(release)
+            mode = check_enum(mode, MODES, "mode").to_sym
+            on_network_error = check_enum(on_network_error, ON_NETWORK_ERROR, "on_network_error").to_sym
+            # The variable turns offline on with 1, true, yes or on, and then wins over offline: false (CR D15).
+            offline = check_bool(offline, "offline") || %w[1 true yes on].include?(environment["OPENTIDECONSTANTS_OFFLINE"].to_s.strip.downcase)
+            auto_update = check_bool(auto_update, "auto_update")
+            verify_on_open = check_bool(verify_on_open, "verify_on_open")
+            # Select only sets whose licence allows commercial use, in every
+            # release this client loads (spec §4.2, K-NC DR106).
+            commercial_only = check_bool(commercial_only, "commercial_only")
+            commercial_basis = check_enum(commercial_basis, %w[strict as_published_upstream], "commercial_basis").to_sym
+            historical_offsets_policy = check_enum(historical_offsets_policy, %w[fallback exclude], "historical_offsets_policy").to_sym
+            unless update_interval.is_a?(Numeric) && update_interval.positive?
+                raise InvalidArgumentError, "update_interval must be a number of seconds > 0"
+            end
+            update_interval = update_interval
+            # 0.001 to 1e6 s in every SDK (spec §5.7, CR2 DR19); a Float NaN fails the range check too
+            unless timeout.nil? || (timeout.is_a?(Numeric) && timeout.real? && timeout >= HTTP::TIMEOUT_MIN && timeout <= HTTP::TIMEOUT_MAX)
+                raise InvalidArgumentError, "timeout must be nil or a number of seconds from #{HTTP::TIMEOUT_MIN} to #{HTTP::TIMEOUT_MAX.to_i}"
+            end
+            %i[proxy ca_file user_agent].zip([proxy, ca_file, user_agent]).each do |name, v|
+                raise InvalidArgumentError, "#{name} must be a String" unless v.nil? || v.is_a?(String)
+            end
+            # user_agent goes into a header: no control character (CR2 DR20, spec 4.2, 5.7)
+            if user_agent && (!user_agent.valid_encoding? || user_agent.match?(/[[:cntrl:]]/))
+                raise InvalidArgumentError, "user_agent must have no control characters: #{user_agent.inspect}"
+            end
+            raise InvalidArgumentError, "base_url must be nil or a String" unless base_url.nil? || base_url.is_a?(String)
+            base_url ||= environment["OPENTIDECONSTANTS_BASE_URL"]
+            base_url = DEFAULT_BASE_URL if base_url.nil? || base_url.empty?
+            HTTP.check_url!(base_url, "base_url")
+            base_url = base_url.end_with?("/") ? base_url : "#{base_url}/"
+            raise InvalidArgumentError, "cache_dir must be a String" unless cache_dir.nil? || cache_dir.is_a?(String)
+            cache_dir = cache_dir
+            logger = logger
+            ResolvedOptions.new(requested: requested, mode: mode, on_network_error: on_network_error, offline: offline, auto_update: auto_update, verify_on_open: verify_on_open, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy, update_interval: update_interval, base_url: base_url, cache_dir: cache_dir, logger: logger).freeze
+        end
+
+        def bind_client_option_fields(options)
+            @requested = options.requested
+            @mode = options.mode
+            @on_network_error = options.on_network_error
+            @offline = options.offline
+            @auto_update = options.auto_update
+            @verify_on_open = options.verify_on_open
+            @commercial_only = options.commercial_only
+            @commercial_basis = options.commercial_basis
+            @historical_offsets_policy = options.historical_offsets_policy
+            @update_interval = options.update_interval
+            @base_url = options.base_url
+            @cache_dir = options.cache_dir
+            @logger = options.logger
+        end
+
+        def bind_prepared_client_fields(prepared)
+            bind_client_option_fields(prepared)
+            @http = prepared.http
+            @lock = prepared.lock
+            @closed = prepared.closed
+            @last_error = prepared.last_error
+            @newer_format_major = prepared.newer_format_major
+            @file = prepared.file
+            @loaded = prepared.loaded
+            @release = prepared.release
+            @loaded_from = prepared.loaded_from
+            @last_check = prepared.last_check
+            @cache = prepared.cache
+        end
+
+        def check_release_arg(release)
+            return :latest if release == :latest || release == "latest"
+            unless release.is_a?(String) && release.match?(DATESTAMP_RE)
+                raise InvalidArgumentError, "release must be :latest or a datestamp like 20261008 or 20261008.2, not #{release.inspect}"
+            end
+            release
+        end
+
+        def check_enum(value, allowed, name)
+            v = value.is_a?(Symbol) ? value.to_s : value
+            raise InvalidArgumentError, "#{name} must be one of #{allowed.join(', ')}, not #{value.inspect}" unless allowed.include?(v)
+            v
+        end
+
+        def check_bool(value, name)
+            raise InvalidArgumentError, "#{name} must be true or false" unless value == true || value == false
+            value
+        end
+
+    end
+    include ConstructorArguments
+    private_constant :ConstructorArguments
+
+    # Opens a client and yields it, closing it afterwards. Without a block it
+    # is the same as new.
+    def self.open(**options)
+        client = new(**options)
+        return client unless block_given?
+        begin
+            yield client
+        ensure
+            client.close
+        end
+    end
+
+    # Opens the latest release (the default), a pinned release
+    # (release: "20261008") or a local file (file: "…/OTC_20261008.jsonl").
+    # See spec §4.2 for the options.
+    def initialize(release: :latest, file: nil, cache_dir: nil, offline: false, mode: :eager, base_url: nil,
+                   timeout: nil, proxy: nil, ca_file: nil, user_agent: nil, on_network_error: :use_cache,
+                   auto_update: false, update_interval: 86_400, logger: nil, verify_on_open: false,
+                   commercial_only: false, commercial_basis: :strict, historical_offsets_policy: :fallback)
+        options = constructor_options(release: release, file: file, cache_dir: cache_dir, offline: offline, mode: mode, base_url: base_url, timeout: timeout, proxy: proxy, ca_file: ca_file, user_agent: user_agent, on_network_error: on_network_error, auto_update: auto_update, update_interval: update_interval, logger: logger, verify_on_open: verify_on_open, commercial_only: commercial_only, commercial_basis: commercial_basis, historical_offsets_policy: historical_offsets_policy)
+        bind_client_option_fields(options)
+        @http = HTTP.new(timeout: timeout, proxy: proxy, ca_file: ca_file, user_agent: user_agent, logger: logger)
+        @lock = Monitor.new
+        @closed = false
+        @last_error = nil
+        @newer_format_major = nil
+        @file = file
+        @loaded = ObjectSpace::WeakMap.new # every Release this client loaded, while a caller holds it
+        if file
+            @release, @loaded_from = Reader.open_file(file, mode: @mode, logger: @logger, commercial_only: @commercial_only, commercial_basis: @commercial_basis, historical_offsets_policy: @historical_offsets_policy)
+        elsif @requested == :latest
+            open_latest
+        else
+            open_pinned(@requested)
+        end
+        @last_check = monotonic
+        @loaded[@release] = true
+        log(:info, "loaded #{@release.datestamp} (#{@loaded_from})")
+    end
+
+    # ---- release management (spec §4.3)
+
+    # Every release, newest first, from OTC_index.json.
+    def releases
+        check_open!
+        list = index_entries(fetch_pointer_doc("OTC_index.json", missing: :offline))
+        list.each { |e| note_version_doi(e) }
+        list.map { |e| release_info(e, @base_url + "OTC_index.json") }
+            .sort_by { |i| Cache.datestamp_key(i.datestamp) }.reverse.freeze
+    end
+
+    # The newest release this gem reads: the latest pointer (a conditional
+    # GET), and OTC_index.json too when the pointer's release is not readable
+    # (spec §4.3, §5.2 step 2a, CR D23). It does not switch to it.
+    def latest
+        check_open!
+        raise OfflineError, "offline: the latest pointer is not available" if @offline
+        entry, url = resolve_latest
+        release_info(entry, url)
+    end
+
+    # A release newer than the loaded one, with a supported format major and
+    # a readable min_reader_version, or nil (spec §4.3, §5.2 step 2a). It also
+    # sets newer_format_major when the server has a release of a newer major,
+    # also when it then raises because only such releases exist (CR D10).
+    def check_for_update
+        check_open!
+        raise OfflineError, "offline: the latest pointer is not available" if @offline
+        begin
+            entry, url = resolve_latest
+        rescue UnsupportedFormatError, ReaderTooOldError
+            check_newer_major
+            raise
+        end
+        check_newer_major
+        info = release_info(entry, url)
+        newer?(info.datestamp, @release.datestamp) ? info : nil
+    end
+
+    # Downloads and checks the latest release and swaps it in atomically. A
+    # Release held from before stays valid.
+    def update!
+        check_open!
+        raise PinnedReleaseError, "the client was opened on a file" if @file
+        raise PinnedReleaseError, "the client was opened on release #{@requested}" unless @requested == :latest
+        # update is defined against the pointer, so offline it cannot run, and
+        # it does not switch to a newer cached release either (CR D6).
+        raise OfflineError, "offline: update needs the latest pointer" if @offline
+        @lock.synchronize do
+            # Again under the lock: a close that ran since the check above
+            # wins, so no release is swapped in after close that nothing
+            # would close (R2-128).
+            check_open!
+            from = @release.datestamp
+            entry, url = resolve_latest
+            unless newer?(entry["datestamp"], from)
+                @last_check = monotonic
+                return UpdateResult.new(false, from, from)
+            end
+            rel, how = load_from_entry(entry, url)
+            @loaded[rel] = true
+            @release = rel
+            @loaded_from = how
+            @last_error = nil
+            @last_check = monotonic
+            log(:info, "updated from #{from} to #{rel.datestamp}")
+            UpdateResult.new(true, from, rel.datestamp)
+        end
+    end
+
+    # Writes a release into a folder the caller chooses (spec §4.3.2): the
+    # data files of formats, and always OTC_{D}.meta.json and OTC_{D}.sha256,
+    # whatever the formats; all of them or none. Returns the paths written, in that
+    # order with the .sha256 last; a file already there with the same content
+    # is left alone and is not in the list.
+    def download(release = :latest, to:, formats: [:jsonl], overwrite: false)
+        check_open!
+        want = check_release_arg(release)
+        raise InvalidArgumentError, "to must be a String path" unless to.is_a?(String) && !to.empty?
+        raise InvalidArgumentError, "formats must be an Array" unless formats.is_a?(Array) && !formats.empty?
+        formats = formats.map { |f| check_enum(f, FORMATS, "format") }.uniq
+        check_bool(overwrite, "overwrite")
+        Downloader.new(self, want, File.expand_path(to), formats, overwrite).run
+    end
+
+    # Hashes the loaded files again and compares them with OTC_{D}.sha256.
+    # A client on a file with no .sha256 next to it has nothing to compare
+    # with: checksum_mismatch (CR D20).
+    def verify
+        check_open!
+        verify_release_integrity
+    end
+
+    def verify_release_integrity(canonical: nil, trusted_cached_pointer: nil)
+        if @loaded_from == :file_unverified
+            raise ChecksumError.new("no OTC_#{@release.datestamp}.sha256 next to the file", file: @file, expected: nil, actual: nil)
+        end
+        # Compare with OTC_{D}.sha256, read again: next to the file, or in
+        # the cache directory of a cached release. A missing one is
+        # checksum_mismatch, never verified (spec §4.3, §5.3).
+        d = @release.datestamp
+        sha_name = "OTC_#{d}.sha256"
+        first = @release.send(:opened_paths).first
+        dir = @file ? File.dirname(first || @file) : cache.release_dir(d)
+        sha_path = File.join(dir, sha_name)
+        raise ChecksumError.new("no #{sha_name} next to #{first}", file: first, expected: nil, actual: nil) unless File.file?(sha_path)
+        text = Reader.read_text(sha_path)
+        # A cached release: the cached OTC_{D}.sha256 must have the SHA-256
+        # that a cached pointer lists for it, when one lists it. verify
+        # fetches nothing, so a mismatch is checksum_mismatch and the file
+        # stays (CR2 DR45).
+        if !@file || trusted_cached_pointer
+            actual = Digest::SHA256.hexdigest(text)
+            digests = @file ? [] : cached_pointer_sha256(d)
+            supplied = trusted_cached_pointer&.digests&.fetch(sha_name, nil)
+            digests = digests + [supplied.downcase] if supplied
+            digests.each do |expected|
+                next if expected == actual
+                raise ChecksumError.new("#{sha_name}: SHA-256 #{actual}, but the cached pointer lists #{expected}",
+                                        file: sha_path, expected: expected, actual: actual)
+            end
+        end
+        rows = if canonical
+            bytes = OpenTideConstants.const_get(:CanonicalTypes, false)::ChecksumBytes.new(text, source: sha_name)
+            canonical.__send__(:bind_checksum_manifest, checksum_bytes: bytes, pointer_digests: {}, required_files: [])
+        else
+            Reader.parse_sha256(text, sha_name)
+        end
+        @release.send(:verify, rows)
+    end
+    private :verify_release_integrity
+
+    # Datestamps in the cache, newest first.
+    def cached_releases
+        check_open!
+        cache.cached_releases
+    end
+
+    # Removes all but the newest keep releases from the cache. It never
+    # removes the current loaded release or a release locked by another
+    # process. Earlier held releases can keep reading on POSIX after their
+    # directories are removed (§4.3 R13-A1). It also removes incomplete
+    # release directories that no one holds. Returns the
+    # datestamps removed, newest first; CacheError when one cannot be removed.
+    def prune(keep: 3)
+        check_open!
+        raise InvalidArgumentError, "keep must be an Integer >= 0" unless keep.is_a?(Integer) && keep >= 0
+        protect = @file ? [] : [@release.datestamp]
+        removed = []
+        begin
+            cache.cached_releases.drop(keep).reject { |d| protect.include?(d) }.each do |d|
+                if cache.remove_release(d)
+                    removed << d
+                else
+                    log(:info, "prune: #{d} is locked by another process; kept")
+                end
+            end
+            cache.partial_releases.each do |d|
+                next if protect.include?(d)
+                begin
+                    if cache.remove_release(d, partial: true)
+                        log(:info, "prune: removed the incomplete release directory #{d}")
+                    else
+                        log(:info, "prune: incomplete release directory #{d} was kept")
+                    end
+                rescue CacheError => e
+                    log(:warn, "prune: cannot remove the incomplete release directory #{d}: #{e.message}")
+                end
+            end
+        rescue CacheError => e
+            # Stop at the first failure and report the releases removed
+            # before it (spec §4.3, CR2 DR18).
+            raise CacheError.new(e.message, removed: removed)
+        end
+        removed
+    end
+
+    # Closes the client and every Release it loaded (stream mode holds a file
+    # handle per release). After close every query and call is io "the
+    # release is closed" (CR D21). A second close does nothing.
+    # Every release is closed even when one close fails; the first failure is
+    # raised after, as an SDK error (FileError, io, with the system error as
+    # its cause) (R2-104).
+    def close
+        failure = nil
+        @lock.synchronize do
+            return nil if @closed
+            @closed = true
+            ([@release] + @loaded.keys).compact.uniq.each do |r|
+                r.send(:close)
+            rescue StandardError => e
+                failure ||= [e, r]
+            end
+        end
+        return nil unless failure
+        e, r = failure
+        raise e if e.is_a?(Error)
+        raise FileError.new("cannot close release #{r.datestamp}: #{e.message}"), cause: e
+    end
+
+    # ---- queries, forwarded to the current release (spec §4.4–§4.7)
+
+    %i[station require_station tombstone station_by_alias stations iter_stations each_station search near nearest
+       reference_station subordinates_of attribution].each do |name|
+        define_method(name) do |*args, **kw, &blk|
+            check_open!
+            maybe_auto_update
+            @release.public_send(name, *args, **kw, &blk)
+        end
+    end
+
+    def inspect
+        "#<OpenTideConstants #{@release&.datestamp} (#{@loaded_from})>"
+    end
+
+    # ---- internals shared with Downloader (private: Downloader calls them with send)
+
+    attr_reader :http, :base_url, :offline, :on_network_error
+
+    def cache
+        @cache ||= Cache.new(@cache_dir || Cache.default_root, logger: @logger)
+    end
+
+    # The SHA-256 values (lower case) that the cached pointers
+    # (OTC_latest-f{MAJOR}.json, OTC_latest.json) give for OTC_{D}.sha256.
+    # A cached pointer that is not there, cannot be read or does not parse,
+    # names another release or does not list the .sha256 gives none (CR2
+    # DR45).
+    def cached_pointer_sha256(d)
+        names = SUPPORTED_FORMAT_MAJORS.sort.reverse.map { |m| "OTC_latest-f#{m}.json" } + ["OTC_latest.json"]
+        names.flat_map do |name|
+            begin
+                body, = cache.read_pointer(name)
+                doc = body && JSON.parse(body)
+            rescue CacheError, JSON::ParserError, EncodingError => e
+                log(:debug, "verify: the cached #{name} cannot be used (#{e.message})")
+                next []
+            end
+            next [] unless doc.is_a?(Hash) && doc["files"].is_a?(Array)
+            doc["files"].filter_map do |f|
+                f["sha256"].downcase if f.is_a?(Hash) && f["name"] == "OTC_#{d}.sha256" && f["sha256"].is_a?(String)
+            end
+        end
+    end
+
+    # The latest pointer: [entry, url]. OTC_latest-f1.json, then
+    # OTC_latest.json on a 404 only.
+    def fetch_latest_pointer
+        names = SUPPORTED_FORMAT_MAJORS.sort.reverse.map { |m| "OTC_latest-f#{m}.json" } + ["OTC_latest.json"]
+        names.each do |name|
+            doc = fetch_pointer_doc(name, missing: :nil)
+            next if doc.nil?
+            return [check_entry!(doc, name), @base_url + name]
+        end
+        raise ReleaseNotFoundError, "no latest pointer at #{@base_url}"
+    end
+
+    # The newest release this SDK reads: [entry, url] (spec §5.2 steps 2 and
+    # 2a, §7.4). The pointer's release when it is readable; otherwise one GET
+    # of OTC_index.json and its newest readable entry. None: reader_too_old
+    # when a release of a supported major exists, else unsupported_format.
+    def resolve_latest
+        entry, url = fetch_latest_pointer
+        note_version_doi(entry)
+        # A check that reaches the pointer clears last_error; loaded_from does
+        # not change (spec §4.3, CR2 DR4).
+        @last_error = nil
+        return [entry, url] if readable_entry?(entry)
+        index_url = @base_url + "OTC_index.json"
+        doc = fetch_pointer_doc("OTC_index.json", missing: :nil)
+        list = doc ? index_entries(doc) : []
+        list.each { |e| note_version_doi(e) }
+        pick = list.select { |e| readable_entry?(e) }.max_by { |e| Cache.datestamp_key(e["datestamp"]) }
+        return [pick, index_url] if pick
+        too_new = ([entry] + list).find { |e| Release.supported_major?(e["format_version"]) }
+        if too_new
+            raise ReaderTooOldError, "release #{too_new['datestamp']} needs a reader for format " \
+                                     "#{too_new['min_reader_version']}; this SDK reads format #{SUPPORTED_FORMAT_VERSION}"
+        end
+        raise UnsupportedFormatError, "the latest release has format #{entry['format_version']}, not supported by this " \
+                                      "SDK (supported majors: #{SUPPORTED_FORMAT_MAJORS.join(', ')})"
+    end
+
+    # The newest cached release this SDK reads, or nil. With usable: true,
+    # only one this client's mode can load.
+    def newest_cached(usable: true)
+        index = cached_index
+        cache.cached_releases.find do |d|
+            cached_readable?(d, cache.verified(d), index[d]) && (!usable || usable_cached?(d))
+        end
+    end
+
+    def release_info(entry, pointer_url)
+        files = Array(entry["files"]).map do |f|
+            FileInfo.new(name: f["name"], url: f["url"] && resolve(pointer_url, f["url"]), size: f["size"], sha256: f["sha256"])
+        end.sort_by(&:name)
+        ReleaseInfo.new(entry, files)
+    end
+
+    # The absolute URL of a files[] url (spec §4.3.1). A url that is not a
+    # URL is invalid_release.
+    def resolve(base, ref)
+        URI.join(base, ref).to_s
+    rescue URI::Error, TypeError => e
+        raise InvalidReleaseError, "bad url #{ref.inspect} in a release entry: #{e.message}"
+    end
+
+    def log(level, msg)
+        @logger&.public_send(level, "opentideconstants: #{Redact.text(msg)}") # no URL user or password (CR2 DR21)
+    end
+
+    private :http, :base_url, :offline, :on_network_error, :cache, :fetch_latest_pointer, :resolve_latest, :newest_cached, :release_info,
+            :resolve, :log, :cached_pointer_sha256
+
+    private
+
+    def monotonic
+        Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+
+    # The datestamps prune must keep: the loaded release and every release
+    # this client loaded that is still reachable (a caller may hold it,
+    # spec §4.3 update). A client on a file keeps no cached release.
+    def held_datestamps
+        return [] if @file
+        ([@release] + @loaded.keys).compact.map(&:datestamp).uniq
+    end
+
+    def check_open!
+        raise FileError.new("the release is closed", path: @file) if @closed
+    end
+
+    # The automatic update (spec §5.6): at most once per update_interval, in
+    # the first query after it. A failure keeps the current release, is
+    # logged and is kept in last_error; it never breaks the query.
+    def maybe_auto_update
+        return unless @auto_update && @requested == :latest && @file.nil? && !@offline && !@closed
+        return if monotonic - @last_check < @update_interval
+        @lock.synchronize do
+            # Again under the lock: queries that passed the check above at
+            # the same time run one update, not one each (R3-221).
+            return if @closed || monotonic - @last_check < @update_interval
+            begin
+                update!
+            rescue StandardError => e
+                @last_check = monotonic
+                @last_error = auto_update_error(e)
+                log(:warn, "automatic update failed: #{@last_error.message}\n#{Array(e.backtrace).join("\n")}")
+            end
+        end
+    end
+
+    # Transport failures that a non-SDK exception in the automatic update can
+    # be (the HTTP layer wraps them; this is the safety net).
+    TRANSPORT_ERRORS = [SocketError, Timeout::Error, EOFError, Errno::ECONNREFUSED, Errno::ECONNRESET,
+                        Errno::ECONNABORTED, Errno::EHOSTUNREACH, Errno::ENETUNREACH, Errno::ETIMEDOUT, Errno::EPIPE,
+                        OpenSSL::SSL::SSLError, Net::ProtocolError, Net::HTTPBadResponse].freeze
+    private_constant :TRANSPORT_ERRORS
+
+    # The last_error of an automatic update that failed (spec §5.6, CR2
+    # DR5): an SDK error as it is; any other failure as an SDK error whose
+    # cause is the original: network for a transport failure, else io.
+    def auto_update_error(e)
+        return e if e.is_a?(Error)
+        msg = "automatic update failed: #{e.class}: #{e.message}"
+        begin
+            # raised here, inside the rescue of e, so Ruby sets its #cause to e
+            raise(TRANSPORT_ERRORS.any? { |k| e.is_a?(k) } ? NetworkError.new(msg) : FileError.new(msg))
+        rescue Error => wrapped
+            wrapped
+        end
+    end
+
+
+
+    # True when this SDK reads the release of a pointer or index entry.
+    def readable_entry?(entry)
+        return false unless entry.is_a?(Hash) && Release.supported_major?(entry["format_version"])
+        mrv = entry["min_reader_version"]
+        mrv.nil? || Release.readable_version?(mrv)
+    end
+
+    # The checked entries of OTC_index.json; invalid_release when releases
+    # is missing or an entry is malformed.
+    def index_entries(doc)
+        raise InvalidReleaseError, "OTC_index.json has no releases list" unless doc.is_a?(Hash) && doc["releases"].is_a?(Array)
+        doc["releases"].map { |e| check_entry!(e, "OTC_index.json") }
+    end
+
+    # Checks a pointer or index entry from the server (spec §4.2, §5.2): an
+    # object with a valid datestamp, and files (if any) whose elements are
+    # objects with a String name, a String sha256, an Integer size of 0 or
+    # more (CR2 DR12) and, if given, a String url. Returns the entry.
+    def check_entry!(entry, source)
+        raise InvalidReleaseError, "#{source}: an entry is not an object" unless entry.is_a?(Hash)
+        d = entry["datestamp"]
+        raise InvalidReleaseError, "#{source}: bad datestamp #{d.inspect}" unless d.is_a?(String) && d.match?(DATESTAMP_RE)
+        files = entry["files"]
+        return entry if files.nil?
+        raise InvalidReleaseError, "#{source}: files of #{d} is not a list" unless files.is_a?(Array)
+        files.each do |f|
+            next if f.is_a?(Hash) && f["name"].is_a?(String) && (f["url"].nil? || f["url"].is_a?(String)) &&
+                    f["sha256"].is_a?(String) && f["size"].is_a?(Integer) && f["size"] >= 0
+            raise InvalidReleaseError, "#{source}: a files entry of #{d} is malformed: #{f.inspect[0, 120]}"
+        end
+        entry
+    end
+
+    # The entries of the cached OTC_index.json by datestamp ({} if none).
+    def cached_index
+        cached = cached_pointer("OTC_index.json")
+        return {} unless cached
+        index_entries(cached[0]).to_h { |e| [e["datestamp"], e] }
+    rescue InvalidReleaseError
+        {}
+    end
+
+    # Whether a cached release is readable, by its .verified, else the cached
+    # index entry, else its .meta.json. Unknown counts as readable (the load
+    # then checks it).
+    def cached_readable?(d, ver, index_entry)
+        fv = ver&.dig("format_version") || index_entry&.dig("format_version")
+        mrv = ver&.dig("min_reader_version") || index_entry&.dig("min_reader_version")
+        if fv.nil? || mrv.nil?
+            meta = cached_meta(d)
+            fv ||= meta["format_version"]
+            mrv ||= meta["release"].is_a?(Hash) ? meta["release"]["min_reader_version"] : nil
+        end
+        (fv.nil? || Release.supported_major?(fv)) && (mrv.nil? || Release.readable_version?(mrv))
+    end
+
+    # The format_version and release of a .json release file, as a Hash
+    # ({} when it cannot be read; the load then checks it).
+    def release_versions(path)
+        doc = JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8))
+        doc.is_a?(Hash) ? doc.slice("format_version", "release") : {}
+    rescue JSON::ParserError, EncodingError, SystemCallError, IOError
+        {}
+    end
+
+    # The cached .meta.json of release d ({} when it is not there or not a
+    # JSON object; CacheError when it cannot be read).
+    def cached_meta(d)
+        text = cache.read_file(File.join(cache.release_dir(d), "OTC_#{d}.meta.json"))
+        doc = text ? JSON.parse(text.force_encoding(Encoding::UTF_8)) : {}
+        doc.is_a?(Hash) ? doc : {}
+    rescue JSON::ParserError, EncodingError
+        {}
+    end
+
+    # check_for_update: a conditional GET of OTC_latest.json; a release there
+    # with a major newer than every supported one sets newer_format_major,
+    # else it is nil (spec §7.4). When the check fails (a network error, a
+    # malformed entry, an unreadable cached copy), the value from before
+    # stays (CR D10).
+    def check_newer_major
+        entry = fetch_pointer_doc("OTC_latest.json", missing: :nil)
+        if entry.nil?
+            @newer_format_major = nil
+            return
+        end
+        key = entry.is_a?(Hash) ? Release.version_key(entry["format_version"]) : nil
+        raise InvalidReleaseError, "OTC_latest.json: bad format_version #{entry.is_a?(Hash) ? entry['format_version'].inspect : nil}" unless key
+        if key[0] > SUPPORTED_FORMAT_MAJORS.max
+            @newer_format_major = key[0]
+            log(:warn, "a newer format (#{key[0]}) exists; upgrade opentideconstants to read it")
+        else
+            @newer_format_major = nil
+        end
+    rescue Error => e
+        # any failure (network, a malformed entry, a cached copy that cannot be read) keeps the value from
+        # before, and never replaces the error or the result of the check that called this (CR D10)
+        log(:warn, "cannot check OTC_latest.json for a newer format: #{e.message}")
+    end
+
+    # Keeps the version DOI of an entry in the .verified of its cached release.
+    # An entry whose DOI is null never erases a known one (CR2 DR11).
+    def note_version_doi(entry)
+        d = entry["datestamp"]
+        return unless d.is_a?(String) && d.match?(DATESTAMP_RE) && !entry["zenodo_version_doi"].nil?
+        cache.note_version_doi(d, entry["zenodo_version_doi"])
+        @lock.synchronize do
+            next if @file || @closed || !@release || @release.datestamp != d || @release.zenodo_version_doi == entry["zenodo_version_doi"]
+            @release.__send__(:note_version_doi, entry["zenodo_version_doi"])
+        end
+    end
+
+    def newer?(a, b)
+        (Cache.datestamp_key(a) <=> Cache.datestamp_key(b)) == 1
+    end
+
+    # GETs a pointer or index file with If-None-Match and returns it parsed
+    # (spec §5.2 step 2). A 200 is parsed before it is cached: a body that is
+    # not JSON (a captive portal or a proxy error page) is a network error
+    # (CR D8) and leaves the cached copy alone. A failure to cache it is
+    # logged, not raised. A 304 with no usable cached copy is asked again
+    # without the ETag. Offline it uses the cached copy, or raises
+    # OfflineError. missing: :nil returns nil on a 404 (the latest pointers
+    # and the index lookup of §5.2 step 2a; a network error is raised, and the
+    # caller's open falls back to a cached release). missing: :offline is for
+    # releases: a 404 is release_not_found, and after a network error with
+    # on_network_error :use_cache it uses the cached copy.
+    def fetch_pointer_doc(name, missing:)
+        url = @base_url + name
+        cached = cached_pointer(name)
+        if @offline
+            return cached[0] if cached
+            raise OfflineError, "offline and #{name} is not cached"
+        end
+        res = @http.get(url, etag: cached && cached[1])
+        res = @http.get(url) if res.status == 304 && cached.nil?
+        case res.status
+        when 304
+            raise NetworkError.new("#{url}: HTTP 304 to a request without If-None-Match", url: url, status: 304) unless cached
+            log(:debug, "#{name}: 304, the cached copy is current")
+            cached[0]
+        when 200
+            doc = parse_pointer_body(name, url, res.body)
+            store_pointer(name, res.body, res.etag)
+            log(:debug, "#{name}: 200")
+            doc
+        when 404
+            return nil if missing == :nil
+            raise ReleaseNotFoundError, "#{url}: HTTP 404"
+        else
+            raise NetworkError.new("#{url}: HTTP #{res.status}", url: url, status: res.status)
+        end
+    rescue NetworkError => e
+        raise unless missing == :offline && @on_network_error == :use_cache && cached
+        log(:warn, "#{e.message}; using the cached #{name}")
+        cached[0]
+    end
+
+    # The cached copy of a pointer or index file as [doc, etag], or nil. A
+    # copy that is not JSON of the right shape counts as none, so its ETag is
+    # not sent.
+    def cached_pointer(name)
+        cached = cache.read_pointer(name)
+        return nil unless cached
+        doc = JSON.parse(cached[0])
+        return [doc, cached[1]] if pointer_shape?(name, doc)
+        log(:warn, "the cached #{name} is not JSON of the right shape; ignoring it")
+        nil
+    rescue JSON::ParserError, EncodingError
+        log(:warn, "the cached #{name} is not JSON; ignoring it")
+        nil
+    end
+
+    # The shape of a pointer (an object with a datestamp and a files list) or
+    # of the index (an object with a releases list). A wrong value inside a
+    # body of the right shape is invalid_release later (CR2 DR13).
+    def pointer_shape?(name, doc)
+        return false unless doc.is_a?(Hash)
+        return doc["releases"].is_a?(Array) if name == "OTC_index.json"
+        doc.key?("datestamp") && doc["files"].is_a?(Array)
+    end
+
+    # A 200 pointer or index body that is not JSON (CR D8), or is JSON of the
+    # wrong shape (CR2 DR13), is a network error. It is checked before the
+    # body is cached, so it never replaces the cached copy.
+    def parse_pointer_body(name, url, body)
+        doc = JSON.parse(body.dup.force_encoding(Encoding::UTF_8))
+        return doc if pointer_shape?(name, doc)
+        raise NetworkError.new("#{url}: HTTP 200 with JSON of the wrong shape for #{name}", url: url, status: 200)
+    rescue JSON::ParserError, EncodingError => e
+        raise NetworkError.new("#{url}: HTTP 200 with a body that is not JSON (#{e.message[0, 100]})", url: url, status: 200)
+    end
+
+    # Stores a pointer or index file and its ETag. The cached copy only saves
+    # work, so a failure is logged, not raised (spec §5.2, CR D8).
+    def store_pointer(name, body, etag)
+        cache.write_pointer(name, body, etag)
+    rescue CacheError => e
+        log(:warn, "cannot cache #{name}: #{e.message}")
+    end
+
+    # spec §5.2
+    def open_latest
+        if @offline
+            @release = load_newest_cached or raise OfflineError, "offline and no release is cached in #{cache.root}"
+            @loaded_from = :cache
+            return
+        end
+        cache.ensure_dir(cache.releases_dir)
+        begin
+            entry, url = resolve_latest
+            @release, @loaded_from = load_from_entry(entry, url)
+        rescue NetworkError => e
+            rel = @on_network_error == :use_cache ? load_newest_cached : nil
+            raise e unless rel
+            log(:warn, "#{e.message}; using the cached release #{rel.datestamp}")
+            @release = rel
+            @loaded_from = :cache_after_error
+            @last_error = e
+        end
+    end
+
+    def open_pinned(d)
+        if (rel = load_cached_unless_corrupt(d))
+            @release = rel
+            @loaded_from = :cache
+            return
+        end
+        raise OfflineError, "offline and release #{d} is not cached" if @offline
+        cache.ensure_dir(cache.releases_dir)
+        @release = fetch_release(d, nil, nil)
+        @loaded_from = :download
+    end
+
+    # [release, loaded_from] for a pointer entry: the cache when it has it.
+    def load_from_entry(entry, url)
+        d = entry["datestamp"]
+        raise InvalidReleaseError, "bad datestamp #{d.inspect} in the pointer" unless d.is_a?(String) && d.match?(DATESTAMP_RE)
+        # The entry's version DOI is the newest one read for d: the session has it even when .verified does not yet
+        # (a pinned writer cached d with none, or the note below is skipped under a busy lock) (CR2 DR11).
+        if (rel = load_cached_unless_corrupt(d, doi: entry["zenodo_version_doi"]))
+            note_version_doi(entry)
+            return [rel, :cache]
+        end
+        [fetch_release(d, entry, url), :download]
+    end
+
+    # The cached release d when it is usable, else nil. A cached release that
+    # fails its size or SHA-256 check or does not parse is healed, and then,
+    # when online, nil, so the caller downloads it again (spec §4.8, §5.2
+    # step 6). Offline, the error is raised.
+    def load_cached_unless_corrupt(d, doi: nil)
+        return nil unless present_cached?(d)
+        load_cached(d, doi: doi)
+    rescue ChecksumError, InvalidReleaseError => e
+        heal(d, e)
+        raise if @offline
+        log(:warn, "downloading #{d} again")
+        nil
+    end
+
+    # The newest cached release this SDK reads, loaded (spec §5.2 steps 1, 5
+    # and 6). A candidate that fails its size or SHA-256 check or does not
+    # parse is healed and the next older one is tried; one whose format this
+    # SDK cannot read is skipped. nil when none loads: the caller raises its
+    # original error.
+    def load_newest_cached
+        index = cached_index
+        cache.cached_releases.each do |d|
+            next unless cached_readable?(d, cache.verified(d), index[d]) && present_cached?(d)
+            begin
+                rel = load_cached(d)
+                return rel if rel
+            rescue UnsupportedFormatError, ReaderTooOldError => e
+                log(:info, "the cached release #{d} is not readable: #{e.message}")
+            rescue ChecksumError, InvalidReleaseError => e
+                heal(d, e)
+            end
+        end
+        nil
+    end
+
+    # Removes a cached release that failed its check or does not parse (spec
+    # §5.2 step 6): .verified first, so it is no longer trusted, then the bad
+    # file (the one the error names, or the data files of this mode). A
+    # failure to delete is logged; it never hides the original error.
+    def heal(d, err)
+        log(:warn, "the cached release #{d} is corrupt (#{err.message}); removing it from the cache")
+        dir = cache.release_dir(d)
+        bad = if err.respond_to?(:file) && err.file
+                  [File.join(dir, File.basename(err.file.to_s))] # only ever a file of this release's directory
+              else
+                  (wanted_files(d).find { |ns| ns.all? { |n| File.file?(File.join(dir, n)) } } || []).map { |n| File.join(dir, n) }
+              end
+        [File.join(dir, ".verified"), *bad].each do |path|
+            cache.remove_file(path)
+        rescue CacheError => e
+            log(:warn, e.message)
+        end
+    end
+
+    # The data files a load in this mode reads, in order of preference.
+    def wanted_files(d)
+        json = ["OTC_#{d}.json"]
+        jsonl = ["OTC_#{d}.jsonl", "OTC_#{d}.meta.json"]
+        @mode == :stream ? [jsonl] : [json, jsonl]
+    end
+
+    def usable_cached?(d)
+        ver = cache.verified(d)
+        return false unless ver
+        wanted_files(d).any? { |names| names.all? { |n| cache.file_ok?(d, n, ver) } }
+    end
+
+    # A verified release whose data files for this mode are there and listed
+    # in .verified, whatever their size (load_cached checks the size).
+    def present_cached?(d)
+        ver = cache.verified(d)
+        return false unless ver
+        wanted_files(d).any? { |names| names.all? { |n| ver["files"][n].is_a?(Hash) && ver["files"][n]["sha256"].is_a?(String) && File.file?(File.join(cache.release_dir(d), n)) } }
+    end
+
+    # Loads cached release d, or nil when it is no longer usable (another
+    # process removed it after the caller checked it). doi: a version DOI
+    # newer than .verified's (a pointer entry); anything but a String keeps .verified's.
+    def load_cached(d, doi: nil, files: nil)
+        ver = cache.verified(d)
+        dir = cache.release_dir(d)
+        names = ver && wanted_files(d).find { |ns| ns.all? { |n| ver["files"][n].is_a?(Hash) && ver["files"][n]["sha256"].is_a?(String) && File.file?(File.join(dir, n)) } }
+        return nil unless names
+        paths = names.map { |n| File.join(dir, n) }
+        # spec §5.3: the size is compared with .verified on every open
+        names.zip(paths).each do |n, p|
+            next if cache.file_ok?(d, n, ver)
+            raise ChecksumError.new("#{n}: the size does not match .verified", file: p, expected: ver["files"][n]["sha256"], actual: nil)
+        end
+        checks = paths.to_h { |p| [p, ver["files"][File.basename(p)]["sha256"]&.downcase] }
+        files ||= ver["files"].map do |name, row|
+            FileInfo.new(name: name, url: row["url"], size: row["size"], sha256: row["sha256"]&.downcase)
+        end
+        # With verify_on_open the load hashes each file from the bytes it reads (spec §5.3).
+        opts = { mode: @mode, files: files, checks: checks, zenodo_version_doi: doi.is_a?(String) ? doi : ver["zenodo_version_doi"], verify: @verify_on_open || @mode == :stream,
+                 logger: @logger, commercial_only: @commercial_only, commercial_basis: @commercial_basis, historical_offsets_policy: @historical_offsets_policy }
+        return Reader.load(paths.first, **opts) unless @mode == :stream
+        load_cached_stream(d, ver, paths.first, opts)
+    end
+
+    # Authenticate the opened source before the index admission callback.
+    # Its complete source pass and one index-derived retry stay in this phase.
+    def load_cached_stream(d, ver, jsonl_path, opts, canonical: nil, supplied_index: nil, index_presence: nil, on_index: nil)
+        selected = nil
+        rows = []
+        admission = lambda do
+            selected = fresh_stream_index(d, ver, jsonl_path, supplied_index: supplied_index, index_presence: index_presence, on_index: on_index)
+            drop_stream_index(d, "the stream index is stale") if !selected && File.file?(File.join(cache.release_dir(d), "index-v1.json"))
+            selected
+        end
+        begin
+            rel = Reader.load(jsonl_path, index: admission, index_rows: rows, canonical: canonical,
+                              on_bad_index: ->(msg) { drop_stream_index(d, msg) }, **opts)
+        rescue InvalidReleaseError => error
+            raise unless selected
+            log(:warn, "the stream index for #{d} cannot be used (#{error.message}); rebuilding it")
+            drop_stream_index(d, "the stream index is stale") if File.file?(File.join(cache.release_dir(d), "index-v1.json"))
+            rows = []
+            rel = Reader.load(jsonl_path, index_rows: rows, canonical: canonical, **opts)
+            selected = nil
+        end
+        write_stream_index(d, rel, rows, ver, jsonl_path, on_index: on_index) unless selected
+        rel
+    end
+
+    # The entries of index-v1.json when it is fresh for release d (spec §6.2), else nil.
+    def fresh_stream_index(d, ver, jsonl_path, supplied_index: nil, index_presence: nil, on_index: nil)
+        path = File.join(cache.release_dir(d), "index-v1.json")
+        return nil unless File.file?(path)
+        idx = JSON.parse(File.read(path, mode: "rb").force_encoding(Encoding::UTF_8))
+        if index_presence
+            unless supplied_index == idx && index_presence.all? { |key, present| idx.is_a?(Hash) && idx.key?(key) == present }
+                raise OpenTideConstants.const_get(:Canonical, false)::Unimplemented.new("B25 mismatched authenticated index source or presence")
+            end
+        end
+        jsonl = "OTC_#{d}.jsonl"
+        return nil unless idx.is_a?(Hash)
+        # An integer key may be written as a number with an integral value, 12.0 (CR2 DR10).
+        %w[index_version jsonl_size].each { |k| idx[k] = Reader.integral(idx[k]) if idx.key?(k) }
+        if idx["stations"].is_a?(Array)
+            idx["stations"].each do |e|
+                %w[offset length].each { |k| e[k] = Reader.integral(e[k]) if e.is_a?(Hash) && e.key?(k) }
+            end
+        end
+        return nil unless idx["index_version"].is_a?(Integer) && idx["index_version"] == 1
+        return nil if idx.key?("discovery_index_version") && Reader.integral(idx["discovery_index_version"]) != 1
+        return nil unless idx["datestamp"] == d && idx["jsonl"] == jsonl
+        return nil unless idx["jsonl_sha256"].is_a?(String) && idx["jsonl_sha256"] == ver["files"].dig(jsonl, "sha256")
+        return nil unless idx["jsonl_size"].is_a?(Integer) && idx["jsonl_size"] == File.size(jsonl_path)
+        return nil unless idx["stations"].is_a?(Array)
+        profile = Reader.index_profile(idx["stations"])
+        return nil unless profile && idx["stations"].all? { |e| Reader.index_entry_ok?(e, profile: profile) }
+        return nil unless index_in_bounds?(idx["stations"], idx["jsonl_size"])
+        on_index&.call(idx)
+        idx["stations"]
+    rescue JSON::ParserError, EncodingError, SystemCallError, IOError
+        nil
+    end
+
+    # The bounds check of a fresh index (spec §6.2, CR D4): each length > 0,
+    # offset + length <= the .jsonl size, and each offset at least the
+    # previous offset + the previous length + 1, so that no two entries
+    # overlap (CR2 DR9).
+    def index_in_bounds?(entries, size)
+        start = 0
+        entries.all? do |e|
+            ok = e["length"].positive? && e["offset"] >= start && e["offset"] + e["length"] <= size
+            start = e["offset"] + e["length"] + 1
+            ok
+        end
+    end
+
+    # Deletes the stream index of release d after a line did not match its
+    # entry (spec §6.2, CR D4); the next open rebuilds it.
+    def drop_stream_index(d, msg)
+        log(:warn, "#{msg}; deleting index-v1.json of #{d}")
+        cache.remove_file(File.join(cache.release_dir(d), "index-v1.json"))
+    rescue CacheError => e
+        log(:warn, e.message)
+    end
+
+    # Writes index-v1.json (spec §6.2): rows are the entries of every line,
+    # from the pass that loaded rel. A failure to write it is logged, not
+    # raised: the index only saves work.
+    def write_stream_index(d, rel, rows, ver, jsonl_path, on_index: nil)
+        jsonl = "OTC_#{d}.jsonl"
+        sha = ver["files"].dig(jsonl, "sha256")
+        return unless sha.is_a?(String)
+        kinds = rel.send(:index_kinds)
+        rows.each do |r|
+            r["kind"] = kinds[r["station_id"]] if r["status"] == "active" && kinds.key?(r["station_id"])
+            r["sets"] = r["sets"].map { |cs| cs.reject { |k, _| %w[source_record_id source_version datum].include?(k) } }
+            r["current_offsets"] = r["current_offsets"].map { |off| Reader::CURRENT_BASE.to_h { |key| [key, off[key]] } }
+        end
+        doc = { "index_version" => 1, "discovery_index_version" => 1, "datestamp" => d, "jsonl" => jsonl, "jsonl_sha256" => sha,
+                "jsonl_size" => File.size(jsonl_path), "by" => "opentideconstants-ruby/#{VERSION}", "stations" => rows }
+        on_index&.call(doc)
+        cache.write_atomic(File.join(cache.release_dir(d), "index-v1.json"), Cache.encode_cache_json(doc))
+    rescue CacheError, SystemCallError, IOError => e
+        log(:warn, "cannot write the stream index for #{d}: #{e.message}")
+    end
+
+    # Downloads, checks and caches release d (spec §5.2 step 4), then loads it.
+    def fetch_release(d, entry, pointer_url)
+        dir = cache.ensure_dir(cache.release_dir(d))
+        result = cache.with_lock(dir, done: -> { usable_cached?(d) }) do
+            next if usable_cached?(d)
+            download_into_cache(d, entry, pointer_url)
+        end
+        # release.files (spec §4.3.1): the pointer entry for a download of latest, else the .verified rows
+        files = entry && release_info(entry, pointer_url).files
+        load_cached(d, files: files) or raise CacheError, "release #{d} left the cache while it was opened"
+    end
+
+    def download_into_cache(d, entry, pointer_url)
+        dir = cache.release_dir(d)
+        rows, sha_bytes = Downloader.fetch_sha256(self, d, entry, pointer_url)
+        pointer_files = entry ? Array(entry["files"]).to_h { |f| [f["name"], f] } : {}
+        # Eager mode reads the .json, from .json.gz when the release has one.
+        gz = "OTC_#{d}.json.gz"
+        json = "OTC_#{d}.json"
+        need = @mode == :stream ? %W[OTC_#{d}.jsonl OTC_#{d}.meta.json] : [rows[gz] ? gz : json, json]
+        need.uniq.each do |name|
+            # Check the list before any download (a file it does not list cannot be checked).
+            raise ChecksumError.new("#{name} is not listed in OTC_#{d}.sha256", file: name, expected: nil, actual: nil) unless rows[name]
+        end
+        url_of = lambda do |name|
+            f = pointer_files[name]
+            f && f["url"] ? resolve(pointer_url, f["url"]) : @base_url + name
+        end
+        sha_name = "OTC_#{d}.sha256"
+        # .verified gets a row only for each file stored and verified here, with
+        # its real size (spec §5.4, CR3 DR100); release.files of a download of
+        # latest is the pointer entry (fetch_release).
+        verified = {}
+        row = ->(name, size) { verified[name] = { "sha256" => rows[name], "size" => size, "url" => url_of.call(name) } }
+        cache.write_atomic(File.join(dir, sha_name), sha_bytes)
+        # Only the keys the entry has: a missing or null zenodo_version_doi keeps the stored one (CR2 DR11).
+        info = entry ? entry.slice(*Cache::VERIFIED_INFO) : {}
+        info.delete("zenodo_version_doi") if info["zenodo_version_doi"].nil?
+        if @mode == :stream
+            %W[OTC_#{d}.jsonl OTC_#{d}.meta.json].each do |name|
+                size = Downloader.fetch_checked(self, url_of.call(name), dir, File.join(dir, name), name, rows[name],
+                                                pointer_files.dig(name, "size"))
+                row.call(name, size)
+            end
+        elsif !rows[gz]
+            size = Downloader.fetch_checked(self, url_of.call(json), dir, File.join(dir, json), json, rows[json],
+                                            pointer_files.dig(json, "size"))
+            row.call(json, size)
+        else
+            tmp_gz = Cache.tmp_path(dir)
+            begin
+                Downloader.fetch_checked(self, url_of.call(gz), dir, nil, gz, rows[gz], pointer_files.dig(gz, "size"),
+                                         keep_tmp: tmp_gz)
+                size = Downloader.gunzip_checked(tmp_gz, dir, File.join(dir, json), json, rows[json])
+                row.call(json, size)
+            ensure
+                FileUtils.rm_f(tmp_gz)
+            end
+        end
+        # The receipt keeps the versions of the checked source, including
+        # readable higher minors, rather than the pointer's advertised values.
+        meta = @mode == :stream ? cached_meta(d) : release_versions(File.join(dir, "OTC_#{d}.json"))
+        info["format_version"] = meta["format_version"]
+        info["min_reader_version"] = meta["release"].is_a?(Hash) ? meta["release"]["min_reader_version"] : nil
+        cache.write_verified(d, verified, info)
+    end
+end

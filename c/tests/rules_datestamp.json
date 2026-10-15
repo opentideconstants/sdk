@@ -1,0 +1,4 @@
+[{"match": "^/d10/OTC_latest-f1\\.json$", "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+  "set": {"/datestamp": "20991231.1234567890"}},
+ {"match": "^/d9/OTC_latest-f1\\.json$", "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+  "set": {"/datestamp": "20991231.123456789"}}]

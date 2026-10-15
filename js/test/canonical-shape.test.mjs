@@ -1,0 +1,1726 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createServer } from 'node:http';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
+import { Session } from 'node:inspector';
+import { Sum, events } from '../dist/predict/harmonic.js';
+import { releaseFromJson } from '../dist/loader.js';
+import { predictionAstroTable } from '../dist/release.js';
+import { select_canonical_error } from '../dist/canonical.js';
+import { evaluate_astronomy, find_unrounded_tide_events, evaluate_harmonic_height } from '../dist/canonical.js';
+import { InvalidArgumentError } from '../dist/errors.js';
+import { OpenTideConstants } from '../dist/client.js';
+import { translate_native_binding } from '../dist/canonical.js';
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = path.resolve(packageRoot, '..');
+const proof = process.env.OTC_SHAPE_PROOF ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/S-TS';
+const nodeFixture = await import('../dist/canonical-shape/test/canonical-shape.js').catch(error => ({ loadError: error.message }));
+const documentBytes = fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_20991231.2.json'));
+const predictionSource = fs.readFileSync(path.join(root, 'conformance/fixtures/predict/OTC_20991231.7.json'), 'utf8');
+const protocol = JSON.parse(fs.readFileSync(path.join(root, 'conformance/canonical/native-shape.json')));
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+const pin = relative => ({ path: relative, sha256: sha256(fs.readFileSync(path.join(root, relative))) });
+
+async function observeM2({ moduleRoot, source, meta, jsonl, checksum, pointer, baseUrl, cacheDir, corpus = [], retryFailure, warningSource }) {
+    const [canonical, loader, releases, core, clients, errors] = await Promise.all([
+        import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`), import(`${moduleRoot}/release.js`),
+        import(`${moduleRoot}/core.js`), import(`${moduleRoot}/client.js`), import(`${moduleRoot}/errors.js`),
+    ]);
+    const bytes = value => new TextEncoder().encode(value);
+    const readerVersion = { major: 1, minor: 0, native_document_context: { url: baseUrl, what: 'OTC_index.json' } };
+    const release = loader.releaseFromJson(bytes(source), []);
+    const other = loader.releaseFromJson(bytes(source), []);
+    const station = release.requireStation('OTC-T-0001');
+    const header = releases.parseHeader(JSON.parse(meta));
+    const indexed = loader.indexJsonl(header, bytes(jsonl), false).entries;
+    const index = releases.storedIndex(indexed, release.datestamp, pointer.files.find(row => row.name.endsWith('.jsonl')).sha256, bytes(jsonl).length, 'native-m2');
+    const admitted = releases.usableIndex(index, release.datestamp, index.jsonl_sha256, index.jsonl_size,
+        new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+    if (!admitted) throw new Error('Real native generated index was not admitted');
+    const events = [];
+    const rawBytes = bytes(jsonl);
+    const stream = loader.releaseFromJsonl(bytes(meta), null, { eager: false, files: [], index: { entries: admitted },
+        reader: (offset, length) => { events.push({ action: 'read', offset, length }); return rawBytes.subarray(offset, offset + length); },
+        close: () => events.push({ action: 'close' }), dropIndex: () => events.push({ action: 'delete_index' }) });
+    const node = typeof process === 'object' ? (await import(`${moduleRoot}/node.js`)).nodeApi : null;
+    const platform = node ? node.nodePlatform() : (await import(`${moduleRoot}/browser.js`)).browserPlatform();
+    const client = await clients.OpenTideConstants.open({ baseUrl, cacheDir, mode: 'stream', autoUpdate: false });
+    const store = await platform.cache(typeof process === 'object' ? cacheDir : `opentideconstants-v1:${cacheDir}`);
+    const context = { platform, store, baseUrl, offline: true, timeout: 60, proxy: null, caFile: null, userAgent: 'M2 native proof', onNetworkError: 'raise', logger: null, mode: 'stream', commercialOnly: false };
+    const verified = await core.readVerified(store, release.datestamp);
+    if (!verified) throw new Error('Native downloaded receipt missing');
+    const directoryEvents = [];
+    const nativePath = name => node.nodePath.join(store.describe(`releases/${release.datestamp}`), name);
+    const backend = node ? {
+        read: name => node.readIfExists(nativePath(name)), size: name => node.statSize(nativePath(name)),
+        lineReader: name => {
+            const reader = node.openLineReader(nativePath(name)); directoryEvents.push({ action: 'open_reader', name });
+            return { read: (offset, length) => { const value = reader.read(offset, length); directoryEvents.push({ action: 'positional_read', name, offset, length, actual_length: value.length }); return value; },
+                close: () => { directoryEvents.push({ action: 'close_reader', name }); reader.close(); } };
+        },
+        writeIndex: value => node.writeAtomicSync(nativePath('index-v1.json'), value), removeIndex: () => node.removeFileSync(nativePath('index-v1.json')),
+    } : await core.prefetchDir(store, release.datestamp, 'stream');
+    const trackDirectory = source => ({ ...source,
+        read: name => { directoryEvents.push({ action: 'read_file', name }); return source.read(name); },
+        writeIndex: value => { directoryEvents.push({ action: 'write_index', length: value.length }); source.writeIndex(value); },
+        removeIndex: () => { directoryEvents.push({ action: 'delete_index' }); source.removeIndex(); },
+    });
+    const dir = trackDirectory(backend);
+    const records = [];
+    const observe = async (id, call, check) => {
+        try { const value = await call(); records.push({ id, passed: check(value), value_json: JSON.stringify(value) ?? 'null' }); if (id === 'B25') value.close(); }
+        catch (error) { records.push({ id, passed: false, error_name: error.name, error_code: error.code ?? null, error_message: error.message }); }
+    };
+    try {
+        await observe('B05', () => canonical.decode_release_document(bytes(source), readerVersion, 'release'), value => value.variant === 'release' && JSON.stringify(value.value) === JSON.stringify(JSON.parse(source)));
+        await observe('B06', () => canonical.validate_release_links({ variant: 'release', value: JSON.parse(source) }, []), value => JSON.stringify(value) === JSON.stringify(JSON.parse(source)));
+        await observe('B08', () => canonical.access_raw_record('raw_record', station.raw, station, release, typeof process === 'object' ? 'typescript_node' : 'typescript_browser'), value => value === station.raw);
+        await observe('B08.station_object', () => canonical.access_raw_record('station_object', station.raw, station, release, typeof process === 'object' ? 'typescript_node' : 'typescript_browser'), value => value === station);
+        await observe('B08.origin', () => canonical.check_station_origin(station, release), value => value === station);
+        await observe('B15', () => canonical.enforce_resource_lifetime(release, 'station_read'), value => value === release);
+        await observe('B16', () => canonical.bind_checksum_manifest(bytes(checksum), { native_context: context, datestamp: release.datestamp, entry: core.parseIndex(bytes(JSON.stringify({ releases: [pointer] })), baseUrl)[0] }, pointer.files.filter(row => row.name.endsWith('.meta.json') || row.name.endsWith('.jsonl'))), value => value['OTC_20991231.2.jsonl'] === index.jsonl_sha256);
+        await observe('B20', () => canonical.verify_release_files({ native_owner: client, files: client.release.files }, null), value => value === true);
+        await observe('B25', () => canonical.authenticate_station_index({ jsonl: 'OTC_20991231.2.jsonl', meta: 'OTC_20991231.2.meta.json', jsonl_sha256: index.jsonl_sha256, jsonl_size: rawBytes.length, meta_sha256: pointer.files.find(row => row.name.endsWith('.meta.json')).sha256, meta_size: bytes(meta).length, native_context: { context, dir, verified, datestamp: release.datestamp } }, index, {}, readerVersion), value => value.entries.length === indexed.length);
+        const entry = admitted.find(row => row.station_id === station.station_id);
+        if (!entry) throw new Error('Actual admitted station index entry missing');
+        await observe('B26', () => canonical.compare_station_source({ native_entry: entry, native_header: header, native_drop_index: () => events.push({ action: 'delete_index' }) }, station.raw, entry.indexPresence), value => value === station.raw);
+        await observe('B27', () => canonical.read_station_lazily({ release_view: stream, native_owner: stream }, station.station_id, stream, readerVersion), value => JSON.stringify(value) === JSON.stringify(station.raw));
+        const indexEffectProbe = async supplied => {
+            const actualEvents = [], nativeEvents = [];
+            const observedDir = (events, suppliedBytes) => ({ ...dir,
+                read: name => { events.push({ action: 'read_file', name }); return suppliedBytes !== undefined && name === 'index-v1.json' ? suppliedBytes : dir.read(name); },
+                writeIndex: value => { events.push({ action: 'write_index', length: value.length }); dir.writeIndex(value); },
+                removeIndex: () => { events.push({ action: 'delete_index' }); dir.removeIndex(); },
+            });
+            const descriptor = observedDir(actualEvents);
+            const nativeSource = { jsonl: 'OTC_20991231.2.jsonl', meta: 'OTC_20991231.2.meta.json', jsonl_sha256: index.jsonl_sha256, jsonl_size: rawBytes.length, meta_sha256: pointer.files.find(row => row.name.endsWith('.meta.json')).sha256, meta_size: bytes(meta).length, native_context: { context, dir: descriptor, verified, datestamp: release.datestamp } };
+            const actual = await canonical.authenticate_station_index(nativeSource, supplied, {}, readerVersion);
+            const original = core.prepareCachedStreamIndex(observedDir(nativeEvents, supplied === null ? null : bytes(JSON.stringify(supplied))), verified, release.datestamp);
+            try {
+                const actualDeleted = actualEvents.some(row => row.action === 'delete_index'), nativeDeleted = nativeEvents.some(row => row.action === 'delete_index');
+                records.push({ id: supplied === null ? 'B25.absent_index' : 'B25.stale_supplied_index', passed: actualDeleted === nativeDeleted && JSON.stringify(actual.entries) === JSON.stringify(original.entries), actual_deleted: actualDeleted, native_deleted: nativeDeleted, actual_events: actualEvents, native_events: nativeEvents });
+            } finally { actual.close(); original.close(); }
+        };
+        await indexEffectProbe({ ...index, index_version: 0 });
+        await indexEffectProbe(null);
+        const failure = async call => {
+            try { return { value: await call() }; }
+            catch (error) { return { error: { name: error.name, code: error.code, message: error.message, file: error.file ?? null, path: error.path ?? null, expected: error.expected ?? null, actual: error.actual ?? null } }; }
+        };
+        const paired = async (id, actualCall, originalCall) => {
+            const actual = await failure(actualCall), expected = await failure(originalCall);
+            records.push({ id, passed: JSON.stringify(actual) === JSON.stringify(expected), actual, expected });
+        };
+        for (const profile of ['full', 'legacy_offsets', 'absent_fallback', 'absent_bins', 'mismatching_latitude']) {
+            const variant = structuredClone(index);
+            for (const row of variant.stations) {
+                if (profile === 'legacy_offsets') delete row.subordinate_offsets;
+                if (profile === 'absent_fallback') for (const set of row.sets) delete set.fallback;
+                if (profile === 'absent_bins') for (const set of row.sets) delete set.current_bins;
+                if (profile === 'mismatching_latitude' && row.station_id === station.station_id) row.lat += 0.01;
+            }
+            const entries = releases.usableIndex(variant, release.datestamp, index.jsonl_sha256, index.jsonl_size,
+                new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+            if (!entries) throw new Error(`Native presence profile is not admitted: ${profile}`);
+            const entry = entries.find(row => row.station_id === station.station_id);
+            if (!entry) throw new Error('Admitted presence target missing');
+            const actualEvents = [], nativeEvents = [];
+            const original = loader.releaseFromJsonl(bytes(meta), null, { eager: false, files: [], index: { entries }, reader: (offset, length) => rawBytes.subarray(offset, offset + length), dropIndex: () => nativeEvents.push('delete_index') });
+            try {
+                const actual = await failure(() => canonical.compare_station_source({ native_entry: entry, native_header: header, native_drop_index: () => actualEvents.push('delete_index') }, station.raw, entry.indexPresence));
+                const expected = await failure(() => original.requireStation(station.station_id).raw);
+                records.push({ id: `B26.${profile}`, passed: JSON.stringify(actual) === JSON.stringify(expected) && JSON.stringify(actualEvents) === JSON.stringify(nativeEvents), actual, expected, actual_effects: actualEvents, native_effects: nativeEvents, native_presence: entry.indexPresence });
+            } finally { original._close(); }
+        }
+        {
+            const variant = structuredClone(index);
+            variant.stations.find(row => row.station_id === station.station_id).lat += 0.01;
+            const entries = releases.usableIndex(variant, release.datestamp, index.jsonl_sha256, index.jsonl_size,
+                new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+            const deletionError = new errors.FileError('controlled native index deletion failure', { path: 'index-v1.json' });
+            const effects = [[], []];
+            const owners = effects.map(log => loader.releaseFromJsonl(bytes(meta), null, { eager: false, files: [], index: { entries },
+                reader: (offset, length) => { log.push('read_source_row'); return rawBytes.subarray(offset, offset + length); },
+                dropIndex: () => { log.push('delete_index'); throw deletionError; }, close: () => log.push('close_reader') }));
+            const identities = [];
+            try {
+                for (let which = 0; which < owners.length; which++) {
+                    try {
+                        if (which === 0) canonical.read_station_lazily({ release_view: owners[which], native_owner: owners[which] }, station.station_id, owners[which], readerVersion);
+                        else owners[which].requireStation(station.station_id);
+                    } catch (error) { identities.push(error === deletionError); }
+                }
+                records.push({ id: 'B27.deferred_deletion_callback_raises', passed: identities.length === 2 && identities.every(Boolean) && JSON.stringify(effects[0]) === JSON.stringify(['read_source_row', 'delete_index']) && JSON.stringify(effects[0]) === JSON.stringify(effects[1]),
+                    native_error_identity_preserved: identities, actual_effects: effects[0].slice(), native_effects: effects[1].slice(),
+                    qualification: 'Genuine native Release brands and deferred source comparator; controlled private delete callback failure; no initial-load retry after return' });
+            } finally { for (const owner of owners) owner._close(); }
+        }
+        for (const row of corpus) {
+            if (row.kind === 'checksum') continue;
+            const input = new Uint8Array(row.bytes);
+            if (row.kind === 'pointer' || row.kind === 'catalogue') {
+                await paired(`B05.${row.kind}.${row.name}`, async () => (await canonical.decode_release_document(input, readerVersion, row.kind)).value, () => {
+                    const parsed = loader.parseJson(input, 'the release file');
+                    core.parseIndex(row.kind === 'pointer' ? bytes(JSON.stringify({ releases: [parsed] })) : input, baseUrl);
+                    return parsed;
+                });
+            } else if (row.kind === 'cache') await paired(`B05.cache.${row.name}`, async () => (await canonical.decode_release_document(input, readerVersion, 'cache')).value, () => loader.parseJson(input, 'the release file'));
+            else if (row.kind === 'links') await paired(`B06.${row.name}`, () => canonical.validate_release_links({ variant: 'release', value: loader.parseJson(input, 'the release file') }, []), () => {
+                const parsed = loader.parseJson(input, 'the release file');
+                const header = releases.parseHeader(parsed);
+                releases.indexStations(header, parsed.stations);
+                return parsed;
+            });
+            else await paired(`B05.release.${row.name}`, async () => (await canonical.decode_release_document(input, readerVersion, 'release')).value, () => {
+                const parsed = loader.parseJson(input, 'the release file'); loader.checkFormat(parsed);
+                const header = releases.parseHeader(parsed);
+                for (const station of parsed.stations ?? []) releases.checkShape(station, String(station.station_id));
+                return header.raw;
+            });
+        }
+        await paired('B08.foreign_owner', () => canonical.check_station_origin(station, other), () => releases.releaseSourceReceiver(other).own(station));
+        const metadataBinding = { native_context: context, datestamp: release.datestamp, entry: core.parseIndex(bytes(JSON.stringify({ releases: [pointer] })), baseUrl)[0] };
+        const requiredFiles = pointer.files.filter(row => row.name.endsWith('.meta.json') || row.name.endsWith('.jsonl'));
+        for (const row of corpus.filter(row => row.kind === 'checksum')) {
+            const input = new Uint8Array(row.bytes);
+            const binding = { ...metadataBinding, entry: row.pointer_bound ? metadataBinding.entry : null };
+            await paired(`B16.${row.name}`, () => canonical.bind_checksum_manifest(input, binding, requiredFiles), async () => {
+                const rows = await core.checkSha256(context, release.datestamp, binding.entry, input);
+                core.requireManifestRows(release.datestamp, context.mode, rows, requiredFiles.map(file => file.name));
+                return Object.fromEntries(rows);
+            });
+        }
+        const fileName = 'OTC_20991231.2.jsonl', checksumName = 'OTC_20991231.2.sha256';
+        const relative = name => `releases/${release.datestamp}/${name}`;
+        for (const mode of ['missing_sidecar', 'tampered_sidecar', 'missing_data', 'tampered_data']) {
+            const name = mode.endsWith('sidecar') ? checksumName : fileName;
+            const original = await store.read(relative(name)); if (!original) throw new Error('Real verification fixture file missing');
+            const mutate = async () => {
+                if (mode.startsWith('missing')) await store.remove(relative(name));
+                else { const changed = new Uint8Array(original.length + 1); changed.set(original); changed[original.length] = 10; await store.write(relative(name), changed); }
+            };
+            await mutate();
+            const actual = await failure(() => canonical.verify_release_files({ native_owner: client, files: client.release.files }, null));
+            const actualPresent = await store.read(relative(name)) !== null;
+            await store.write(relative(name), original);
+            await mutate();
+            const expected = await failure(() => client.verify());
+            const expectedPresent = await store.read(relative(name)) !== null;
+            await store.write(relative(name), original);
+            records.push({ id: `B20.${mode}`, passed: JSON.stringify(actual) === JSON.stringify(expected) && actualPresent === expectedPresent, actual, expected, actual_present_after: actualPresent, native_present_after: expectedPresent });
+        }
+        if (node) {
+            const local = await clients.OpenTideConstants.open({ file: nativePath(fileName), cacheDir, mode: 'stream', autoUpdate: false });
+            try {
+                await paired('B20.local_valid', () => canonical.verify_release_files({ native_owner: local, files: local.release.files }, null), () => local.verify());
+                for (const mode of ['missing_sidecar', 'missing_data', 'tampered_data']) {
+                    const name = mode.endsWith('sidecar') ? checksumName : fileName;
+                    const original = await store.read(relative(name));
+                    if (!original) throw new Error('Actual local native file is required');
+                    if (mode.startsWith('missing')) await store.remove(relative(name));
+                    else { const changed = new Uint8Array(original.length + 1); changed.set(original); changed[original.length] = 10; await store.write(relative(name), changed); }
+                    try {
+                        const actual = await failure(() => canonical.verify_release_files({ native_owner: local, files: local.release.files }, null));
+                        const expected = await failure(() => local.verify());
+                        const retained = await store.read(relative(name));
+                        records.push({ id: `B20.local_${mode}`, passed: JSON.stringify(actual) === JSON.stringify(expected) && (mode.startsWith('missing') ? retained === null : retained?.length === original.length + 1), actual, expected,
+                            file_preserved_by_verification: mode.startsWith('missing') ? retained === null : retained?.length === original.length + 1,
+                            qualification: 'Actual native Node local-file Client source; original verification preserves local files' });
+                    } finally { await store.write(relative(name), original); }
+                }
+            } finally { local.close(); }
+        } else records.push({ id: 'B20.local_file_not_applicable', passed: true, qualification: 'Native Chromium platform does not support local file paths; genuine cached verify branch is executed above' });
+        {
+            const originalIndex = await store.read(relative('index-v1.json'));
+            for (const field of ['lat', 'country', 'aliases']) {
+                const variant = structuredClone(index);
+                for (const entry of variant.stations) delete entry.subordinate_offsets;
+                const target = variant.stations.find(entry => entry.station_id === station.station_id);
+                if (field === 'lat') target.lat += 0.01;
+                if (field === 'country') target.country = target.country === 'USA' ? 'GBR' : 'USA';
+                if (field === 'aliases') target.aliases = { ...target.aliases, canonical_stale_index: [target.station_id] };
+                await store.write(relative('index-v1.json'), bytes(JSON.stringify(variant)));
+                const actualDirectory = node ? dir : trackDirectory(await core.prefetchDir(store, release.datestamp, 'stream'));
+                const beforeEvents = directoryEvents.length;
+                const beforeBytes = await store.read(relative(fileName));
+                const beforeHash = await platform.sha256(beforeBytes);
+                const outcome = await failure(() => {
+                    const loaded = core.loadCached(actualDirectory, verified, release.datestamp, 'stream', undefined, true);
+                    try { return loaded.requireStation(station.station_id).raw; } finally { loaded._close(); }
+                });
+                const recoveryEvents = directoryEvents.slice(beforeEvents);
+                const afterHash = await platform.sha256(await store.read(relative(fileName)));
+                const scanReads = recoveryEvents.filter(row => row.action === 'positional_read' && row.length === 65536);
+                const fullPasses = node ? scanReads.filter(row => row.offset === 0).length : recoveryEvents.filter(row => row.action === 'read_file' && row.name === fileName).length - 1;
+                const fullBytes = node ? scanReads.reduce((sum, row) => sum + row.actual_length, 0) : rawBytes.length;
+                records.push({ id: `B25.initial_load_retry.${field}`, passed: !!outcome.value && JSON.stringify(outcome.value) === JSON.stringify(station.raw) && fullPasses === 1 && fullBytes === rawBytes.length && beforeHash === afterHash, actual: outcome,
+                    index_present_after: await store.read(relative('index-v1.json')) !== null, recovery_events: recoveryEvents, source_sha256_before: beforeHash, source_sha256_after: afterHash,
+                    full_source_passes: fullPasses, full_pass_bytes: fullBytes,
+                    qualification: 'Actual native initial constructor policy hydration; commercialOnly; admitted legacy index with represented mismatch; original source files unchanged' });
+                await store.write(relative('index-v1.json'), bytes(JSON.stringify(variant)));
+                const canonicalDirectory = node ? dir : trackDirectory(await core.prefetchDir(store, release.datestamp, 'stream'));
+                await observe(`B25.initial_load_retry.${field}.canonical`, async () => {
+                    const prepared = await canonical.authenticate_station_index({ jsonl: fileName, meta: 'OTC_20991231.2.meta.json', jsonl_sha256: index.jsonl_sha256, jsonl_size: rawBytes.length,
+                        meta_sha256: verified.files['OTC_20991231.2.meta.json'].sha256, meta_size: bytes(meta).length,
+                        native_context: { context: { ...context, commercialOnly: true }, dir: canonicalDirectory, verified, datestamp: release.datestamp } }, variant, {}, readerVersion);
+                    const materialized = releases.releaseFromPrepared(prepared.native_prepared_release);
+                    try { return materialized.requireStation(station.station_id).raw; } finally { materialized._close(); }
+                }, value => JSON.stringify(value) === JSON.stringify(station.raw));
+                if (field === 'lat') {
+                    await store.write(relative('index-v1.json'), bytes(JSON.stringify(variant)));
+                    const messages = [];
+                    const logger = Object.fromEntries(['debug', 'info', 'warn'].map(level => [level, message => messages.push({ level, message })]));
+                    const loaded = await clients.OpenTideConstants.open({ baseUrl, cacheDir, release: release.datestamp, offline: true, mode: 'stream', commercialOnly: true, autoUpdate: false, logger });
+                    try {
+                        const sourceHash = await platform.sha256(await store.read(relative(fileName)));
+                        const receiptPresent = await store.read(relative('.verified')) !== null;
+                        records.push({ id: 'B25.initial_retry_owning_client_no_heal', passed: JSON.stringify(loaded.requireStation(station.station_id).raw) === JSON.stringify(station.raw) && receiptPresent && sourceHash === beforeHash && !messages.some(row => /is corrupt|downloading release/.test(row.message)),
+                            logger_messages: messages, verified_receipt_present: receiptPresent, source_sha256_before: beforeHash, source_sha256_after: sourceHash,
+                            qualification: 'Genuine public pinned offline Client.open on unchanged actual cache; successful constructor recovery precedes owning heal and leaves receipt/source intact; no network permitted by original offline policy' });
+                    } finally { loaded.close(); }
+                }
+                if (originalIndex) await store.write(relative('index-v1.json'), originalIndex);
+                else await store.remove(relative('index-v1.json'));
+            }
+            const date = '20991231', stem = `OTC_${date}`;
+            const badMeta = new Uint8Array(retryFailure.meta), badJsonl = new Uint8Array(retryFailure.jsonl);
+            const badHeader = loader.headerFromMeta(badMeta);
+            const originalGood = loader.indexJsonl(loader.headerFromMeta(new Uint8Array(retryFailure.good_meta)), new Uint8Array(retryFailure.good_jsonl), false).entries;
+            const badDigest = await platform.sha256(badJsonl);
+            const staleIndex = releases.storedIndex(originalGood, date, badDigest, badJsonl.length, 'native second-failure control');
+            for (const entry of staleIndex.stations) delete entry.subordinate_offsets;
+            const badVerified = { datestamp: date, format_version: '1.0', verified_at: '2026-10-14T00:00:00Z', by: 'native-source-control', files: {} };
+            for (const [name, input] of [[`${stem}.meta.json`, badMeta], [`${stem}.jsonl`, badJsonl]]) {
+                await store.write(`releases/${date}/${name}`, input);
+                badVerified.files[name] = { sha256: await platform.sha256(input), size: input.length, url: null };
+            }
+            await store.write(`releases/${date}/${stem}.sha256`, new Uint8Array(retryFailure.checksum));
+            await store.write(`releases/${date}/.verified`, bytes(JSON.stringify(badVerified)));
+            const admitted = releases.usableIndex(staleIndex, date, badDigest, badJsonl.length,
+                new Set(badHeader.conventions.map(row => row.convention_id)), new Set(badHeader.licences.map(row => row.licence_id)));
+            if (!admitted) throw new Error('Authentic second-failure supplied native index was not admitted');
+            const nativeError = await failure(() => loader.indexJsonl(badHeader, badJsonl, false));
+            for (const route of ['public', 'canonical']) {
+                await store.write(`releases/${date}/index-v1.json`, bytes(JSON.stringify(staleIndex)));
+                const file = name => node.nodePath.join(store.describe(`releases/${date}`), name);
+                const directory = trackDirectory(node ? {
+                    read: name => node.readIfExists(file(name)), size: name => node.statSize(file(name)),
+                    lineReader: name => { const reader = node.openLineReader(file(name)); directoryEvents.push({ action: 'open_reader', name }); return {
+                        read: (offset, length) => { const value = reader.read(offset, length); directoryEvents.push({ action: 'positional_read', name, offset, length, actual_length: value.length }); return value; },
+                        close: () => { directoryEvents.push({ action: 'close_reader', name }); reader.close(); },
+                    }; },
+                    writeIndex: value => node.writeAtomicSync(file('index-v1.json'), value), removeIndex: () => node.removeFileSync(file('index-v1.json')),
+                } : await core.prefetchDir(store, date, 'stream'));
+                const initialEvents = directoryEvents.length;
+                const badContext = { ...context, commercialOnly: true };
+                const outcome = await failure(() => route === 'public' ? core.loadCached(directory, badVerified, date, 'stream', undefined, true)
+                    : canonical.authenticate_station_index({ jsonl: `${stem}.jsonl`, meta: `${stem}.meta.json`, jsonl_sha256: badDigest, jsonl_size: badJsonl.length,
+                        meta_sha256: badVerified.files[`${stem}.meta.json`].sha256, meta_size: badMeta.length,
+                        native_context: { context: badContext, dir: directory, verified: badVerified, datestamp: date } }, staleIndex, {}, readerVersion));
+                const effects = directoryEvents.slice(initialEvents);
+                const passes = node ? effects.filter(row => row.action === 'positional_read' && row.offset === 0 && row.length === 65536).length : effects.filter(row => row.action === 'read_file' && row.name === `${stem}.jsonl`).length - 1;
+                const indexPresent = await store.read(`releases/${date}/index-v1.json`) !== null;
+                const sourceHash = await platform.sha256(await store.read(`releases/${date}/${stem}.jsonl`));
+                records.push({ id: `B25.second_failure.${route}`, passed: JSON.stringify(outcome) === JSON.stringify(nativeError) && passes === 1 && !indexPresent && sourceHash === badDigest && effects.filter(row => row.action === 'delete_index').length === 1, actual: outcome, expected_full_pass_failure: nativeError,
+                    recovery_events: effects, full_source_passes: passes,
+                    index_present_after: indexPresent, source_sha256_after: sourceHash, source_sha256_before: badDigest,
+                    qualification: 'Authentic approved bad/lat-string JSONL/META/sidecar; initial admitted stale index fault, exactly one full pass propagates original source error' });
+            }
+            const warningMeta = new Uint8Array(warningSource.meta), warningJsonl = new Uint8Array(warningSource.jsonl);
+            const warningEntries = loader.indexJsonl(loader.headerFromMeta(warningMeta), warningJsonl, false).entries;
+            const warningDigest = await platform.sha256(warningJsonl);
+            const warningIndex = releases.storedIndex(warningEntries, date, warningDigest, warningJsonl.length, 'unknown-status fixture control');
+            const warningVerified = { ...badVerified, files: {} };
+            for (const [name, input] of [[`${stem}.meta.json`, warningMeta], [`${stem}.jsonl`, warningJsonl]]) {
+                await store.write(`releases/${date}/${name}`, input);
+                warningVerified.files[name] = { sha256: await platform.sha256(input), size: input.length, url: null };
+            }
+            const warnings = [];
+            for (const retry of [false, true]) {
+                const supplied = structuredClone(warningIndex);
+                if (retry) {
+                    for (const entry of supplied.stations) delete entry.subordinate_offsets;
+                    supplied.stations.find(entry => entry.status === 'active').lat += 0.01;
+                }
+                await store.write(`releases/${date}/index-v1.json`, bytes(JSON.stringify(supplied)));
+                const file = name => node.nodePath.join(store.describe(`releases/${date}`), name);
+                const directory = node ? { read: name => node.readIfExists(file(name)), size: name => node.statSize(file(name)),
+                    lineReader: name => node.openLineReader(file(name)), writeIndex: value => node.writeAtomicSync(file('index-v1.json'), value), removeIndex: () => node.removeFileSync(file('index-v1.json')),
+                } : await core.prefetchDir(store, date, 'stream');
+                const messages = [];
+                const loaded = core.loadCached(directory, warningVerified, date, 'stream', message => messages.push(message), true);
+                loaded._close(); warnings.push(messages);
+            }
+            records.push({ id: 'B25.initial_retry_warning_once', passed: warnings[0].length === 1 && JSON.stringify(warnings[0]) === JSON.stringify(warnings[1]), native_without_retry: warnings[0], actual_retry: warnings[1],
+                qualification: 'Approved synthetic bad/unknown-status fixture control on actual native cache load; not an authentic production dataset' });
+            await store.removeDir(`releases/${date}`);
+        }
+        const retainedClientRelease = client.release;
+        const stationIdBeforeClose = retainedClientRelease.requireStation(station.station_id).station_id;
+        const retainedIterator = retainedClientRelease.iterStations()[Symbol.iterator]();
+        const firstIteratorValue = retainedIterator.next();
+        if (firstIteratorValue.done) throw new Error('Actual retained native iterator is required');
+        canonical.enforce_resource_lifetime(client, 'close'); canonical.enforce_resource_lifetime(client, 'close');
+        await paired('B15.client_closed_read', () => canonical.enforce_resource_lifetime(client, 'query'), () => { clients.clientArgumentReceiver(client); return client; });
+        await observe('B15.client_retained_metadata', () => canonical.enforce_resource_lifetime(client, 'retained_metadata'), value => value === client && value.release === retainedClientRelease && value.release.datestamp === release.datestamp);
+        await paired('B15.retained_release_closed_read', () => canonical.enforce_resource_lifetime(retainedClientRelease, 'station_read'), () => { void retainedClientRelease._header; return retainedClientRelease; });
+        await paired('B15.retained_iterator_step', () => canonical.enforce_resource_lifetime(retainedClientRelease, 'iterator_step'), () => retainedIterator.next());
+        await observe('B15.retained_release_metadata', () => canonical.enforce_resource_lifetime(retainedClientRelease, 'retained_metadata'), value => value === retainedClientRelease && value.datestamp === release.datestamp);
+        const closeEvents = [];
+        const firstClose = new errors.FileError('controlled native first source close', { path: 'private native close control' });
+        const secondClose = new errors.FileError('controlled native second source close', { path: 'private native close control' });
+        const sourceA = loader.releaseFromJsonl(bytes(meta), rawBytes, { eager: false, files: [], close: () => { closeEvents.push('first'); throw firstClose; } });
+        const sourceB = loader.releaseFromJsonl(bytes(meta), rawBytes, { eager: false, files: [], close: () => { closeEvents.push('second'); throw secondClose; } });
+        const fields = await clients.prepareClientFields({ baseUrl, cacheDir, mode: 'stream', autoUpdate: false });
+        const controlledClient = clients.clientFromPrepared({ ...fields, all: [new WeakRef(sourceA), new WeakRef(sourceB)] });
+        try {
+            let failureIdentity;
+            try { canonical.enforce_resource_lifetime(controlledClient, 'close'); }
+            catch (error) { failureIdentity = error; }
+            canonical.enforce_resource_lifetime(controlledClient, 'close');
+            records.push({ id: 'B15.controlled_source_close_aggregation', passed: failureIdentity === firstClose && JSON.stringify(closeEvents) === JSON.stringify(['first', 'second']),
+                first_error_identity_preserved: failureIdentity === firstClose, actual_close_order: closeEvents,
+                qualification: 'Controlled private source-close callbacks on genuine native Release/Client brands; ordinary native Node close suppresses errors, ordinary browser close is no-op; not a genuine ordinary close-exception witness' });
+        } finally { fields.release._close(); sourceA._close(); sourceB._close(); }
+        return { records, events, directory_events: directoryEvents, control: { same_release: station._from(release), foreign_release: station._from(other), datestamp_equal: release.datestamp === other.datestamp, raw: station.raw, station_id: stationIdBeforeClose } };
+    } finally { client.close(); stream._close(); release._close(); other._close(); }
+}
+
+function m2Inputs(baseUrl, cacheDir) {
+    const fixture = path.join(root, 'conformance/fixtures/good');
+    const chosen = { release: ['bad/format-major', 'bad/min-reader', 'bad/min-reader-malformed', 'bad/format-version-malformed', 'bad/lat-string', 'bad/source-versions-not-object', 'bad/licence-commercial-use-missing', 'bad/invalid-utf8', 'bad/lone-surrogate', 'bad/format-minor'], links: ['bad/unresolved-convention', 'bad/unresolved-licence', 'bad/unresolved-recommended', 'bad/duplicate-alias', 'bad/duplicate-station-id', 'bad/duplicate-set-id', 'bad/duplicate-convention-id', 'bad/duplicate-licence-id', 'bad/active-and-removed-same-id', 'bad/unresolved-reference-station', 'bad/unresolved-offsets-licence'], pointer: ['bad/min-reader-malformed', 'bad/pointer-file-no-sha256'], catalogue: ['bad/min-reader-malformed', 'bad/pointer-file-no-sha256'] };
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, 'conformance/fixtures/fixtures.json'))).fixtures;
+    chosen.checksum = ['bad/sha256-dup-name', 'bad/sha256-invalid-utf8', 'bad/sha256-no-json-row', 'bad/pointer-mismatch', 'bad/sha256-file-differs'];
+    const corpus = Object.entries(chosen).flatMap(([kind, names]) => names.map(name => {
+        const row = manifest.find(row => row.root === name); if (!row) throw new Error(`Approved corpus row missing: ${name}`);
+        const filename = kind === 'pointer' ? 'OTC_latest.json' : kind === 'catalogue' ? 'OTC_index.json' : kind === 'checksum' ? `OTC_${row.latest}.sha256` : `OTC_${row.latest}.json`;
+        const input = fs.readFileSync(path.join(root, 'conformance/fixtures', name, filename));
+        return { kind, name, bytes: [...input], sha256: sha256(input), pointer_bound: name.includes('mismatch') || name.includes('file-differs') };
+    }));
+    for (const row of JSON.parse(fs.readFileSync(path.join(root, 'conformance/canonical/cache-golden.json'))).cases) {
+        const input = Buffer.from(row.expected);
+        corpus.push({ kind: 'cache', name: row.id, bytes: [...input], sha256: sha256(input) });
+    }
+    const retryFailure = { meta: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/lat-string/OTC_20991231.meta.json'))], jsonl: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/lat-string/OTC_20991231.jsonl'))], checksum: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/lat-string/OTC_20991231.sha256'))], good_meta: [...fs.readFileSync(path.join(fixture, 'OTC_20991231.meta.json'))], good_jsonl: [...fs.readFileSync(path.join(fixture, 'OTC_20991231.jsonl'))] };
+    const warningSource = { meta: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/unknown-status/OTC_20991231.meta.json'))], jsonl: [...fs.readFileSync(path.join(root, 'conformance/fixtures/bad/unknown-status/OTC_20991231.jsonl'))] };
+    return { source: fs.readFileSync(path.join(fixture, 'OTC_20991231.2.json'), 'utf8'), meta: fs.readFileSync(path.join(fixture, 'OTC_20991231.2.meta.json'), 'utf8'), jsonl: fs.readFileSync(path.join(fixture, 'OTC_20991231.2.jsonl'), 'utf8'), checksum: fs.readFileSync(path.join(fixture, 'OTC_20991231.2.sha256'), 'utf8'), pointer: JSON.parse(fs.readFileSync(path.join(fixture, 'OTC_latest.json'), 'utf8')), baseUrl, cacheDir, corpus, retryFailure, warningSource };
+}
+
+async function m2StationRetention({ moduleRoot, source }) {
+    const { releaseFromJson } = await import(`${moduleRoot}/loader.js`);
+    let inspector;
+    const collect = typeof globalThis.gc === 'function' ? () => globalThis.gc() : async () => {
+        if (!inspector) { const { Session } = await import('node:inspector'); inspector = new Session(); inspector.connect(); }
+        await new Promise((resolve, reject) => inspector.post('HeapProfiler.collectGarbage', error => error ? reject(error) : resolve()));
+    };
+    let release = releaseFromJson(new TextEncoder().encode(source), []);
+    const station = release.requireStation('OTC-T-0001');
+    const owner = new WeakRef(release);
+    release = null;
+    for (let attempt = 0; attempt < 12; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await collect();
+    }
+    const value = { collected: owner.deref() === undefined, retained_station: station.station_id, raw_station: station.raw.station_id, retained_set: station.constantSets()[0].set_id };
+    inspector?.disconnect(); return value;
+}
+
+async function observeM2Lru({ moduleRoot, meta, index, sourcePath, slices }) {
+    const [canonical, loader, releases] = await Promise.all([import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`), import(`${moduleRoot}/release.js`)]);
+    const header = loader.headerFromMeta(new TextEncoder().encode(meta));
+    const stored = JSON.parse(index);
+    const entries = releases.usableIndex(stored, stored.datestamp, stored.jsonl_sha256, stored.jsonl_size,
+        new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+    if (!entries) throw new Error('Accepted unchanged historical index admission failed');
+    const chosen = slices.map(row => row.station_id);
+    const events = [];
+    const nativeReader = typeof process === 'object' ? (await import(`${moduleRoot}/node.js`)).nodeApi.openLineReader(sourcePath) : null;
+    const byOffset = new Map(slices.map(row => [row.offset, new TextEncoder().encode(row.source)]));
+    const release = loader.releaseFromJsonl(new TextEncoder().encode(meta), null, { eager: false, files: [], index: { entries },
+        reader: (offset, length) => {
+            const bytes = nativeReader ? nativeReader.read(offset, length) : byOffset.get(offset);
+            if (!bytes || bytes.length !== length) throw new Error('Exact historical source span missing');
+            events.push({ action: 'read', offset, length }); return bytes;
+        }, close: () => { events.push({ action: 'close' }); nativeReader?.close(); }, dropIndex: () => events.push({ action: 'delete_index' }) });
+    const reader = { release_view: release, native_owner: release };
+    const version = { major: 1, minor: 0 };
+    try {
+        const before = events.length;
+        const first = canonical.read_station_lazily(reader, chosen[0], release, version);
+        const retained = release.requireStation(chosen[0]);
+        const firstReads = events.length - before;
+        const hit = canonical.read_station_lazily(reader, chosen[0], release, version);
+        const cacheHitReads = events.length - before - firstReads;
+        for (const id of chosen.slice(1)) canonical.read_station_lazily(reader, id, release, version);
+        const refillBefore = events.length;
+        const refill = canonical.read_station_lazily(reader, chosen[0], release, version);
+        const rematerialized = release.requireStation(chosen[0]);
+        const returned = { first_reads: firstReads, cache_hit_reads: cacheHitReads, refill_reads: events.length - refillBefore,
+            selected_stations: chosen.length, cache_hit_identity: hit === first, evicted_station_rematerialized: retained !== rematerialized,
+            values_unchanged: JSON.stringify(first) === JSON.stringify(refill), retained_origin_accepted: canonical.check_station_origin(retained, release) === retained,
+            fresh_origin_accepted: canonical.check_station_origin(rematerialized, release) === rematerialized,
+            original_byte_spans: slices.map(row => ({ station_id: row.station_id, offset: row.offset, length: row.length, sha256: row.sha256 })), events };
+        canonical.enforce_resource_lifetime(reader, 'close'); canonical.enforce_resource_lifetime(reader, 'close');
+        try { canonical.read_station_lazily(reader, chosen[0], release, version); returned.closed_error = null; }
+        catch (error) { returned.closed_error = { code: error.code, name: error.name, message: error.message }; }
+        returned.close_calls = events.filter(row => row.action === 'close').length;
+        returned.metadata_after_close = release.datestamp;
+        return returned;
+    } finally { release._close(); }
+}
+
+function m2HistoricalInputs() {
+    const locatorsPath = '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-PY/fixture-locators/locators.json';
+    const locators = JSON.parse(fs.readFileSync(locatorsPath));
+    const nativeIndexPath = '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/mobile-memory/node-cached-stream/implementation/cache/v1/releases/20261011/index-v1.json';
+    const metadata = fs.readFileSync(locators.metadata_path), index = fs.readFileSync(nativeIndexPath);
+    assert.equal(sha256(metadata), locators.metadata_sha256); assert.equal(sha256(index), '87539048ab6233961d0b0d280f0c1c12a93152d3c093bc6e64f07035d38a220a');
+    const sourcePath = locators.locators[0].source_path;
+    const fd = fs.openSync(sourcePath, 'r');
+    try {
+        const slices = JSON.parse(index).stations.filter(row => row.status === 'active').slice(0, 258).map(row => {
+            const bytes = Buffer.alloc(row.length); assert.equal(fs.readSync(fd, bytes, 0, bytes.length, row.offset), bytes.length);
+            assert.equal(JSON.parse(bytes).station_id, row.station_id);
+            return { station_id: row.station_id, offset: row.offset, length: row.length, source: bytes.toString(), sha256: sha256(bytes) };
+        });
+        return { meta: metadata.toString(), index: index.toString(), sourcePath, slices };
+    } finally { fs.closeSync(fd); }
+}
+
+for (const profile of ['node', 'chromium']) test(`M2 ${profile} authentic historical lazy LRU and retained owner`, async () => {
+    const server = m1Server(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+        const inputs = { ...m2HistoricalInputs(), moduleRoot: profile === 'node' ? path.join(packageRoot, 'dist') : '/dist' };
+        let value;
+        if (profile === 'node') value = await observeM2Lru(inputs);
+        else {
+            browser = await chromium.launch({ headless: true }); const page = await browser.newPage(); await page.goto(`http://127.0.0.1:${server.address().port}/`);
+            value = await page.evaluate(`(${observeM2Lru.toString()})(${JSON.stringify(inputs)})`);
+        }
+        if (process.env.OTC_M2_PROOF) fs.writeFileSync(path.join(process.env.OTC_M2_PROOF, `${process.env.OTC_M2_PHASE ?? 'candidate'}-lru-${profile}.json`), JSON.stringify(value, null, 2));
+        console.log(JSON.stringify({ profile, selected_stations: value.selected_stations, first_reads: value.first_reads, cache_hit_reads: value.cache_hit_reads, refill_reads: value.refill_reads, close_calls: value.close_calls, evicted_station_rematerialized: value.evicted_station_rematerialized }));
+        assert.equal(value.selected_stations, 258); assert.ok(value.first_reads > 0); assert.equal(value.cache_hit_reads, 0); assert.ok(value.refill_reads > 0);
+        assert.equal(value.evicted_station_rematerialized, true); assert.equal(value.values_unchanged, true); assert.equal(value.retained_origin_accepted, true); assert.equal(value.fresh_origin_accepted, true);
+        assert.equal(value.close_calls, 1); assert.equal(value.closed_error.code, 'io');
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+for (const profile of ['node', 'chromium']) test(`M2 ${profile} retained Station releases its producing owner`, async () => {
+    const server = m1Server(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+        const inputs = { source: documentBytes.toString(), moduleRoot: profile === 'node' ? path.join(packageRoot, 'dist') : '/dist' };
+        let value;
+        if (profile === 'node') value = await m2StationRetention(inputs);
+        else {
+            browser = await chromium.launch({ headless: true, args: ['--js-flags=--expose-gc'] });
+            const page = await browser.newPage(); await page.goto(`http://127.0.0.1:${server.address().port}/`);
+            value = await page.evaluate(`(${m2StationRetention.toString()})(${JSON.stringify(inputs)})`);
+        }
+        if (process.env.OTC_M2_PROOF) fs.writeFileSync(path.join(process.env.OTC_M2_PROOF, `${process.env.OTC_M2_PHASE ?? 'candidate'}-retention-${profile}.json`), JSON.stringify(value, null, 2));
+        console.log(JSON.stringify({ profile, qualification: 'Actual native model retained; controlled exposed runtime GC', ...value }));
+        assert.equal(value.collected, true); assert.equal(value.raw_station, value.retained_station);
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+});
+
+for (const profile of ['node', 'chromium']) test(`M2 actual ${profile} authenticated source and ownership`, async () => {
+    const server = m1Server();
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const inputs = m2Inputs(`${origin}/fixture-good/`, profile === 'node' ? fs.mkdtempSync(path.join('/tmp', 'otc-m2-native-')) : 'otc-m2-native-browser');
+    let browser;
+    try {
+        let result;
+        if (profile === 'node') result = await observeM2({ ...inputs, moduleRoot: path.join(packageRoot, 'dist') });
+        else {
+            browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage(); await page.goto(origin);
+            result = await page.evaluate(`(${observeM2.toString()})(${JSON.stringify({ ...inputs, moduleRoot: '/dist' })})`);
+        }
+        const output = process.env.OTC_M2_PROOF;
+        if (output) { fs.mkdirSync(output, { recursive: true }); fs.writeFileSync(path.join(output, `${process.env.OTC_M2_PHASE ?? 'candidate'}-${profile}.json`), JSON.stringify(result, null, 2)); }
+        console.log(JSON.stringify({ profile, records: result.records, events: result.events, control: { same_release: result.control.same_release, foreign_release: result.control.foreign_release, datestamp_equal: result.control.datestamp_equal, station_id: result.control.station_id } }));
+        assert.equal(result.control.same_release, true); assert.equal(result.control.foreign_release, false); assert.equal(result.control.datestamp_equal, true);
+        assert.deepEqual(result.records.filter(row => !row.passed), []);
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); if (profile === 'node') fs.rmSync(inputs.cacheDir, { recursive: true, force: true }); }
+});
+
+function m1Server() {
+    let failMetadata = false;
+    return createServer((request, response) => {
+        const pathname = new URL(request.url, 'http://localhost').pathname;
+        if (pathname === '/control/fail-metadata' || pathname === '/control/reset-metadata') {
+            failMetadata = pathname === '/control/fail-metadata'; response.end('native fixture phase selected'); return;
+        }
+        if (failMetadata && pathname.startsWith('/fixture-good/OTC_latest')) { response.writeHead(503); response.end('actual local metadata failure'); return; }
+        if (pathname === '/') { response.setHeader('content-type', 'text/html'); response.end('<!doctype html>'); return; }
+        const fixture = pathname.startsWith('/fixture-good/');
+        const filename = fixture ? path.resolve(root, 'conformance/fixtures/good', pathname.slice('/fixture-good/'.length)) : path.resolve(packageRoot, `.${pathname}`);
+        const directory = fixture ? path.join(root, 'conformance/fixtures/good') : path.join(packageRoot, 'dist');
+        if (!filename.startsWith(directory + path.sep) || !fs.existsSync(filename)) { response.writeHead(404); response.end(); return; }
+        response.setHeader('content-type', fixture ? 'application/octet-stream' : 'text/javascript');
+        response.end(fs.readFileSync(filename));
+    });
+}
+
+function verifyInvocations(observations) {
+    assert.deepEqual(observations.runtime.map(row => row.id), protocol.runtime.map(row => row.id));
+    assert.deepEqual(observations.call_actions.map(row => row.id), protocol.call_actions.map(row => row.action.action_id));
+    const migrated = new Set(['B01', 'B02', 'B03', 'B04', 'B05', 'B06', 'B07', 'B08', 'B08.origin', 'B08.raw', 'B15', 'B16', 'B20', 'B24', 'B25', 'B26', 'B27', 'B28', 'B39', 'B41', 'B42', 'B43.roots', 'B44.roots']);
+    assert.ok(observations.runtime.every(row => migrated.has(row.id) ? row.refusal === undefined && typeof row.value_json === 'string' : row.refusal === `Private canonical seam ${row.id} is unimplemented`));
+    assert.equal(observations.b04_presence_controls.length, 16);
+    assert.ok(observations.b04_presence_controls.every(row => row.refusal === undefined && (typeof row.value_json === 'string' || typeof row.error_json === 'string')));
+    assert.equal(JSON.parse(observations.b04_presence_controls[0].value_json).member_id, 'Client.close');
+    assert.deepEqual(JSON.parse(observations.b04_presence_controls[1].value_json), { member_id: 'Release.station', value: null });
+    assert.equal(JSON.parse(observations.b04_presence_controls[2].error_json).code, 'io');
+    assert.equal(JSON.parse(observations.b04_presence_controls[3].error_json).structured_fields.message, 'native exception');
+    assert.deepEqual(observations.b04_presence_controls.slice(4).map(row => JSON.parse(row.error_json).code), ['network', 'checksum_mismatch', 'cache', 'station_not_found', 'station_removed', 'file_exists', 'release_not_found', 'unsupported_constituent', 'time_out_of_range', 'datum_unavailable', 'unknown_time_zone', 'reference_unavailable']);
+    assert.equal(observations.control.raw_preserved, true);
+    assert.equal(observations.control.public_route_unchanged, true);
+}
+
+function writeEvidence(profile, observations, runtimeEnvironment) {
+    const evidenceDir = path.join(packageRoot, 'dist/canonical-shape/evidence');
+    fs.mkdirSync(evidenceDir, { recursive: true });
+    fs.mkdirSync(proof, { recursive: true });
+    const relative = `js/dist/canonical-shape/evidence/${profile}-invocations.json`;
+    fs.writeFileSync(path.join(root, relative), JSON.stringify({ profile, runtimeEnvironment, document_sha256: sha256(documentBytes), observations }, null, 2));
+    fs.copyFileSync(path.join(root, relative), path.join(proof, `${profile}-invocations.json`));
+    return pin(relative);
+}
+
+test('private canonical TypeScript Node entries load and invoke on the actual candidate', async () => {
+    assert.equal(nodeFixture.loadError, undefined, `Required private native seam is absent: ${nodeFixture.loadError}`);
+    const server = m1Server(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const cacheRoot = fs.mkdtempSync(path.join('/tmp', 'otc-m2-shape-'));
+    try {
+        const inputs = m2Inputs(`http://127.0.0.1:${server.address().port}/fixture-good/`, cacheRoot);
+        const contexts = { base_url: inputs.baseUrl, cache_root: cacheRoot, metadata: inputs.meta, jsonl: inputs.jsonl, checksum: inputs.checksum, pointer: JSON.stringify(inputs.pointer) };
+        const observations = await nodeFixture.exerciseShape(documentBytes.toString(), 'typescript_node', predictionSource, contexts);
+        verifyInvocations(observations);
+        writeEvidence('typescript_node', observations, 'node');
+        console.log(JSON.stringify({ native_profile: 'typescript_node', runtime: 60, ordered_call_actions: 78, construction_only: true }));
+    } finally { await new Promise(resolve => server.close(resolve)); fs.rmSync(cacheRoot, { recursive: true, force: true }); }
+});
+
+test('private canonical TypeScript browser entries load and invoke in Chromium', async () => {
+    const server = m1Server();
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+        browser = await chromium.launch({ headless: true });
+        const page = await browser.newPage();
+        await page.goto(`http://127.0.0.1:${server.address().port}/`);
+        const inputs = m2Inputs(`http://127.0.0.1:${server.address().port}/fixture-good/`, 'otc-m2-shape-browser');
+        const contexts = { base_url: inputs.baseUrl, cache_root: inputs.cacheDir, metadata: inputs.meta, jsonl: inputs.jsonl, checksum: inputs.checksum, pointer: JSON.stringify(inputs.pointer) };
+        const result = await page.evaluate(async ({ source, predictionSource, contexts }) => {
+            try {
+                const fixture = await import('/dist/canonical-shape/test/canonical-shape.js');
+                return { runtime_environment: 'browser', user_agent: navigator.userAgent, observations: await fixture.exerciseShape(source, 'typescript_browser', predictionSource, contexts) };
+            } catch (error) {
+                return { runtime_environment: 'browser', load_error: error.message };
+            }
+        }, { source: documentBytes.toString(), predictionSource, contexts });
+        assert.equal(result.load_error, undefined, `Required private browser seam is absent: ${result.load_error}`);
+        assert.equal(result.runtime_environment, 'browser');
+        assert.match(result.user_agent, /Chrome/);
+        verifyInvocations(result.observations);
+        writeEvidence('typescript_browser', result.observations, 'browser');
+        console.log(JSON.stringify({ native_profile: 'typescript_browser', runtime: 60, ordered_call_actions: 78, runtime_environment: 'browser', user_agent: result.user_agent, construction_only: true }));
+    } finally {
+        await browser?.close();
+        await new Promise(resolve => server.close(resolve));
+    }
+});
+
+// Real native leaf values from accepted CC0 documents and original finite oracles.
+async function observeM1({ moduleRoot, goodSource, predictSource, astroCase, cacheCase, extendedModels = false, extendedGuards = false, guardInputs = [], historicalInputs, dtoModels = false, baseUrl, cacheDir, pointerSource, foreignTables = false, receiverGuards = false, managedModels = false, streamMetadata, streamSource, primitiveGuards = false, requiredBindings = false, requiredTimes = false, requiredErrorDefaults = false, requiredOptionOrder = false, requiredErrorContexts = false, requiredDetailCodes = false, requiredCoreCause = false, requiredNativeChannels = false, requiredGuardModels = false, requiredModelContexts = false, requiredModelEdges = false, requiredManagedFields = false, nativeFilePath, requiredCurrentPhase = false, currentPhaseSource }) {
+    const [canonical, loader, releaseModule, errors, astro] = await Promise.all([
+        import(`${moduleRoot}/canonical.js`), import(`${moduleRoot}/loader.js`),
+        import(`${moduleRoot}/release.js`), import(`${moduleRoot}/errors.js`), import(`${moduleRoot}/predict/astro.js`),
+    ]);
+    const good = loader.releaseFromJson(new TextEncoder().encode(goodSource), []);
+    const release = loader.releaseFromJson(new TextEncoder().encode(predictSource), []);
+    const station = release.requireStation('OTC-P-0001');
+    const constants = station.recommendedSet;
+    if (!constants) throw new Error('Authentic recommended native model missing');
+    const table = releaseModule.predictionAstroTable(release);
+    if (!table) throw new Error('Authentic native AstroTable missing');
+    const model = { station, release_view: release, constant_set: constants, convention: constants.convention,
+        astro_table: table._raw, required_constituents: constants.raw.constituents, reference_bin: null,
+        mean_term: 0, datum_source: constants.raw.datum };
+    const header = releaseModule.parseHeader(release._header);
+    const span = { offset_bytes: 0, length_bytes: new TextEncoder().encode(JSON.stringify(station.raw)).length };
+    const index = releaseModule.indexDoc(station.raw, header, span.offset_bytes, span.length_bytes,
+        new Set(header.conventions.map(row => row.convention_id)), new Set(header.licences.map(row => row.licence_id)));
+    const nativeOwner = { release, entry: index };
+    const origin = Symbol('borrowed actual producing Release');
+    const result = [];
+    const observation = async (id, call, check) => {
+        try { const value = await call(); result.push({ id, passed: check(value), value_json: JSON.stringify(value) }); }
+        catch (error) { result.push({ id, passed: false, error_name: error.name, error_code: error.code ?? null, error_message: error.message }); }
+    };
+    const nativeFailure = async call => {
+        try { await call(); return null; }
+        catch (error) { return { name: error.name, code: error.code, message: error.message, path: error.path ?? null }; }
+    };
+    const args = { member_id: 'Client.open', arguments: { offline: false } };
+    const node = typeof process === 'object' ? (await import(`${moduleRoot}/node.js`)).nodeApi : null;
+    const platform = node ? node.nodePlatform() : (await import(`${moduleRoot}/browser.js`)).browserPlatform();
+    const environment = node ? { OPENTIDECONSTANTS_OFFLINE: 'On' } : {};
+    const failure = new errors.InvalidArgumentError('file cannot be combined with release, offline or onNetworkError');
+    const canonicalFailure = { code: failure.code, structured_fields: { message: failure.message }, cause: null };
+    try {
+        await observation('B01', () => canonical.validate_operation_arguments('open', args, args), value => value.member_id === 'Client.open' && value.arguments.offline === false);
+        if (extendedGuards) {
+            const clientModule = await import(`${moduleRoot}/client.js`);
+            const guardClient = await clientModule.OpenTideConstants.open({ baseUrl, cacheDir: cacheDir + '-guards', offline: false, format: 'json', autoUpdate: false });
+            try {
+                for (const { operation, selected } of guardInputs) {
+                    const native_receiver = selected.member_id.startsWith('Client.') ? { kind: 'client', owner: guardClient } : selected.member_id.startsWith('Release.') ? { kind: 'release', owner: good } : undefined;
+                    await observation(`B01.${operation}`, () => {
+                        try { return canonical.validate_operation_arguments(operation, selected, { ...selected, native_receiver }); }
+                        catch (error) {
+                            if (!node && ['download', 'prune'].includes(operation) && error.code === 'unsupported') return { native_capability_error: error.code };
+                            throw error;
+                        }
+                    }, value => value === selected || !node && value.native_capability_error === 'unsupported');
+                }
+            } finally { guardClient.close(); }
+            for (const member_id of ['Constituent.name', 'Constituent.amplitude_m', 'Constituent.phase_deg']) {
+                const selected = { member_id, arguments: {} };
+                const contract = { ...selected, native_guard: 'no_arguments', native_profile: typeof process === 'object' ? 'typescript_node' : 'typescript_browser' };
+                await observation(`B01.no_arguments.${member_id}`, () => canonical.validate_operation_arguments('constituent', selected, contract), value => value === selected && typeof constants.constituents[0][member_id.split('.')[1]] !== 'undefined');
+            }
+        }
+        await observation('B02', () => canonical.resolve_effective_options({ member_id: 'Client.open', offline: false }, environment, { member_id: 'Client.open', native_context: { platform, node } }), value => value.offline === Boolean(node));
+        if (requiredOptionOrder) {
+            const clientModule = await import(`${moduleRoot}/client.js`);
+            const names = ['OPENTIDECONSTANTS_OFFLINE', 'OPENTIDECONSTANTS_BASE_URL', 'OPENTIDECONSTANTS_CACHE_DIR'];
+            const saved = node ? Object.fromEntries(names.map(name => [name, process.env[name]])) : {};
+            const optionsCases = [
+                ['defaults', {}, {}],
+                ['nullable_defaults', { timeout: null, offline: null, cacheDir: null, proxy: null, caFile: null, autoUpdate: null, verifyOnOpen: null, updateInterval: null, mode: null, onNetworkError: null }, {}],
+                ['explicit_all', { mode: 'stream', timeout: 20, updateInterval: 120, offline: true, verifyOnOpen: true, commercialOnly: true, commercialBasis: 'as_published_upstream', historicalOffsetsPolicy: 'exclude', onNetworkError: 'raise', baseUrl: 'https://explicit.native.invalid/root', cacheDir: 'explicit-native-cache' }, {}],
+                ['capability_before_url', { file: '/native/fixture.json', baseUrl: 'bad-url' }, {}],
+            ];
+            if (node) optionsCases.push(
+                ['offline_forces_false', { offline: false }, { OPENTIDECONSTANTS_OFFLINE: ' On ' }],
+                ['offline_unrecognized', { offline: true }, { OPENTIDECONSTANTS_OFFLINE: 'false' }],
+                ['environment_defaults', {}, { OPENTIDECONSTANTS_BASE_URL: 'https://env.native.invalid/root', OPENTIDECONSTANTS_CACHE_DIR: 'env-native-cache' }],
+                ['explicit_over_environment', { baseUrl: 'https://explicit.native.invalid/root', cacheDir: 'explicit-native-cache' }, { OPENTIDECONSTANTS_BASE_URL: 'https://env.native.invalid/root', OPENTIDECONSTANTS_CACHE_DIR: 'env-native-cache' }],
+            );
+            const nativeKeys = { cacheDir: 'cache_dir', baseUrl: 'base_url', caFile: 'ca_file', userAgent: 'user_agent', onNetworkError: 'on_network_error', autoUpdate: 'auto_update', updateInterval: 'update_interval', verifyOnOpen: 'verify_on_open', commercialOnly: 'commercial_only', commercialBasis: 'commercial_basis', historicalOffsetsPolicy: 'historical_offsets_policy' };
+            try {
+                for (const [label, options, env] of optionsCases) {
+                    if (node) for (const name of names) { if (env[name] === undefined) delete process.env[name]; else process.env[name] = env[name]; }
+                    const sourceEnvironment = Object.fromEntries(names.map(name => [name, platform.env(name)]).filter(([, value]) => typeof value === 'string'));
+                    const explicit = { member_id: 'Client.open', ...Object.fromEntries(Object.entries(options).map(([name, value]) => [nativeKeys[name] ?? name, value])) };
+                    let expected, expectedError;
+                    try {
+                        const validated = clientModule.validateOpenOptions(options);
+                        const settings = clientModule.resolveOpenNativeOptions(options, validated, platform, node);
+                        expected = { release: validated.release, mode: validated.mode, on_network_error: validated.onNetworkError,
+                            timeout: validated.timeout, auto_update: validated.autoUpdate, update_interval: validated.interval,
+                            verify_on_open: validated.verifyOnOpen, commercial_only: validated.commercialOnly === true,
+                            commercial_basis: validated.commercialBasis, historical_offsets_policy: validated.historicalOffsetsPolicy,
+                            offline: settings.offline, base_url: settings.baseUrl, proxy: settings.proxy, ca_file: settings.caFile, cache_dir: settings.cacheRoot ?? settings.cacheDir };
+                    } catch (error) { expectedError = { name: error.name, code: error.code, message: error.message }; }
+                    await observation(`B02.native.${label}`, () => {
+                        try {
+                            const value = canonical.resolve_effective_options(explicit, sourceEnvironment, { member_id: 'Client.open', native_context: { platform, node } });
+                            return { value: Object.fromEntries(Object.keys(expected ?? {}).map(name => [name, value[name]])) };
+                        } catch (error) { return { error: { name: error.name, code: error.code, message: error.message } }; }
+                    }, actual => expectedError ? JSON.stringify(actual.error) === JSON.stringify(expectedError) : JSON.stringify(actual.value) === JSON.stringify(expected));
+                }
+                if (!node) await observation('B02.applicability.native_browser_environment', () => names.map(name => platform.env(name)), values => values.every(value => value === null));
+            } finally { if (node) for (const name of names) { if (saved[name] === undefined) delete process.env[name]; else process.env[name] = saved[name]; } }
+            const sourceFailure = options => {
+                try { clientModule.validateOpenOptions(options); throw new Error('Expected original native option failure'); }
+                catch (error) { if (!(error instanceof errors.OpenTideConstantsError)) throw error; return error; }
+            };
+            for (const [label, together, later] of [
+                ['release_before_mode', { release: 'bad-date', mode: 'bad-mode' }, { mode: 'bad-mode' }],
+                ['mode_before_timeout', { mode: 'bad-mode', timeout: -1 }, { timeout: -1 }],
+                ['timeout_before_interval', { timeout: -1, updateInterval: -1 }, { updateInterval: -1 }],
+            ]) {
+                const first = sourceFailure(together), second = sourceFailure(later);
+                const selected = { code: first.code, structured_fields: { message: first.message }, cause: null, native_error: first };
+                const competing = { code: second.code, structured_fields: { message: second.message }, cause: null, native_error: second };
+                await observation(`B03.native.${label}`, () => canonical.select_canonical_error('open', [selected, competing], null), value => value === selected && value.native_error === first && value.structured_fields === selected.structured_fields);
+                const cause = new Error('supplemental native cause');
+                await observation(`B03.cause.${label}`, () => canonical.select_canonical_error('open', [selected, competing], cause), value => value.cause === cause && value.native_error === first && selected.cause === null && Object.isFrozen(value));
+                const heldCause = { ...selected, cause };
+                await observation(`B03.cause.preserve_${label}`, () => canonical.select_canonical_error('open', [heldCause, competing], new Error('later cause')), value => value === heldCause && value.cause === cause);
+            }
+        }
+        await observation('B03', () => canonical.select_canonical_error('open', [canonicalFailure], null), value => value.code === 'invalid_argument' && value.structured_fields.message === failure.message);
+        await observation('B04', () => canonical.translate_native_binding({ native_profile: typeof process === 'object' ? 'typescript_node' : 'typescript_browser', canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: release.station('missing') } } }), value => value.member_id === 'Release.station' && value.value === null);
+        if (requiredNativeChannels) {
+            const clientModule = await import(`${moduleRoot}/client.js`);
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            const options = { baseUrl, cacheDir: cacheDir + '-native-channel', offline: false, format: 'json', autoUpdate: false, onNetworkError: 'use_cache' };
+            const seed = await clientModule.OpenTideConstants.open(options);
+            const date = seed.release.datestamp;
+            seed.close();
+            await fetch(new URL('../control/fail-metadata', baseUrl));
+            let cached;
+            try {
+                cached = await clientModule.OpenTideConstants.open(options);
+                const diagnostic = cached.lastError, acquired = cached.release;
+                if (!(diagnostic instanceof errors.NetworkError) || cached.loadedFrom !== 'cache_after_error') throw new Error('Genuine native cached fallback is required');
+                const binding = { member_id: 'Client.open', value: cached };
+                await observation('B04.channel.cached_client', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'present_value', binding } }), value => value === binding && value.value === cached && value.value.lastError === diagnostic && value.value.release === acquired && acquired.datestamp === date && value.value.requireStation('OTC-T-0001')._from(acquired));
+                for (const [label, controlOptions, Constructor] of [
+                    ['raise_with_cache', { ...options, onNetworkError: 'raise' }, errors.NetworkError],
+                    ['no_cache', { ...options, cacheDir: options.cacheDir + '-empty' }, errors.NetworkError],
+                    ['non_network_guard', { ...options, mode: 'invalid-mode' }, errors.InvalidArgumentError],
+                ]) await observation(`B04.channel.control.${label}`, async () => {
+                    try { const unexpected = await clientModule.OpenTideConstants.open(controlOptions); unexpected.close(); return false; }
+                    catch (error) { return error instanceof Constructor; }
+                }, value => value === true);
+                await observation('B04.channel.null_station', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: acquired.station('native-absent-id') } } }), value => value.value === null);
+                if (!node) {
+                    let failure;
+                    try { cached.prune({ keep: 0 }); throw new Error('Expected native browser prune refusal'); }
+                    catch (error) { if (!(error instanceof errors.UnsupportedError)) throw error; failure = error; }
+                    await observation('B04.channel.browser_prune_terminal', () => {
+                        try { canonical.translate_native_binding({ native_profile, native_exception: failure, member_id: 'Client.prune' }); return false; }
+                        catch (actual) { return actual === failure; }
+                    }, value => value === true);
+                }
+                const closed = cached.close();
+                await observation('B04.channel.close_void', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'successful_no_value', member_id: 'Client.close' } }), value => closed === undefined && value.member_id === 'Client.close' && Object.hasOwn(value, 'value') && value.value === undefined);
+                await observation('B04.channel.close_controls', () => {
+                    const repeated = cached.close();
+                    try { cached.requireStation('OTC-T-0001'); return false; }
+                    catch (error) { return repeated === undefined && error instanceof errors.FileError && cached.lastError === diagnostic; }
+                }, value => value === true);
+            } finally { cached?.close(); await fetch(new URL('../control/reset-metadata', baseUrl)); }
+        }
+        if (requiredCoreCause) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            // Native constructor controls; these do not claim acquisition or data failures.
+            for (const [Constructor, fields] of [
+                [errors.FileError, { path: '/native/core-constructor-control' }],
+                [errors.NetworkError, { url: 'https://native.invalid/core-constructor', status: 503 }],
+                [errors.ChecksumError, { file: 'OTC_20991231.2.json', expected: 'a'.repeat(64), actual: 'b'.repeat(64) }],
+                [errors.CacheError, { removed: ['20991231.2', '20991231'] }],
+            ]) for (const [label, cause] of [['absent', undefined], ['error', new Error('native core constructor cause')], ['null', null]]) {
+                const expected = new Constructor('native core constructor control', { ...fields, cause });
+                const input = { native_profile, canonical_error: { code: expected.code, structured_fields: { message: expected.message, ...fields }, cause: expected.cause ?? null },
+                    native_cause_option: Object.hasOwn(expected, 'cause') ? { presence: 'present', value: expected.cause } : { presence: 'absent' } };
+                await observation(`B04.core_cause.${expected.code}.${label}`, () => {
+                    try { canonical.translate_native_binding(input); return { threw: false }; }
+                    catch (actual) { return { native_class: actual instanceof Constructor, code: actual.code, message: actual.message,
+                        fields: Object.fromEntries(Object.keys(fields).map(name => [name, actual[name]])),
+                        cause_identity: actual.cause === expected.cause, cause_presence: Object.hasOwn(actual, 'cause') === Object.hasOwn(expected, 'cause') }; }
+                }, actual => actual.native_class && actual.code === expected.code && actual.message === expected.message
+                    && JSON.stringify(actual.fields) === JSON.stringify(fields) && actual.cause_identity && actual.cause_presence);
+            }
+        }
+        if (requiredDetailCodes) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            const nativeSeries = await release.heightsAt(station, [new Date('2000-01-01T00:00:00Z')]);
+            for (const [code, names, sourceCall] of [
+                ['unsupported_constituent', ['constituent'], () => table.equilibriumArgument('ZZ9', new Date('2015-06-01T00:00:00Z'))],
+                ['time_out_of_range', ['first_year', 'last_year'], () => table.nodeFactor('M2', new Date('2031-01-01T00:00:00Z'))],
+                ['datum_unavailable', ['missing'], () => release.heightsAt(release.requireStation('OTC-P-0053'), [new Date('2010-03-01T03:00:00Z')], { setId: 'OTC-P-0053/no-datum', datum: 'zero' })],
+                ['unknown_time_zone', ['zone'], () => nativeSeries.toLocal('Mars/Olympus')],
+                ['reference_unavailable', ['reference_station_id'], () => release.extremes(release.requireStation('OTC-P-0049'), { start: new Date('2010-03-01T00:00:00Z'), stop: new Date('2010-03-03T00:00:00Z') })],
+            ]) {
+                let expected;
+                try { await sourceCall(); throw new Error(`Expected genuine native ${code}`); }
+                catch (error) { if (!(error instanceof errors.OpenTideConstantsError) || error.code !== code) throw error; expected = error; }
+                const fields = Object.fromEntries(names.map(name => [name, expected[name]]));
+                const input = { native_profile, canonical_error: { code, structured_fields: { message: expected.message, ...fields }, cause: expected.cause ?? null },
+                    native_cause_option: Object.hasOwn(expected, 'cause') ? { presence: 'present', value: expected.cause } : { presence: 'absent' } };
+                await observation(`B04.producer.${code}`, () => {
+                    try { canonical.translate_native_binding(input); return { threw: false }; }
+                    catch (actual) { return { name: actual.name, code: actual.code, message: actual.message,
+                        native_class: actual instanceof expected.constructor,
+                        fields: Object.fromEntries(names.map(name => [name, actual[name]])), cause_identity: actual.cause === expected.cause,
+                        cause_presence: Object.hasOwn(actual, 'cause') === Object.hasOwn(expected, 'cause') }; }
+                }, actual => actual.native_class && actual.code === expected.code && actual.message === expected.message
+                    && JSON.stringify(actual.fields) === JSON.stringify(fields) && actual.cause_identity && actual.cause_presence);
+                await observation(`B04.producer.identity.${code}`, () => {
+                    try { canonical.translate_native_binding({ ...input, canonical_error: { ...input.canonical_error, native_error: expected } }); return false; }
+                    catch (actual) { return actual === expected; }
+                }, value => value === true);
+                // Constructor/private controls below are not authentic producer/data failures.
+                for (const [label, detailFields, detailCause] of [
+                    ['error_cause', fields, new Error('native detail constructor cause')],
+                    ['null_cause', fields, null],
+                    ...(code === 'time_out_of_range' ? [] : [['nullable_field', Object.fromEntries(names.map(name => [name, null])), undefined]]),
+                ]) {
+                    const native = new expected.constructor(expected.message, { ...detailFields, cause: detailCause });
+                    const control = { native_profile, canonical_error: { code, structured_fields: { message: native.message, ...detailFields }, cause: native.cause ?? null },
+                        native_cause_option: Object.hasOwn(native, 'cause') ? { presence: 'present', value: native.cause } : { presence: 'absent' } };
+                    await observation(`B04.detail_control.${code}.${label}`, () => {
+                        try { canonical.translate_native_binding(control); return { threw: false }; }
+                        catch (actual) { return { native_class: actual instanceof native.constructor, code: actual.code, message: actual.message,
+                            fields: Object.fromEntries(names.map(name => [name, actual[name]])),
+                            cause_identity: actual.cause === native.cause, cause_presence: Object.hasOwn(actual, 'cause') === Object.hasOwn(native, 'cause') }; }
+                    }, actual => actual.native_class && actual.code === native.code && actual.message === native.message
+                        && JSON.stringify(actual.fields) === JSON.stringify(detailFields) && actual.cause_identity && actual.cause_presence);
+                }
+                for (const [label, invalidFields] of [['missing', {}], ['wrong_scalar', Object.fromEntries(names.map(name => [name, true]))]]) {
+                    await observation(`B04.private_field_control.${code}.${label}`, () => {
+                        try { canonical.translate_native_binding({ ...input, canonical_error: { ...input.canonical_error, structured_fields: { message: expected.message, ...invalidFields } } }); return false; }
+                        catch (actual) { return actual instanceof canonical.CanonicalUnimplementedError; }
+                    }, value => value === true);
+                }
+            }
+        }
+        if (requiredErrorContexts) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            const sourceError = async call => {
+                try { await call(); throw new Error('Expected genuine native source failure'); }
+                catch (error) { if (!(error instanceof errors.OpenTideConstantsError)) throw error; return error; }
+            };
+            const missingId = 'OTC-native-missing-context';
+            const missing = await sourceError(() => good.requireStation(missingId));
+            const removedRow = JSON.parse(goodSource).stations.find(row => row.status === 'removed');
+            if (!removedRow) throw new Error('Authentic removed native row is required');
+            const removed = await sourceError(() => good.requireStation(removedRow.station_id));
+            const tombstone = good.tombstone(removedRow.station_id);
+            if (!tombstone || removed.tombstone !== tombstone) throw new Error('Genuine native Tombstone identity is required');
+            const reason = typeof tombstone.raw.removed_reason === 'string' ? tombstone.raw.removed_reason : null;
+            let collision, preparedPath, collisionClient;
+            try {
+                if (node) {
+                    const clientModule = await import(`${moduleRoot}/client.js`);
+                    collisionClient = await clientModule.OpenTideConstants.open({ baseUrl, cacheDir: cacheDir + '-context-source', offline: false, format: 'json', autoUpdate: false });
+                    const destination = cacheDir + '-context-destination';
+                    node.mkdirp(destination);
+                    preparedPath = node.nodePath.join(destination, 'OTC_20991231.2.json');
+                    node.writeAtomicSync(preparedPath, new TextEncoder().encode('deliberate existing-file digest disagreement'));
+                    collision = await sourceError(() => collisionClient.download({ release: '20991231.2', to: destination, formats: ['json'], overwrite: false }));
+                    if (collision.path !== preparedPath || !(collision instanceof errors.FileExistsError)) throw new Error('Genuine native download collision is required');
+                } else {
+                    preparedPath = '/native/browser-constructor-control';
+                    collision = new errors.FileExistsError(preparedPath);
+                }
+                for (const [label, expected, context] of [
+                    ['unknown_station', missing, { code: missing.code, stationId: missingId }],
+                    ['removed_station', removed, { code: removed.code, stationId: removedRow.station_id, tombstone, reason }],
+                    [node ? 'node_download_collision' : 'browser_file_constructor_control', collision, { code: collision.code, path: preparedPath }],
+                ]) {
+                    const input = { native_profile, canonical_error: { code: expected.code, structured_fields: { message: expected.message }, cause: null }, native_constructor_context: context };
+                    const fileBefore = node && context.code === 'file_exists' ? Array.from(node.readFileOrIo(preparedPath)) : null;
+                    await observation(`B04.context.${label}`, () => {
+                        try { canonical.translate_native_binding(input); return { threw: false }; }
+                        catch (actual) { return { name: actual.name, code: actual.code, message: actual.message,
+                            native_class: actual instanceof expected.constructor, cause_absent: !Object.hasOwn(actual, 'cause'),
+                            tombstone_identity: context.code === 'station_removed' ? actual.tombstone === tombstone : undefined,
+                            raw_identity: context.code === 'station_removed' ? actual.tombstone?.raw === tombstone.raw : undefined,
+                            path: actual.path, file_unchanged: fileBefore ? JSON.stringify(Array.from(node.readFileOrIo(preparedPath))) === JSON.stringify(fileBefore) : undefined }; }
+                    }, actual => actual.native_class && actual.code === expected.code && actual.message === expected.message && actual.cause_absent
+                        && (context.code !== 'station_removed' || actual.tombstone_identity && actual.raw_identity)
+                        && (context.code !== 'file_exists' || actual.path === preparedPath && (!node || actual.file_unchanged)));
+                    await observation(`B04.context.mismatch.${label}`, () => {
+                        try { canonical.translate_native_binding({ ...input, native_constructor_context: { code: 'network' } }); return false; }
+                        catch (actual) { return actual instanceof canonical.CanonicalUnimplementedError; }
+                    }, value => value === true);
+                }
+            } finally { collisionClient?.close(); }
+        }
+        if (requiredErrorDefaults) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            // Source-native constructor qualification, distinct from authentic acquisition/data failure proof.
+            for (const Constructor of [errors.ReleaseNotFoundError, errors.OfflineError, errors.UnsupportedFormatError,
+                errors.ReaderTooOldError, errors.InvalidReleaseError, errors.NoConstantsError, errors.QuantityMismatchError,
+                errors.UnsupportedConventionError, errors.NoAstroTableError, errors.BinNotFoundError, errors.ExtremesOnlyError,
+                errors.LocalTimeUnavailableError, errors.HistoricalOffsetsExcludedError, errors.PinnedReleaseError, errors.UnsupportedError]) {
+                for (const [variant, message, detail] of [['default', '', undefined],
+                    ['cause', 'native fixture https://user:password@native.invalid/a', { cause: new Error('original native constructor cause') }],
+                    ['explicit_null', 'native explicit-null cause', { cause: null }]]) {
+                    const expected = new Constructor(message, detail);
+                    const input = { native_profile, canonical_error: { code: expected.code, structured_fields: { message: expected.message }, cause: expected.cause ?? null },
+                        native_cause_option: Object.hasOwn(expected, 'cause') ? { presence: 'present', value: expected.cause } : { presence: 'absent' } };
+                    await observation(`B04.defaults.${expected.code}.${variant}`, () => {
+                        try { canonical.translate_native_binding(input); return { threw: false }; }
+                        catch (actual) { return { name: actual.name, code: actual.code, message: actual.message,
+                            native_class: actual instanceof Constructor, cause_identity: actual.cause === expected.cause,
+                            cause_presence: Object.hasOwn(actual, 'cause') === Object.hasOwn(expected, 'cause') }; }
+                    }, actual => actual.native_class && actual.code === expected.code && actual.message === expected.message && actual.cause_identity && actual.cause_presence);
+                    await observation(`B04.defaults.identity.${expected.code}.${variant}`, () => {
+                        try { canonical.translate_native_binding({ native_profile, canonical_error: { ...input.canonical_error, native_error: expected } }); return false; }
+                        catch (actual) { return actual === expected; }
+                    }, value => value === true);
+                    if (expected.cause instanceof Error) await observation(`B04.cause_context.mismatch.${expected.code}`, () => {
+                        try { canonical.translate_native_binding({ ...input, canonical_error: { ...input.canonical_error, cause: new Error('foreign logical cause') } }); return false; }
+                        catch (actual) { return actual instanceof canonical.CanonicalUnimplementedError; }
+                    }, value => value === true);
+                }
+            }
+        }
+        if (requiredBindings) {
+            const native_profile = node ? 'typescript_node' : 'typescript_browser';
+            const cause = new Error('original native cause');
+            // Injected canonical failures exercise real source-native constructors, not acquisition failures.
+            const network = new errors.NetworkError('transport fixture failed', { url: 'https://native.invalid/release', status: 503, cause });
+            const checksum = new errors.ChecksumError('injected digest disagreement', { file: 'OTC_20991231.2.json', expected: 'a'.repeat(64), actual: 'b'.repeat(64), cause });
+            const cache = new errors.CacheError('injected prune failure', { removed: ['20991231.2', '20991231'], cause });
+            for (const [expected, structured_fields] of [
+                [network, { message: network.message, url: network.url, status: network.status }],
+                [checksum, { message: checksum.message, file: checksum.file, expected: checksum.expected, actual: checksum.actual }],
+                [cache, { message: cache.message, removed: cache.removed }],
+            ]) {
+                const input = { native_profile, canonical_error: { code: expected.code, structured_fields, cause } };
+                await observation(`B04.required.${expected.code}`, () => {
+                    try { canonical.translate_native_binding(input); return { threw: false }; }
+                    catch (actual) {
+                        return { name: actual.name, code: actual.code, message: actual.message,
+                            native_class: actual instanceof expected.constructor, cause_identity: actual.cause === cause,
+                            url: actual.url, status: actual.status, file: actual.file, expected: actual.expected, actual: actual.actual,
+                            removed: actual.removed, removed_frozen: actual.removed ? Object.isFrozen(actual.removed) : undefined };
+                    }
+                }, actual => actual.native_class && actual.cause_identity && actual.message === expected.message && actual.code === expected.code
+                    && actual.url === expected.url && actual.status === expected.status && actual.file === expected.file
+                    && actual.expected === expected.expected && actual.actual === expected.actual
+                    && JSON.stringify(actual.removed) === JSON.stringify(expected.removed)
+                    && (!expected.removed || actual.removed_frozen));
+                await observation(`B04.identity.${expected.code}`, () => {
+                    try { canonical.translate_native_binding({ native_profile, canonical_error: { ...input.canonical_error, native_error: expected } }); return false; }
+                    catch (actual) { return actual === expected && actual.cause === cause; }
+                }, value => value === true);
+            }
+            const binding = { member_id: 'Release.station', value: station };
+            await observation('B04.identity.present_owner', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'present_value', binding } }), value => value === binding && value.value === station && value.value._from(release));
+            await observation('B04.presence.void', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'successful_no_value', member_id: 'Client.close' } }), value => value.member_id === 'Client.close' && Object.hasOwn(value, 'value') && value.value === undefined);
+            await observation('B04.presence.null', () => canonical.translate_native_binding({ native_profile, canonical_result: { presence: 'present_value', binding: { member_id: 'Release.station', value: null } } }), value => value.value === null);
+        }
+        if (requiredTimes) {
+            for (const [label, times] of [['null', null], ['object', {}], ['omitted', undefined]]) {
+                const selected = { member_id: 'Release.heights_at', arguments: { station, times } };
+                const expected = await nativeFailure(() => release.heightsAt(station, times));
+                await observation(`B39.required.times_${label}`, () => nativeFailure(() => canonical.parse_prediction_window(selected, selected, null, 'utc')), value => JSON.stringify(value) === JSON.stringify(expected));
+            }
+            const engine = await import(`${moduleRoot}/predict/engine.js`);
+            for (const [label, times] of [
+                ['empty', []],
+                ['fractional_duplicate', [new Date('2000-01-01T00:00:00.499Z'), new Date('2000-01-01T00:00:00.499Z')]],
+                ['unordered', [new Date('2000-01-01T00:10:00.999Z'), new Date('2000-01-01T00:00:00.499Z')]],
+            ]) {
+                const selected = { member_id: 'Release.heights_at', arguments: { station, times } };
+                const expected = engine.predictionSeconds(times);
+                await observation(`B39.control.times_${label}`, () => canonical.parse_prediction_window(selected, selected, null, 'utc'), value => JSON.stringify(value) === JSON.stringify({ instants: expected }));
+            }
+            const selected = { member_id: 'Release.heights_at', arguments: { station: null, times: null } };
+            const expected = await nativeFailure(() => release.heightsAt(null, null));
+            await observation('B39.order.times_before_station', () => nativeFailure(() => canonical.parse_prediction_window(selected, selected, null, 'utc')), value => JSON.stringify(value) === JSON.stringify(expected));
+        }
+        await observation('B07', () => canonical.materialize_typed_model(station.raw, { model_type: 'Station', fields: ['Station.station_id', 'Station.raw'], native_owner: nativeOwner }, origin, 'Station'), value => value.model_type === 'Station' && value.model.station_id === station.station_id && value.model.raw === station.raw);
+        if (requiredManagedFields) {
+            const clientModule = await import(`${moduleRoot}/client.js`);
+            const options = { baseUrl, cacheDir: cacheDir + '-prepared-fallback', offline: false, format: 'json', autoUpdate: false, onNetworkError: 'use_cache' };
+            const seed = await clientModule.OpenTideConstants.open(options);
+            seed.close();
+            await fetch(new URL('../control/fail-metadata', baseUrl));
+            let materialized;
+            try {
+                const fields = await clientModule.prepareClientFields(options);
+                await observation('B07.managed.Client.cached_fallback', () => {
+                    materialized = canonical.materialize_typed_model(options, { model_type: 'Client', fields: [], native_prepared_client: fields }, origin, 'Client').model;
+                    return { diagnostic_identity: materialized.lastError === fields.extra.lastError, diagnostic_name: materialized.lastError?.name, diagnostic_status: materialized.lastError?.status, loaded_from: materialized.loadedFrom, release_identity: materialized.release === fields.release, genuine_brand: materialized.requireStation('OTC-T-0001')._from(fields.release) };
+                }, value => value.diagnostic_identity && value.diagnostic_name === 'NetworkError' && value.diagnostic_status === 503 && value.loaded_from === 'cache_after_error' && value.release_identity && value.genuine_brand);
+            } finally { materialized?.close(); await fetch(new URL('../control/reset-metadata', baseUrl)); }
+            const fileOptions = { file: nativeFilePath, cacheDir: cacheDir + '-prepared-file', autoUpdate: false };
+            if (node) {
+                const fields = await clientModule.prepareClientFields(fileOptions);
+                let fileClient;
+                try {
+                    await observation('B07.managed.Client.file_fields', () => {
+                        fileClient = canonical.materialize_typed_model(fileOptions, { model_type: 'Client', fields: [], native_prepared_client: fields }, origin, 'Client').model;
+                        return { release_identity: fileClient.release === fields.release, loaded_from: fileClient.loadedFrom, last_error: fileClient.lastError, genuine_brand: fileClient.requireStation('OTC-T-0001')._from(fields.release) };
+                    }, value => value.release_identity && value.loaded_from === 'file' && value.last_error === null && value.genuine_brand);
+                } finally { if (fileClient) fileClient.close(); else fields.release._close(); }
+            } else {
+                const expected = await nativeFailure(() => clientModule.OpenTideConstants.open(fileOptions));
+                await observation('B07.managed.Client.browser_file_inapplicable', async () => ({ expected, prepared: await nativeFailure(() => clientModule.prepareClientFields(fileOptions)) }), value => value.expected?.code === 'unsupported' && JSON.stringify(value.expected) === JSON.stringify(value.prepared));
+            }
+            for (const commercialOnly of [false, true]) for (const [commercialBasis, historicalPolicy] of [['strict', 'fallback'], ['as_published_upstream', 'exclude']]) {
+                const bytes = new TextEncoder().encode(goodSource);
+                const native = loader.releaseFromJson(bytes, [], null, undefined, commercialOnly, commercialBasis, historicalPolicy);
+                const fields = loader.prepareReleaseFromJson(bytes, [], null, undefined, commercialOnly, commercialBasis, historicalPolicy);
+                let value;
+                try {
+                    await observation(`B07.managed.Release.policy_${commercialOnly}_${commercialBasis}_${historicalPolicy}`, () => {
+                        value = canonical.materialize_typed_model(fields.authenticHeader.raw, { model_type: 'Release', fields: [], native_prepared_release: fields }, origin, 'Release').model;
+                        return { commercial_only: value._commercialOnly, historical_policy: value.historicalOffsetsPolicy, station_ids: value.stations().map(row => row.station_id), expected_ids: native.stations().map(row => row.station_id), stats: value.stats, expected_stats: native.stats, header_identity: value._header === fields.header };
+                    }, row => row.commercial_only === commercialOnly && row.historical_policy === historicalPolicy && row.header_identity && JSON.stringify(row.station_ids) === JSON.stringify(row.expected_ids) && JSON.stringify(row.stats) === JSON.stringify(row.expected_stats));
+                } finally { native._close(); if (value) value._close(); else fields.source.close(); }
+            }
+            const aliasStation = good.stations({ includeFlagged: true, includeFallback: true }).find(row => Object.keys(row.aliases).length);
+            if (!aliasStation) throw new Error('Genuine Station alias fixture missing');
+            const aliasHeader = releaseModule.parseHeader(good._header);
+            const aliasEntry = releaseModule.indexDoc(aliasStation.raw, aliasHeader, 0, 0, new Set(aliasHeader.conventions.map(row => row.convention_id)), new Set(aliasHeader.licences.map(row => row.licence_id)));
+            await observation('B07.managed.Station.alias_fields', () => canonical.materialize_typed_model(aliasStation.raw, { model_type: 'Station', fields: [], native_owner: { release: good, entry: aliasEntry } }, origin, 'Station'), value => value.model._from(good) && value.model.raw === aliasStation.raw && JSON.stringify(value.model.aliases) === JSON.stringify(aliasStation.aliases) && JSON.stringify(value.model.subordinateOffsets) === JSON.stringify(aliasStation.subordinateOffsets));
+        }
+        if (requiredModelEdges) {
+            const closed = loader.releaseFromJson(new TextEncoder().encode(predictSource), []);
+            closed._close();
+            const owner = { recommended: false, convention: constants.convention, licence: constants.licence, validation: constants.validation };
+            const constantFields = { model_type: 'ConstantSet', fields: [], native_constant_set: owner };
+            const cases = [
+                ...[['valid_dates', { built_at: '2000-01-01T01:00:00.125+01:00', fetched_at: '2000-01-01T00:00:00Z' }], ['malformed_dates', { built_at: 'not-a-date', fetched_at: '2000-02-30T00:00:00Z' }]].map(([label, raw]) => ['ProvenanceBuild', label, raw, { model_type: 'ProvenanceBuild', fields: [] }, () => releaseModule.buildOf(raw)]),
+                ...[['end_after_start', { start: '2000-01-01T00:00:00Z', end: 'invalid' }], ['wrong_scalar', { start: 1, end: null }]].map(([label, raw]) => ['RecordSpan', label, raw, { model_type: 'RecordSpan', fields: [], native_record_span: { set_id: constants.set_id } }, () => releaseModule.recordSpanOf(raw, constants.set_id)]),
+                ...[['fractional_year', { first_year: 2000.5, last_year: 2001, constituents: {} }], ['row_length', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [], f: [1], speed_deg_per_hour: 1 } } }], ['row_nonfinite', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [0], f: [NaN], speed_deg_per_hour: 1 } } }], ['speed_null', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [0], f: [1], speed_deg_per_hour: null } } }], ['speed_negative', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [0], f: [1], speed_deg_per_hour: -1 } } }], ['speed_nonfinite', { first_year: 2000, last_year: 2000, constituents: { M2: { v0u_deg: [0], f: [1], speed_deg_per_hour: Infinity } } }]].map(([label, raw]) => ['AstroTable', label, raw, { model_type: 'AstroTable', fields: [] }, () => new astro.AstroTable(raw)]),
+                ['Station', 'foreign_release', station.raw, { model_type: 'Station', fields: [], native_owner: { entry: index, release: good } }, () => new releaseModule.Station(station.raw, index, good)],
+                ['Station', 'closed_release', station.raw, { model_type: 'Station', fields: [], native_owner: { entry: index, release: closed } }, () => new releaseModule.Station(station.raw, index, closed)],
+                ['ConstantSet', 'recommended_false', constants.raw, constantFields, () => new releaseModule.ConstantSet(constants.raw, false, owner.convention, owner.licence, owner.validation)],
+                ...[['invalid_span', { record_span: { start: 'invalid', end: 'also-invalid' } }], ['fallback_provenance', { fallback: { reason: 'time_base_disputed', basis: 'native-control' }, provenance: { build: { built_at: '2000-01-01T00:00:00Z' } } }]].map(([label, raw]) => ['ConstantSet', label, raw, constantFields, () => new releaseModule.ConstantSet(raw, false, owner.convention, owner.licence, owner.validation)]),
+                ['SourceRecord', 'closed_licence', { licence_id: constants.licence.licence_id }, { model_type: 'SourceRecord', fields: [], native_release: closed }, () => releaseModule.sourceRecordOf({ licence_id: constants.licence.licence_id }, closed)],
+                ...[['licence_present', { licence_id: constants.licence.licence_id, upstream_licence_id: constants.licence.licence_id }], ['licence_missing', { licence_id: 'not-present', upstream_licence_id: null }]].map(([label, raw]) => ['SourceRecord', label, raw, { model_type: 'SourceRecord', fields: [], native_release: release }, () => releaseModule.sourceRecordOf(raw, release)]),
+                ...['R', 'A', null].map(adjustment => ['SubordinateOffsets', `adjustment_${adjustment}`, { height_adjusted_type: adjustment }, { model_type: 'SubordinateOffsets', fields: [] }, () => releaseModule.subordinateOffsetsOf({ height_adjusted_type: adjustment })]),
+            ];
+            for (const [model_type, label, raw, contract, nativeCall] of cases) {
+                const expectedError = await nativeFailure(nativeCall);
+                await observation(`B07.edge.${model_type}.${label}`, async () => expectedError ? { expected: expectedError, actual: await nativeFailure(() => canonical.materialize_typed_model(raw, contract, origin, model_type)) } : { native: nativeCall(), actual: canonical.materialize_typed_model(raw, contract, origin, model_type).model }, value => expectedError ? JSON.stringify(value.expected) === JSON.stringify(value.actual) : JSON.stringify(value.native) === JSON.stringify(value.actual) && (model_type !== 'AstroTable' || JSON.stringify(value.native.validRange) === JSON.stringify(value.actual.validRange)) && (model_type !== 'ConstantSet' || value.actual.isRecommended === value.native.isRecommended && value.actual.convention === owner.convention && value.actual.licence === owner.licence && value.actual.validation === owner.validation) && (model_type !== 'SourceRecord' || value.actual.licence === value.native.licence && value.actual.upstreamLicence === value.native.upstreamLicence));
+            }
+        }
+        if (requiredGuardModels) {
+            // Runtime invalid arguments exercise native binders; they are not fabricated data failures.
+            for (const [label, operation, member_id, arguments_, publicCall] of [
+                ['filters_nullable', 'stations', 'Release.stations', { country: null, source_type: null }, () => good.stations({ country: null, sourceType: null })],
+                ['filters_unknown_enum', 'stations', 'Release.stations', { type: 'future-kind' }, () => good.stations({ type: 'future-kind' })],
+                ['filters_country_scalar', 'stations', 'Release.stations', { country: 1 }, () => good.stations({ country: 1 })],
+                ['filters_flag_null', 'stations', 'Release.stations', { include_flagged: null }, () => good.stations({ includeFlagged: null })],
+                ['filters_fallback_scalar', 'iter_stations', 'Release.iter_stations', { include_fallback: 1 }, () => good.iterStations({ includeFallback: 1 })],
+                ['country_before_flag', 'stations', 'Release.stations', { country: 1, include_flagged: 1 }, () => good.stations({ country: 1, includeFlagged: 1 })],
+                ['search_missing_name', 'search', 'Release.search', {}, () => good.search({})],
+                ['search_empty_name', 'search', 'Release.search', { name: ' ' }, () => good.search({ name: ' ' })],
+                ['search_match_enum', 'search', 'Release.search', { name: 'a', match: 'prefix' }, () => good.search({ name: 'a', match: 'prefix' })],
+                ['search_limit_fractional', 'search', 'Release.search', { name: 'a', limit: 0.5 }, () => good.search({ name: 'a', limit: 0.5 })],
+                ['search_filters_before_name', 'search', 'Release.search', { country: 1, name: null }, () => good.search({ country: 1, name: null })],
+                ['near_missing_lat', 'near', 'Release.near', { lon: 0, radius_km: 0 }, () => good.near({ lon: 0, radiusKm: 0 })],
+                ['near_lat_boundary', 'near', 'Release.near', { lat: 90, lon: 180, radius_km: 0 }, () => good.near({ lat: 90, lon: 180, radiusKm: 0 })],
+                ['near_lat_outside', 'near', 'Release.near', { lat: 91, lon: 0, radius_km: 0 }, () => good.near({ lat: 91, lon: 0, radiusKm: 0 })],
+                ['near_lat_before_filter', 'near', 'Release.near', { lat: null, lon: null, radius_km: -1, country: 1 }, () => good.near({ lat: null, lon: null, radiusKm: -1, country: 1 })],
+                ['nearest_max_nullable', 'nearest', 'Release.nearest', { lat: -90, lon: -180, max_km: null }, () => good.nearest({ lat: -90, lon: -180, maxKm: null })],
+                ['nearest_max_negative', 'nearest', 'Release.nearest', { lat: 0, lon: 0, max_km: -1 }, () => good.nearest({ lat: 0, lon: 0, maxKm: -1 })],
+                ['constant_sets_nullable', 'constant_sets', 'Station.constant_sets', { include_no_constants: null }, () => station.constantSets({ includeNoConstants: null })],
+                ['constant_sets_scalar', 'constant_sets', 'Station.constant_sets', { include_no_constants: 1 }, () => station.constantSets({ includeNoConstants: 1 })],
+            ]) {
+                const selected = { member_id, arguments: arguments_ };
+                const expected = await nativeFailure(publicCall);
+                const contract = { ...selected, native_receiver: { kind: 'release', owner: good } };
+                await observation(`B01.required.${label}`, async () => ({ expected, actual: await nativeFailure(() => canonical.validate_operation_arguments(operation, selected, contract)) }), value => JSON.stringify(value.actual) === JSON.stringify(value.expected));
+            }
+            // Pure native mapper controls qualify defaults and tolerant parsing, separately from acquired rows.
+            for (const [model_type, mapper, variants] of [
+                ['Constituent', 'constituentOf', [['absent', {}], ['nullable', { name: null, amplitude_m: null }], ['wrong_scalar', { name: 1, amplitude_m: '1', phase_deg: false }]]],
+                ['TimeBase', 'timeBaseOf', [['absent', {}], ['nullable', { code: null, correction: null, months_dropped: null, evidence: null }], ['filtered_arrays', { code: 'unknown', correction: { from: 1, to: null }, months_dropped: ['a', 1, null], evidence: [null, 1, { distance_km: '1' }] }]]],
+                ['Validation', 'validationOf', [['absent', {}], ['nullable', { previous_release: null, missed_events: null }], ['wrong_scalar', { set_id: 1, time_mae_min: '1', previous_release: { extra_events: '1' } }]]],
+                ['QcFlag', 'qcFlagOf', [['absent', {}], ['nullable', { flag: null, values: null }], ['filtered_values', { flag: 'future_flag', values: { okay: 1, nullable: null, ignored: '1' } }]]],
+                ['ProvenanceBuild', 'buildOf', [['absent', {}], ['nullable', { built_at: null, tool_versions: null }], ['wrong_scalar', { built_at: 1, tool_versions: 'tools', build_commit: 1 }]]],
+                ['Fallback', 'fallbackOf', [['absent', {}], ['nullable', { reason: null, basis: null }], ['wrong_scalar', { reason: 'future', basis: 1, preferred_set_id: 1 }]]],
+                ['Datum', 'datumOf', [['absent', {}], ['nullable', { msl_offset_m: null, named: null }], ['filtered_values', { msl_offset_m: '1', named: { retained: 1, rejected: '1', nullable: null } }]]],
+                ['DroppedConstituent', 'droppedConstituentOf', [['absent', {}], ['nullable', { name: null, dropped_reason: null, detail: null }], ['wrong_scalar', { name: 1, dropped_reason: 'future', detail: { retained: true } }]]],
+                ['Provenance', 'provenanceOf', [['absent', {}], ['nullable', { build: null, decision: null }], ['wrong_scalar', { build: 1, adapter_version: 1, input_sha256: ['retained'], decision: { retained: true } }]]],
+                ['Convention', 'conventionOf', [['absent', {}], ['nullable', { phase_reference: null, utc_offset_hours: null }], ['wrong_scalar', { convention_id: 1, phase_reference: 'future', nodal_formula_ids: { retained: true } }]]],
+                ['Licence', 'licenceOf', [['absent', {}], ['nullable', { commercial_use: null, spdx: null }], ['wrong_scalar', { licence_id: 1, commercial_use: 1, terms_url: 1 }]]],
+                ['SubordinateOffsets', 'subordinateOffsetsOf', [['absent', {}], ['nullable', { qc_flags: null, fallback: null, vintage: null, provenance: null }], ['filtered_arrays', { source_type: 'future', qc_flags: [null, 1, {}], time_offset_high_min: '1', vintage: { retained: true }, provenance: { retained: true } }]]],
+            ]) {
+                for (const [label, raw] of variants) {
+                    const native = releaseModule[mapper](raw);
+                    await observation(`B07.required.${model_type}.${label}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type), value => value.model !== native && Object.isFrozen(value.model) && JSON.stringify(value.model) === JSON.stringify(native) && (!('raw' in native) || value.model.raw === raw));
+                }
+            }
+            for (const [label, raw] of [['absent', {}], ['nullable', { name: null, country: null, timezone: null, validation: null, constant_sets: null }], ['filtered_arrays', { name: 1, validation: [null, 1, {}], constant_sets: [null, 1] }]]) {
+                const native = new releaseModule.Station(raw, index, release);
+                await observation(`B07.required.Station.${label}`, () => canonical.materialize_typed_model(raw, { model_type: 'Station', fields: [], native_owner: nativeOwner }, origin, 'Station'), value => JSON.stringify(value.model) === JSON.stringify(native) && value.model.raw === raw && value.model._from(release) && !value.model._from(good));
+            }
+            for (const [label, raw] of [['absent', {}], ['nullable', { constituents: null, time_base: null, qc_flags: null, record_span: null }], ['filtered_arrays', { source: 1, constituents: [null, 1, {}], qc_flags: [null, 1, {}], dropped_constituents: [null, {}] }]]) {
+                const owner = { recommended: true, convention: constants.convention, licence: constants.licence, validation: constants.validation };
+                const native = new releaseModule.ConstantSet(raw, owner.recommended, owner.convention, owner.licence, owner.validation);
+                await observation(`B07.required.ConstantSet.${label}`, () => canonical.materialize_typed_model(raw, { model_type: 'ConstantSet', fields: [], native_constant_set: owner }, origin, 'ConstantSet'), value => JSON.stringify(value.model) === JSON.stringify(native) && JSON.stringify(value.model.constituents) === JSON.stringify(native.constituents) && value.model.raw === raw && value.model.convention === owner.convention && value.model.licence === owner.licence && value.model.validation === owner.validation);
+            }
+            for (const [model_type, variants] of [
+                ['SourceRecord', [['absent', {}], ['nullable', { licence_id: null, provenance: null, original_harmonics: null }], ['filtered_arrays', { source: 1, role: 'future', published_set_ids: ['retained', null, 1] }]]],
+                ['Tombstone', [['absent', {}], ['nullable', { name: null, removed_reason: null }], ['unknown_enum', { status: 'future', removed_reason: 'future', detail: 1 }]]],
+                ['RecordSpan', [['nullable', { start: null, end: null }], ['dates', { start: '2000-01-01T00:00:00Z', end: '2000-01-02T00:00:00Z', good_samples: 0 }], ['invalid_date', { start: 'not-a-date', end: null }]]],
+            ]) for (const [label, raw] of variants) {
+                const contract = { model_type, fields: [], native_release: release, native_owner: nativeOwner, native_record_span: { set_id: constants.set_id } };
+                const nativeCall = () => model_type === 'SourceRecord' ? releaseModule.sourceRecordOf(raw, release) : model_type === 'Tombstone' ? releaseModule.tombstoneOf(raw, index) : releaseModule.recordSpanOf(raw, constants.set_id);
+                const expectedError = await nativeFailure(nativeCall);
+                await observation(`B07.required.${model_type}.${label}`, async () => expectedError ? { expected: expectedError, actual: await nativeFailure(() => canonical.materialize_typed_model(raw, contract, origin, model_type)) } : { native: nativeCall(), actual: canonical.materialize_typed_model(raw, contract, origin, model_type).model }, value => expectedError ? JSON.stringify(value.expected) === JSON.stringify(value.actual) : JSON.stringify(value.native) === JSON.stringify(value.actual) && (!('raw' in value.native) || value.actual.raw === raw));
+            }
+            for (const [label, raw] of [['years_missing', {}], ['years_reversed', { first_year: 2001, last_year: 2000, constituents: {} }], ['empty_rows', { first_year: 2000, last_year: 2000, constituents: {} }], ['row_scalar', { first_year: 2000, last_year: 2000, constituents: { M2: 1 } }]]) {
+                const expectedError = await nativeFailure(() => new astro.AstroTable(raw));
+                await observation(`B07.required.AstroTable.${label}`, async () => ({ expected: expectedError, actual: await nativeFailure(() => canonical.materialize_typed_model(raw, { model_type: 'AstroTable', fields: [] }, origin, 'AstroTable')) }), value => JSON.stringify(value.actual) === JSON.stringify(value.expected));
+            }
+        }
+        if (primitiveGuards) {
+            const start = new Date('2000-01-01T00:00:00Z'), stop = new Date('2000-01-02T00:00:00Z');
+            for (const [id, operation, selected, publicCall] of [
+                ['window_step', 'heights', { member_id: 'Release.heights', arguments: { station, start, stop, step_s: 0 } }, () => release.heights(station, { start, stop, stepS: 0 })],
+                ['time_list', 'heights_at', { member_id: 'Release.heights_at', arguments: { station, times: [null] } }, () => release.heightsAt(station, [null])],
+                ['datum_boolean', 'datums', { member_id: 'Release.datums', arguments: { station, all_sets: 1 } }, () => release.datums(station, { allSets: 1 })],
+                ['offset_pair', 'heights', { member_id: 'Release.heights', arguments: { station, start, stop, set_id: constants.set_id, offset_id: 'wrong' } }, () => release.heights(station, { start, stop, setId: constants.set_id, offsetId: 'wrong' })],
+                ['window_before_station', 'heights', { member_id: 'Release.heights', arguments: { station: 'missing', start, stop, step_s: 0 } }, () => release.heights('missing', { start, stop, stepS: 0 })],
+                ['station_before_options', 'heights', { member_id: 'Release.heights', arguments: { station: 'missing', start, stop, set_id: 1 } }, () => release.heights('missing', { start, stop, setId: 1 })],
+                ['station_before_boolean', 'datums', { member_id: 'Release.datums', arguments: { station: 'missing', all_sets: 1 } }, () => release.datums('missing', { allSets: 1 })],
+            ]) {
+                const expected = await nativeFailure(publicCall);
+                const context = releaseModule.preparePredictionArguments ? releaseModule.preparePredictionArguments(release, selected) : undefined;
+                await observation(`B01.primitive.${id}`, () => nativeFailure(() => canonical.validate_operation_arguments(operation, selected, { ...selected, native_receiver: { kind: 'release', owner: release }, native_prediction_prerequisite: context })), value => JSON.stringify(value) === JSON.stringify(expected));
+            }
+            const yearSelected = { member_id: 'AstroTable.node_factor_for_year', arguments: { name: 'M2', year: 2000.5 } };
+            const yearExpected = await nativeFailure(() => table.nodeFactorForYear('M2', 2000.5));
+            const yearContext = astro.prepareAstronomyArguments ? astro.prepareAstronomyArguments(table, yearSelected) : undefined;
+            await observation('B01.primitive.astro_integer', () => nativeFailure(() => canonical.validate_operation_arguments('node_factor_for_year', yearSelected, { ...yearSelected, native_receiver: { kind: 'astro_table', owner: table }, native_astronomy_prerequisite: yearContext })), value => JSON.stringify(value) === JSON.stringify(yearExpected));
+            for (const [label, selected, publicCall] of [
+                ['row_before_integer', { member_id: 'AstroTable.node_factor_for_year', arguments: { name: 'missing', year: 2000.5 } }, () => table.nodeFactorForYear('missing', 2000.5)],
+                ['instant_before_row', { member_id: 'AstroTable.node_factor', arguments: { name: 'missing', at: new Date('invalid') } }, () => table.nodeFactor('missing', new Date('invalid'))],
+            ]) {
+                const expected = await nativeFailure(publicCall), context = astro.prepareAstronomyArguments(table, selected);
+                await observation(`B01.order.${label}`, () => nativeFailure(() => canonical.validate_operation_arguments('node_factor', selected, { ...selected, native_receiver: { kind: 'astro_table', owner: table }, native_astronomy_prerequisite: context })), value => JSON.stringify(value) === JSON.stringify(expected));
+            }
+            const positive = { member_id: 'Release.heights', arguments: { station, start, stop, step_s: 600 } };
+            const positiveContext = releaseModule.preparePredictionArguments(release, positive);
+            await observation('B01.primitive.positive_identity', () => canonical.validate_operation_arguments('heights', positive, { ...positive, native_receiver: { kind: 'release', owner: release }, native_prediction_prerequisite: positiveContext }), value => value === positive && positive.arguments.station === station);
+            const nativeSeries = await release.heightsAt(station, [start]);
+            const localSelected = { member_id: 'HeightSeries.to_local', arguments: { tz: 1 } };
+            const localExpected = await nativeFailure(() => nativeSeries.toLocal(1));
+            await observation('B01.primitive.local_type', () => nativeFailure(() => canonical.validate_operation_arguments('to_local', localSelected, { ...localSelected, native_receiver: { kind: 'result', owner: nativeSeries } })), value => JSON.stringify(value) === JSON.stringify(localExpected));
+            for (const [operation, selected, nativeValue] of [
+                ['convention', { member_id: 'Release.convention', arguments: { convention_id: good.conventions[0].convention_id } }, good.convention(good.conventions[0].convention_id)],
+                ['licence', { member_id: 'Release.licence', arguments: { licence_id: good.licences[0].licence_id } }, good.licence(good.licences[0].licence_id)],
+                ['station', { member_id: 'Release.station', arguments: { station_id: 'OTC-T-0001' } }, good.station('OTC-T-0001')],
+            ]) await observation(`B01.scalar.${operation}`, () => canonical.validate_operation_arguments(operation, selected, { ...selected, native_receiver: { kind: 'release', owner: good } }), value => value === selected && nativeValue !== null);
+            for (const [label, operation, selected, publicCall] of [
+                ['foreign_reference', 'reference_station', { member_id: 'Release.reference_station', arguments: { station } }, () => good.referenceStation(station)],
+                ['null_subordinates', 'subordinates_of', { member_id: 'Release.subordinates_of', arguments: { station: null } }, () => good.subordinatesOf(null)],
+                ['foreign_before_malformed', 'attribution', { member_id: 'Release.attribution', arguments: { stations: [station, null] } }, () => good.attribution([station, null])],
+                ['malformed_before_foreign', 'attribution', { member_id: 'Release.attribution', arguments: { stations: [null, station] } }, () => good.attribution([null, station])],
+            ]) {
+                const expected = await nativeFailure(publicCall);
+                const context = releaseModule.prepareOwnerArguments ? releaseModule.prepareOwnerArguments(good, selected) : undefined;
+                await observation(`B01.owner.${label}`, () => nativeFailure(() => canonical.validate_operation_arguments(operation, selected, { ...selected, native_receiver: { kind: 'release', owner: good }, native_owner_prerequisite: context })), value => JSON.stringify(value) === JSON.stringify(expected));
+            }
+        }
+        if (extendedModels) {
+            await observation('B07.Constituent', () => canonical.materialize_typed_model(constants.raw.constituents[0], { model_type: 'Constituent', fields: ['Constituent.raw'] }, origin, 'Constituent'), value => JSON.stringify(value.model) === JSON.stringify(constants.constituents[0]) && value.model.raw === constants.raw.constituents[0]);
+            await observation('B07.ProvenanceBuild', () => canonical.materialize_typed_model(constants.raw.provenance.build, { model_type: 'ProvenanceBuild', fields: ['ProvenanceBuild.build_commit'] }, origin, 'ProvenanceBuild'), value => JSON.stringify(value.model) === JSON.stringify(constants.provenance.build));
+            await observation('B07.ConstantSet', () => canonical.materialize_typed_model(constants.raw, { model_type: 'ConstantSet', fields: ['ConstantSet.raw'], native_constant_set: { recommended: constants.isRecommended, convention: constants.convention, licence: constants.licence, validation: constants.validation } }, origin, 'ConstantSet'), value => JSON.stringify(value.model) === JSON.stringify(constants) && value.model.raw === constants.raw);
+            const series = await release.heightsAt(station, [new Date('2000-01-01T00:00:00Z')]);
+            const extremes = await release.extremes(station, { start: new Date(1433116800000), stop: new Date(1433203200000) });
+            const nativeCurrentStation = release.stations().find(row => row.kind === 'current' && row.recommendedSet?.raw.current_bins?.length);
+            if (!nativeCurrentStation) throw new Error('Authentic current constructor fixture missing');
+            const currentSeries = await release.currents(nativeCurrentStation, { start: new Date('2020-06-01T00:00:00Z'), stop: new Date('2020-06-01T01:00:00Z'), stepS: 600 });
+            const currentEvents = await release.currentEvents(nativeCurrentStation, { start: new Date('2020-06-01T00:00:00Z'), stop: new Date('2020-06-02T00:00:00Z') });
+            const datumInfo = release.datums(station), ranges = release.ranges(station);
+            if (!datumInfo || Array.isArray(datumInfo) || !datumInfo.levels.length || !currentEvents.items.length) throw new Error('Authentic native result constructor fixture missing');
+            for (const [model_type, nativeModel] of [['HeightPoint', series.items[0]], ['HeightSeries', series], ['Extreme', extremes.items[0]], ['ExtremeList', extremes],
+                ['CurrentPoint', currentSeries.items[0]], ['CurrentSeries', currentSeries], ['CurrentEvent', currentEvents.items[0]], ['CurrentEventList', currentEvents],
+                ['DatumInfo', datumInfo], ['DatumLevel', datumInfo.levels[0]], ['Ranges', ranges]]) {
+                await observation(`B07.${model_type}`, () => canonical.materialize_typed_model(JSON.parse(JSON.stringify(nativeModel)), { model_type, fields: [], native_result_fields: { model_type, fields: nativeModel } }, origin, model_type), value => value.model !== nativeModel && JSON.stringify(value.model) === JSON.stringify(nativeModel));
+                if (requiredModelContexts) {
+                    const results = await import(`${moduleRoot}/predict/results.js`);
+                    const nullableFields = ['local_time', 'utc_offset_s', 'direction_deg', 'timezone', 'method', 'set_id', 'datum', 'datum_name', 'datum_kind', 'datum_uncertainty_m', 'reference_station_id', 'reference_bin', 'epoch', 'data_span', 'control_station_id', 'control_set_id', 'control_source_id', 'uncertainty_m', 'uncertainty_basis', 'zero', 'zero_name', 'chart_datum', 'msl_offset_m', 'mn', 'gt', 'dhq', 'dlq'];
+                    const nullable = Object.fromEntries(Object.entries(nativeModel).map(([key, value]) => [key, nullableFields.includes(key) ? null : value]));
+                    const variants = [['nullable_fields', nullable]];
+                    for (const key of ['items', 'flags', 'levels']) if (key in nativeModel) variants.push([`empty_${key}`, { ...nativeModel, [key]: [] }]);
+                    if ('time' in nativeModel) variants.push(['wrong_time_scalar', { ...nativeModel, time: 1 }]);
+                    for (const [label, fields] of variants) {
+                        const nativeCall = () => new results[model_type](fields);
+                        const expectedError = await nativeFailure(nativeCall);
+                        await observation(`B07.context.${model_type}.${label}`, async () => expectedError ? { expected: expectedError, actual: await nativeFailure(() => canonical.materialize_typed_model({}, { model_type, fields: [], native_result_fields: { model_type, fields } }, origin, model_type)) } : { native: nativeCall(), actual: canonical.materialize_typed_model({}, { model_type, fields: [], native_result_fields: { model_type, fields } }, origin, model_type).model }, value => expectedError ? JSON.stringify(value.expected) === JSON.stringify(value.actual) : JSON.stringify(value.native) === JSON.stringify(value.actual) && value.actual instanceof results[model_type] && Object.isFrozen(value.actual));
+                    }
+                    await observation(`B07.context.${model_type}.missing_dependency`, () => nativeFailure(() => canonical.materialize_typed_model({}, { model_type, fields: [] }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                }
+            }
+            const goodStation = good.requireStation('OTC-T-0001'), goodConstants = goodStation.recommendedSet;
+            if (managedModels) {
+                const clientModule = await import(`${moduleRoot}/client.js`);
+                const options = { baseUrl, cacheDir: cacheDir + '-managed', offline: false, format: 'json', autoUpdate: false };
+                const clientFields = await clientModule.prepareClientFields(options);
+                const releaseFields = loader.prepareReleaseFromJson(new TextEncoder().encode(goodSource), []);
+                const streamFields = loader.prepareReleaseFromJsonl(new TextEncoder().encode(streamMetadata), new TextEncoder().encode(streamSource), { eager: false, files: [] });
+                let materializedClient, materializedRelease, materializedStream;
+                try {
+                    if (requiredModelContexts) for (const [model_type, raw, prepared] of [['Client', options, { native_prepared_client: clientFields }], ['Release', releaseFields.authenticHeader.raw, { native_prepared_release: releaseFields }]]) {
+                        await observation(`B07.context.${model_type}.missing_dependency`, () => nativeFailure(() => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                        await observation(`B07.context.${model_type}.foreign_raw_identity`, () => nativeFailure(() => canonical.materialize_typed_model({}, { model_type, fields: [], ...prepared }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                    }
+                    await observation('B07.Client', () => {
+                        const value = canonical.materialize_typed_model(options, { model_type: 'Client', fields: [], native_prepared_client: clientFields }, origin, 'Client');
+                        materializedClient = value.model;
+                        return value;
+                    }, value => value.model instanceof clientModule.OpenTideConstants && value.model.release === clientFields.release && value.model.loadedFrom === clientFields.loadedFrom && value.model.lastError === clientFields.extra.lastError && value.model.requireStation(goodStation.station_id)._from(clientFields.release));
+                    for (const [label, fields] of [['eager', releaseFields], ['stream', streamFields]]) {
+                        await observation(`B07.Release.${label}`, () => {
+                            const value = canonical.materialize_typed_model(fields.authenticHeader.raw, { model_type: 'Release', fields: [], native_prepared_release: fields }, origin, 'Release');
+                            if (label === 'eager') materializedRelease = value.model; else materializedStream = value.model;
+                            return value;
+                        }, value => value.model instanceof releaseModule.Release && value.model._header === fields.header && value.model.requireStation(goodStation.station_id)._from(value.model) && !goodStation._from(value.model) && JSON.stringify(value.model.stats) === JSON.stringify(good.stats));
+                    }
+                    if (materializedRelease && materializedStream && materializedClient) {
+                        const held = materializedClient.release;
+                        if (held !== clientFields.release) throw new Error('Fresh Client held a foreign Release');
+                        materializedRelease._close();
+                        if (materializedStream.requireStation(goodStation.station_id).station_id !== goodStation.station_id || good.requireStation(goodStation.station_id).station_id !== goodStation.station_id) throw new Error('Managed close affected independent native owners');
+                        materializedClient.close();
+                        if (held.datestamp !== clientFields.release.datestamp) throw new Error('Held native metadata changed after close');
+                    }
+                } finally {
+                    if (materializedClient) materializedClient.close(); else clientFields.release._close();
+                    if (materializedRelease) materializedRelease._close(); else releaseFields.source.close();
+                    if (materializedStream) materializedStream._close(); else streamFields.source.close();
+                }
+            }
+            const nativeSets = good.stations({ includeFlagged: true, includeFallback: true }).flatMap(row => row.constantSets({ includeNoConstants: true }));
+            const timedSet = nativeSets.find(row => row.raw.time_base), flaggedSet = nativeSets.find(row => row.raw.qc_flags?.length);
+            const validatedStation = good.stations({ includeFlagged: true, includeFallback: true }).find(row => row.raw.validation?.length);
+            if (!timedSet || !flaggedSet || !validatedStation) throw new Error('Authentic plain helper model fixtures missing');
+            for (const [model_type, raw, expected] of [
+                ['TimeBase', timedSet.raw.time_base, timedSet.time_base], ['QcFlag', flaggedSet.raw.qc_flags[0], flaggedSet.qc_flags[0]],
+                ['Validation', validatedStation.raw.validation[0], validatedStation.validation[0]],
+            ]) await observation(`B07.${model_type}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type), value => JSON.stringify(value.model) === JSON.stringify(expected) && Object.isFrozen(value.model));
+            await observation('B07.AstroTable', () => canonical.materialize_typed_model(table._raw, { model_type: 'AstroTable', fields: [] }, origin, 'AstroTable'), value => value.model !== table && value.model._raw === table._raw && value.model.nodeFactor('M2', new Date('2000-01-01T00:00:00Z')) === table.nodeFactor('M2', new Date('2000-01-01T00:00:00Z')));
+            if (dtoModels) {
+                const clientModule = await import(`${moduleRoot}/client.js`);
+                const client = await clientModule.OpenTideConstants.open({ baseUrl, cacheDir, offline: false, format: 'json', autoUpdate: false });
+                try {
+                    const info = await client.latest(), update = await client.update();
+                    const pointer = JSON.parse(pointerSource);
+                    const nearby = good.nearest({ lat: goodStation.lat, lon: goodStation.lon });
+                    if (!nearby) throw new Error('Authentic native Nearby missing');
+                    const stats = good.stats;
+                    if (receiverGuards) {
+                        const invalidDownload = { member_id: 'Client.download', arguments: { to: null } };
+                        for (const { operation, selected } of guardInputs.filter(row => ['download', 'search', 'near'].includes(row.operation))) {
+                            await observation(`B01.missing_receiver.${operation}`, () => nativeFailure(() => canonical.validate_operation_arguments(operation, selected, selected)), value => value?.name === 'CanonicalUnimplementedError');
+                        }
+                        const capabilityExpected = await nativeFailure(() => client.download(invalidDownload.arguments));
+                        await observation('B01.native_capability', () => nativeFailure(() => canonical.validate_operation_arguments('download', invalidDownload, { ...invalidDownload, native_receiver: { kind: 'client', owner: client } })), value => JSON.stringify(value) === JSON.stringify(capabilityExpected));
+                        const invalidPrune = { member_id: 'Client.prune', arguments: { keep: -1 } };
+                        const pruneExpected = await nativeFailure(() => client.prune(invalidPrune.arguments));
+                        await observation('B01.prune_validation_before_capability', () => nativeFailure(() => canonical.validate_operation_arguments('prune', invalidPrune, { ...invalidPrune, native_receiver: { kind: 'client', owner: client } })), value => JSON.stringify(value) === JSON.stringify(pruneExpected));
+                        client.close();
+                        const closedRelease = loader.releaseFromJson(new TextEncoder().encode(goodSource), []);
+                        closedRelease._close();
+                        for (const [member_id, receiver, nativeValue] of [
+                            ['Client.release', { kind: 'client', owner: client }, client.release],
+                            ['Release.datestamp', { kind: 'release', owner: closedRelease }, closedRelease.datestamp],
+                            ['Release.citation', { kind: 'release', owner: closedRelease }, closedRelease.citation],
+                        ]) {
+                            const selected = { member_id, arguments: {} };
+                            const contract = { ...selected, native_guard: 'no_arguments', native_profile: node ? 'typescript_node' : 'typescript_browser', native_receiver: receiver };
+                            await observation(`B01.closed_metadata.${member_id}`, () => canonical.validate_operation_arguments('release_metadata', selected, contract), value => value === selected && nativeValue !== undefined);
+                        }
+                        for (const [member_id, receiver, publicCall] of [
+                            ['Client.latest', { kind: 'client', owner: client }, () => client.latest()],
+                            ['Release.station_count', { kind: 'release', owner: closedRelease }, () => closedRelease.stationCount],
+                            ['Release.conventions', { kind: 'release', owner: closedRelease }, () => closedRelease.conventions],
+                        ]) {
+                            const selected = { member_id, arguments: {} };
+                            const contract = { ...selected, native_guard: 'no_arguments', native_profile: node ? 'typescript_node' : 'typescript_browser', native_receiver: receiver };
+                            const expected = await nativeFailure(publicCall);
+                            await observation(`B01.closed_noargs.${member_id}`, () => nativeFailure(() => canonical.validate_operation_arguments('release_metadata', selected, contract)), value => JSON.stringify(value) === JSON.stringify(expected));
+                        }
+                        for (const [operation, selected, receiver, publicCall] of [
+                            ['download', invalidDownload, { kind: 'client', owner: client }, () => client.download(invalidDownload.arguments)],
+                            ['prune', { member_id: 'Client.prune', arguments: { keep: -1 } }, { kind: 'client', owner: client }, () => client.prune({ keep: -1 })],
+                            ['search', { member_id: 'Release.search', arguments: { name: '' } }, { kind: 'release', owner: closedRelease }, () => closedRelease.search({ name: '' })],
+                        ]) {
+                            const expected = await nativeFailure(publicCall);
+                            await observation(`B01.closed_receiver.${operation}`, () => nativeFailure(() => canonical.validate_operation_arguments(operation, selected, { ...selected, native_receiver: receiver })), value => JSON.stringify(value) === JSON.stringify(expected));
+                        }
+                    }
+                    for (const [model_type, raw, expected, context] of [
+                        ['ReleaseInfo', pointer, info, { files: info.files }],
+                        ['FileInfo', pointer.files[0], info.files.find(row => row.name === pointer.files[0].name), { href: new URL(pointer.files[0].url, baseUrl + 'OTC_latest.json').href }],
+                        ['Nearby', { distance_km: nearby.distance_km }, nearby, { station: nearby.station }],
+                        ['UpdateResult', { updated: update.updated, from: update.from, to: update.to }, update, null],
+                        ['Stats', stats, stats, null],
+                    ]) await observation(`B07.${model_type}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [], native_dto_fields: { model_type, context } }, origin, model_type), value => value.model !== expected && JSON.stringify(value.model) === JSON.stringify(expected));
+                    if (requiredModelContexts) {
+                        const core = await import(`${moduleRoot}/core.js`);
+                        for (const [model_type, raw, context, nativeCall] of [
+                            ['ReleaseInfo', { datestamp: pointer.datestamp, format_version: pointer.format_version }, { files: [] }, () => clientModule.toInfo({ datestamp: pointer.datestamp, format_version: pointer.format_version, min_reader_version: null, concept_doi: null, zenodo_version_doi: null, content_sha256: null, files: [] })],
+                            ['FileInfo', { name: pointer.files[0].name, size: 0, sha256: pointer.files[0].sha256.toUpperCase() }, { href: info.files[0].url }, () => core.fileInfoOf(pointer.files[0].name, info.files[0].url, 0, pointer.files[0].sha256.toUpperCase())],
+                            ['Nearby', { distance_km: 0 }, { station: nearby.station }, () => releaseModule.nearbyOf(nearby.station, 0)],
+                            ['UpdateResult', { updated: false, from: update.from, to: update.from }, null, () => clientModule.updateResultOf(false, update.from, update.from)],
+                            ['Stats', { type: {}, kind: {}, country: {}, source: {}, qc_status: {} }, null, () => releaseModule.statsOf({}, {}, {}, {}, {})],
+                        ]) {
+                            const expected = nativeCall();
+                            await observation(`B07.context.${model_type}.default_fields`, () => canonical.materialize_typed_model(raw, { model_type, fields: [], native_dto_fields: { model_type, context } }, origin, model_type), value => JSON.stringify(value.model) === JSON.stringify(expected) && Object.isFrozen(value.model) === Object.isFrozen(expected) && (model_type !== 'Nearby' || value.model.station === nearby.station));
+                            await observation(`B07.context.${model_type}.missing_dependency`, () => nativeFailure(() => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                        }
+                    }
+                } finally { client.close(); }
+            }
+            const fitted = goodStation.constantSets().find(row => row.raw.dropped_constituents?.length);
+            const goodHeader = releaseModule.parseHeader(good._header);
+            const removedRaw = JSON.parse(goodSource).stations.find(row => row.status === 'removed');
+            const offsetStation = good.stations().find(row => row.raw.subordinate_offsets);
+            const tombstone = removedRaw ? good.tombstone(removedRaw.station_id) : null;
+            const tombstoneIndex = removedRaw ? releaseModule.indexDoc(removedRaw, goodHeader, 0, 0, new Set(goodHeader.conventions.map(row => row.convention_id)), new Set(goodHeader.licences.map(row => row.licence_id))) : null;
+            if (!goodConstants || !fitted || !offsetStation || !tombstone || !tombstoneIndex) throw new Error('Authentic plain native model fixtures missing');
+            for (const [model_type, raw, expected, owner] of [
+                ['RecordSpan', goodConstants.raw.record_span, goodConstants.record_span],
+                ['Datum', constants.raw.datum, constants.datum],
+                ['DroppedConstituent', fitted.raw.dropped_constituents[0], fitted.dropped_constituents[0]],
+                ['Provenance', constants.raw.provenance, constants.provenance],
+                ['Convention', good.conventions[0].raw, good.conventions[0]],
+                ['Licence', good.licences[0].raw, good.licences[0]],
+                ['Tombstone', removedRaw, tombstone, { release: good, entry: tombstoneIndex }],
+                ['SubordinateOffsets', offsetStation.raw.subordinate_offsets, offsetStation.subordinateOffsets],
+            ]) await observation(`B07.${model_type}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [], native_owner: owner, native_record_span: model_type === 'RecordSpan' ? { set_id: goodConstants.set_id } : undefined }, origin, model_type), value => JSON.stringify(value.model) === JSON.stringify(expected) && Object.isFrozen(value.model));
+            if (historicalInputs) {
+                const metadata = new TextEncoder().encode(historicalInputs.metadata);
+                const historicalHeader = loader.headerFromMeta(metadata);
+                const slices = historicalInputs.slices;
+                const documents = slices.map(row => JSON.parse(row.source));
+                const entries = releaseModule.indexStations(historicalHeader, documents);
+                const json = await import(`${moduleRoot}/json.js`);
+                const source = { doc: (_entry, position) => json.deepFreeze(documents[position]), close: () => undefined };
+                const historical = new releaseModule.Release(historicalHeader, entries, source, [], true, null);
+                try {
+                    const sourceStation = historical.requireStation('OTC-000cb5d3');
+                    if (!sourceStation.source_records.length) throw new Error('Authentic original SourceRecord fixture missing');
+                    const originalSourceRecord = sourceStation.source_records[0];
+                    if (requiredManagedFields) await observation('B07.managed.Station.source_record_fields', () => canonical.materialize_typed_model(sourceStation.raw, { model_type: 'Station', fields: [], native_owner: { release: historical, entry: entries.find(entry => entry.station_id === sourceStation.station_id) } }, origin, 'Station'), value => value.model._from(historical) && value.model.raw === sourceStation.raw && JSON.stringify(value.model.source_records) === JSON.stringify(sourceStation.source_records) && value.model.source_records[0].licence === originalSourceRecord.licence && value.model.source_records[0].upstreamLicence === originalSourceRecord.upstreamLicence);
+                    await observation('B07.SourceRecord', () => canonical.materialize_typed_model(originalSourceRecord.raw, { model_type: 'SourceRecord', fields: [], native_release: historical }, origin, 'SourceRecord'), value => value.model !== originalSourceRecord && value.model.raw === originalSourceRecord.raw && JSON.stringify(value.model) === JSON.stringify(originalSourceRecord));
+                    for (const slice of slices.filter(row => row.historical)) {
+                        const nativeStation = historical.requireStation(slice.station_id), offsets = nativeStation.subordinateOffsets;
+                        if (!offsets?.vintage || !offsets.provenance) throw new Error('Original native historical aliases missing');
+                        await observation(`B07.Fallback.${slice.station_id}`, () => canonical.materialize_typed_model(nativeStation.raw.subordinate_offsets.fallback, { model_type: 'Fallback', fields: [] }, origin, 'Fallback'), value => JSON.stringify(value.model) === JSON.stringify(offsets.fallback) && Object.isFrozen(value.model));
+                        for (const [model_type, raw, value] of [
+                            ['HistoricalOffsetVintage', nativeStation.raw.subordinate_offsets.vintage, offsets.vintage],
+                            ['HistoricalOffsetProvenance', nativeStation.raw.subordinate_offsets.provenance, offsets.provenance],
+                        ]) await observation(`B07.${model_type}.${slice.station_id}`, () => canonical.materialize_typed_model(raw, { model_type, fields: [], native_historical_parent: nativeStation.raw.subordinate_offsets }, origin, model_type), result => result.model === value && result.model === raw && Object.isFrozen(result.model));
+                        if (requiredModelContexts) for (const [model_type, raw] of [['HistoricalOffsetVintage', nativeStation.raw.subordinate_offsets.vintage], ['HistoricalOffsetProvenance', nativeStation.raw.subordinate_offsets.provenance]]) {
+                            await observation(`B07.context.${model_type}.${slice.station_id}.missing_parent`, () => nativeFailure(() => canonical.materialize_typed_model(raw, { model_type, fields: [] }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                            await observation(`B07.context.${model_type}.${slice.station_id}.foreign_parent`, () => nativeFailure(() => canonical.materialize_typed_model(raw, { model_type, fields: [], native_historical_parent: sourceStation.raw }, origin, model_type)), value => value?.name === 'CanonicalUnimplementedError');
+                        }
+                    }
+                    const reference = historical.requireStation('OTC-a6c00a3f');
+                    if (releaseModule.historicalVintageOf(reference.raw) !== null || releaseModule.historicalProvenanceOf(reference.raw) !== null) throw new Error('Existing absent historical aliases must remain null');
+                    const visibleIds = historical.stations().map(row => row.station_id);
+                    if (visibleIds.join(',') !== [...visibleIds].sort().join(',') || visibleIds.some(id => !slices.some(row => row.station_id === id))) throw new Error('Native station ordering changed');
+                } finally { historical._close(); }
+            }
+        }
+        await observation('B08.raw', () => canonical.retain_raw_source_record(station.raw, typeof process === 'object' ? 'typescript_node' : 'typescript_browser'), value => value === station.raw && Object.isFrozen(value));
+        await observation('B24', () => canonical.project_station_index(station.raw, span, { scalar_types: '', models: '', subordinate_offsets: '', scope: '', fallback: '', native_header: header }), value => value.station_id === index.stored.station_id && value.offset === span.offset_bytes && JSON.stringify(value.aliases) === JSON.stringify(index.stored.aliases));
+        await observation('B28', () => canonical.encode_cache_json({ variant: 'pointer_or_catalogue', value: cacheCase.input }), value => new TextDecoder().decode(value) === cacheCase.expected);
+        const timeArgs = { member_id: 'Release.heights', arguments: { station: station.station_id, start: new Date('2000-01-01T00:00:00Z'), stop: new Date('2000-01-02T00:00:00Z') } };
+        await observation('B39', () => canonical.parse_prediction_window(timeArgs, timeArgs, 600, { tz: 'station' }), value => value.start === 946684800 && value.stop === 946771200 && value.step === 600);
+        const at = Date.parse(astroCase.args.at) / 1000;
+        await observation('B41', () => canonical.evaluate_astronomy(model, at), value => value.utc_year === 2000 && Math.abs(value.constituent_terms[0][2] - (astroCase.expect.value - constants.raw.constituents[0].phase_deg)) < 1e-12);
+        const publicHeights = await release.heightsAt(station, [new Date(at * 1000), new Date(at * 1000)], { datum: 'mean_level' });
+        await observation('B42', () => canonical.evaluate_harmonic_height(model, [at, at], 'mean_level'), value => JSON.stringify(value) === JSON.stringify(publicHeights.items.map(row => row.height_m)));
+        for (const [label, times] of [['empty', []], ['duplicates', [at, at]], ['unordered', [at + 600, at, at]]]) {
+            const dates = times.map(value => new Date(value * 1000));
+            const selected = { member_id: 'Release.heights_at', arguments: { station, times: dates } };
+            await observation(`B39.instants.${label}`, () => canonical.parse_prediction_window(selected, selected, 600, { tz: 'station' }), value => JSON.stringify(value) === JSON.stringify({ instants: times }));
+            const expected = await release.heightsAt(station, dates, { datum: 'mean_level' });
+            await observation(`B42.values.${label}`, () => canonical.evaluate_harmonic_height(model, times, 'mean_level'), value => JSON.stringify(value) === JSON.stringify(expected.items.map(row => row.height_m)));
+        }
+        const window = { start: 1433116800, stop: 1433203200, step: null, instants: null };
+        await observation('B43.roots', () => canonical.find_unrounded_tide_events(model, window), value => value.length > 0 && value.every(row => Number.isFinite(row.root_seconds)));
+        const currentStation = release.stations().find(item => item.kind === 'current' && item.recommendedSet?.raw.current_bins?.length);
+        if (!currentStation) throw new Error('Authentic current native owner missing');
+        const currentConstants = currentStation.recommendedSet;
+        const currentTable = await release.astroTable(currentConstants.convention.raw.astro_table_id);
+        if (!currentTable) throw new Error('Authentic selected current astro table missing');
+        const currentModel = { ...model, station: currentStation, constant_set: currentConstants, convention: currentConstants.convention, astro_table: currentTable._raw, required_constituents: currentConstants.raw.constituents ?? [] };
+        if (foreignTables) {
+            const harmonic = await import(`${moduleRoot}/predict/harmonic.js`);
+            const seconds = Date.parse('2020-06-01T00:00:00Z') / 1000;
+            const narrowStation = release.requireStation('OTC-P-0005'), narrowSet = narrowStation.recommendedSet;
+            if (!narrowSet) throw new Error('Authentic M2-only selected set missing');
+            const narrowModel = { ...model, station: narrowStation, constant_set: narrowSet, convention: narrowSet.convention, required_constituents: narrowSet.raw.constituents, datum_source: narrowSet.raw.datum };
+            const foreignModel = { ...narrowModel, astro_table: currentTable._raw };
+            const foreignSum = new harmonic.Sum(currentTable, narrowSet.raw.constituents);
+            const refusal = call => {
+                try { return { accepted: true, value: call() }; }
+                catch (error) { return { accepted: false, error_name: error.name, error_message: error.message }; }
+            };
+            for (const [id, call] of [
+                ['B41.foreign_table', () => canonical.evaluate_astronomy(foreignModel, seconds)],
+                ['B42.foreign_table', () => canonical.evaluate_harmonic_height(foreignModel, [seconds], 'mean_level')],
+                ['B41.foreign_sum', () => canonical.evaluate_astronomy({ ...narrowModel, native_sum: foreignSum }, seconds)],
+            ]) await observation(id, () => refusal(call), value => value.accepted === false && value.error_name === 'CanonicalUnimplementedError');
+        }
+        if (extendedModels) {
+            const engine = await import(`${moduleRoot}/predict/engine.js`);
+            const nativeContext = engine.contextFor(currentStation, currentConstants, currentTable);
+            const selectedBin = engine.bin(currentStation, currentConstants.raw.current_bins, undefined);
+            engine.currentContext(nativeContext, selectedBin);
+            const seconds = Date.parse('2020-06-01T00:00:00Z') / 1000 + 0.4369507, expected = nativeContext.total.yearData(2020);
+            await observation('B41.current_major', () => canonical.evaluate_astronomy({ ...currentModel, native_sum: nativeContext.total }, seconds), value => JSON.stringify(value.constituent_terms) === JSON.stringify(expected[1]) && value.epoch_hours === (seconds - expected[0]) / 3600);
+        }
+        const currentWindow = { start: Date.parse('2020-06-01T00:00:00Z') / 1000, stop: Date.parse('2020-06-02T00:00:00Z') / 1000, step: null };
+        const currentArgs = { member_id: 'Release.current_events', arguments: { station: currentStation.station_id, start: new Date(currentWindow.start * 1000), stop: new Date(currentWindow.stop * 1000) } };
+        const publicCurrent = await release.currentEvents(currentStation, { start: currentArgs.arguments.start, stop: currentArgs.arguments.stop });
+        await observation('B44.roots', () => canonical.find_unrounded_current_events(currentModel, currentWindow, currentArgs), value => value.length > 0 && JSON.stringify(value.filter(row => currentWindow.start <= Math.floor(row.root_seconds + 0.5) && Math.floor(row.root_seconds + 0.5) < currentWindow.stop).map(row => [Math.floor(row.root_seconds + 0.5), row.event_type, row.velocity_m_s, row.direction_deg])) === JSON.stringify(publicCurrent.items.map(row => [row.time.getTime() / 1000, row.type, row.velocity_ms, row.direction_deg])));
+        if (requiredCurrentPhase) {
+            const phaseRelease = loader.releaseFromJson(new TextEncoder().encode(currentPhaseSource), []);
+            try {
+                const engine = await import(`${moduleRoot}/predict/engine.js`);
+                const phaseStation = phaseRelease.requireStation('OTC-V-NOAA-ACT1616');
+                const phaseSet = phaseStation.recommendedSet;
+                if (!phaseSet || phaseSet.set_id !== 'OTC-V-NOAA-ACT1616/noaa-currents' || phaseSet.convention.convention_id !== 'noaa-currents-harcon-gmt') throw new Error('Qualified ACT1616 selected source missing');
+                const phaseTable = await phaseRelease.astroTable(phaseSet.convention.raw.astro_table_id);
+                if (!phaseTable) throw new Error('Qualified current own convention AstroTable missing');
+                const requestedBin = null;
+                const phaseContext = engine.contextFor(phaseStation, phaseSet, phaseTable);
+                const selectedBin = engine.bin(phaseStation, phaseSet.raw.current_bins, requestedBin);
+                engine.currentContext(phaseContext, selectedBin);
+                const native = engine.unroundedCurrentEventsFor(phaseContext, currentWindow.start, currentWindow.stop).map(([seconds, type, velocity, direction], order) => [seconds, type, velocity, direction, order]);
+                const phaseModel = { station: phaseStation, release_view: phaseRelease, constant_set: phaseSet, convention: phaseSet.convention, astro_table: phaseTable._raw, required_constituents: phaseSet.raw.constituents ?? [], reference_bin: null, mean_term: 0, datum_source: null };
+                const request = { member_id: 'Release.current_events', arguments: { station: phaseStation, start: new Date(currentWindow.start * 1000), stop: new Date(currentWindow.stop * 1000), bin_number: requestedBin } };
+                await observation('B44.exact_native_phase.ACT1616', () => {
+                    const actual = canonical.find_unrounded_current_events(phaseModel, currentWindow, request).map(row => [row.root_seconds, row.event_type, row.velocity_m_s, row.direction_deg, row.reference_order]);
+                    return { native, actual, station_id: phaseStation.station_id, set_id: phaseSet.set_id, convention_id: phaseSet.convention.convention_id, astro_table_id: phaseTable._raw.astro_table_id, selected_bin: selectedBin.bin, window: currentWindow, requested_bin: requestedBin };
+                }, value => value.native.length > 0 && value.actual.length === value.native.length && value.actual.every((row, index) => row.length === value.native[index].length && row.every((field, column) => Object.is(field, value.native[index][column]))));
+            } finally { phaseRelease._close(); }
+        }
+        return { result, public_control: { good_station_id: good.requireStation('OTC-T-0001').station_id, unchanged_astro: table.equilibriumArgument('M2', new Date(at * 1000)), raw_identity: release.requireStation(station.station_id).raw === station.raw } };
+    } finally { good._close(); release._close(); }
+}
+
+const m1Inputs = {
+    requiredCurrentPhase: process.env.OTC_M1_REQUIRED_CURRENT_PHASE === 'qualified',
+    requiredManagedFields: process.env.OTC_M1_REQUIRED_MANAGED_FIELDS === 'qualified',
+    nativeFilePath: path.join(root, 'conformance/fixtures/good/OTC_20991231.2.json'),
+    requiredModelEdges: process.env.OTC_M1_REQUIRED_MODEL_EDGES === 'qualified',
+    requiredModelContexts: process.env.OTC_M1_REQUIRED_MODEL_CONTEXTS === 'qualified',
+    requiredGuardModels: process.env.OTC_M1_REQUIRED_GUARD_MODELS === 'qualified',
+    primitiveGuards: process.env.OTC_M1_PRIMITIVE_GUARDS === 'qualified',
+    managedModels: process.env.OTC_M1_MANAGED === 'qualified',
+    streamMetadata: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_20991231.2.meta.json'), 'utf8'),
+    streamSource: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_20991231.2.jsonl'), 'utf8'),
+    receiverGuards: process.env.OTC_M1_RECEIVER_GUARDS === 'qualified',
+    requiredBindings: process.env.OTC_M1_REQUIRED_BINDINGS === 'qualified',
+    requiredTimes: process.env.OTC_M1_REQUIRED_TIMES === 'qualified',
+    requiredErrorDefaults: process.env.OTC_M1_REQUIRED_ERROR_DEFAULTS === 'qualified',
+    requiredOptionOrder: process.env.OTC_M1_REQUIRED_OPTION_ORDER === 'qualified',
+    requiredErrorContexts: process.env.OTC_M1_REQUIRED_ERROR_CONTEXTS === 'qualified',
+    requiredDetailCodes: process.env.OTC_M1_REQUIRED_DETAIL_CODES === 'qualified',
+    requiredCoreCause: process.env.OTC_M1_REQUIRED_CORE_CAUSE === 'qualified',
+    requiredNativeChannels: process.env.OTC_M1_REQUIRED_NATIVE_CHANNELS === 'qualified',
+    foreignTables: process.env.OTC_M1_FOREIGN_TABLES === 'qualified',
+    dtoModels: process.env.OTC_M1_DTO === 'qualified',
+    pointerSource: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_latest.json'), 'utf8'),
+    extendedModels: process.env.OTC_M1_MODELS === 'extended',
+    extendedGuards: process.env.OTC_M1_GUARDS === 'extended',
+    guardInputs: ['search', 'near', 'nearest', 'prune', 'download', 'constant_sets'].map(operation => {
+        const file = { search: 'search', near: 'knc', nearest: 'knc', prune: 'cache', download: 'download', constant_sets: 'v1' }[operation];
+        const cases = JSON.parse(fs.readFileSync(path.join(root, `conformance/cases/${file}.json`))).cases;
+        const step = cases.flatMap(row => row.steps).find(step => step.op === operation);
+        const { station_id, ...arguments_ } = step.args;
+        const member_id = `${operation === 'prune' || operation === 'download' ? 'Client' : operation === 'constant_sets' ? 'Station' : 'Release'}.${operation}`;
+        return { operation, selected: { member_id, arguments: arguments_ } };
+    }),
+    goodSource: fs.readFileSync(path.join(root, 'conformance/fixtures/good/OTC_20991231.2.json'), 'utf8'),
+    predictSource: fs.readFileSync(path.join(root, 'conformance/fixtures/predict/OTC_20991231.7.json'), 'utf8'),
+    astroCase: JSON.parse(fs.readFileSync(path.join(root, 'conformance/cases/predict-astro-values.json'))).cases[0].steps.find(step => step.op === 'equilibrium_argument' && step.args.name === 'M2' && step.args.at === '2000-01-01T00:00:00Z'),
+    cacheCase: JSON.parse(fs.readFileSync(path.join(root, 'conformance/canonical/cache-golden.json'))).cases[0],
+};
+if (m1Inputs.requiredCurrentPhase) {
+    const source = '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS/public-fixture/OTC_20261011.json';
+    const bytes = fs.readFileSync(source);
+    assert.equal(sha256(bytes), 'd853e3920cf0585dc8bfa3d47f0c5ca862b659732ba7b8d5c8104e05b8e470f4');
+    m1Inputs.currentPhaseSource = bytes.toString('utf8');
+}
+if (process.env.OTC_M1_HISTORICAL === 'qualified') {
+    const historicalLocatorsPath = process.env.OTC_M1_HISTORICAL_LOCATORS ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-PY/fixture-locators/locators.json';
+    const historicalLocatorsBytes = fs.readFileSync(historicalLocatorsPath);
+    assert.equal(sha256(historicalLocatorsBytes), 'd37d5f7f33d31000025f7eaf841fdaa7d590c96c2fee6346a61f3d89c35c26cb');
+    const historicalLocators = JSON.parse(historicalLocatorsBytes);
+    const closurePath = '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS/fixture-locators/locators.json';
+    const closureBytes = fs.readFileSync(closurePath);
+    assert.equal(sha256(closureBytes), '656aa9fda1e9daba388a71df873dd02df0d37ae421252c0f88fd4eb22a28c0ed');
+    const closure = JSON.parse(closureBytes);
+    const historicalMetadata = fs.readFileSync(historicalLocators.metadata_path);
+    const historicalIndex = fs.readFileSync(historicalLocators.index_path);
+    assert.equal(sha256(historicalMetadata), historicalLocators.metadata_sha256);
+    assert.equal(sha256(historicalIndex), historicalLocators.index_sha256);
+    m1Inputs.historicalInputs = { metadata: historicalMetadata.toString(), index: historicalIndex.toString(), source_path: historicalLocators.locators[0].source_path,
+        slices: [...historicalLocators.locators, ...closure.additional_locators].map(row => { const bytes = fs.readFileSync(row.path); assert.equal(sha256(bytes), row.sha256); assert.equal(bytes.length, row.length); return { source: bytes.toString(), station_id: row.station_id, offset: row.offset, length: row.length, historical: row.models?.some(model => model.model === 'HistoricalOffsetVintage') ?? false }; }) };
+}
+
+test('M1 original native unrounded survivor phase is source-qualified before extraction', () => {
+    const release = releaseFromJson(new TextEncoder().encode(m1Inputs.predictSource), []);
+    const constants = release.requireStation('OTC-P-0001').recommendedSet;
+    const table = predictionAstroTable(release);
+    assert.ok(constants && table);
+    const total = new Sum(table, constants.raw.constituents);
+    const start = 1433116800;
+    const fullPublic = events(total, start, 1433203200);
+    const stop = Math.floor(fullPublic[0][0]);
+    const phasePath = path.join(packageRoot, 'dist/predict/harmonic.js');
+    const line = fs.readFileSync(phasePath, 'utf8').split('\n').findIndex(text => text.includes('return kept.filter'));
+    const directory = process.env.OTC_M1_PROOF ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS';
+    fs.mkdirSync(directory, { recursive: true });
+    if (process.env.OTC_M1_PHASE !== 'red') {
+        const expected = JSON.parse(fs.readFileSync(path.join(directory, 'original-root-phase.json')));
+        assert.equal(expected.input_sha256, sha256(Buffer.from(m1Inputs.predictSource)));
+        assert.deepEqual(events(total, start, stop), expected.public_events);
+        const station = release.requireStation('OTC-P-0001');
+        const model = { station, release_view: release, constant_set: constants, convention: constants.convention,
+            astro_table: table._raw, required_constituents: constants.raw.constituents, reference_bin: null, mean_term: 0, datum_source: constants.raw.datum };
+        const actual = find_unrounded_tide_events(model, { start: expected.start, stop: expected.stop, step: null, instants: null });
+        assert.deepEqual(actual.map(row => [row.root_seconds, row.event_type, row.height_m]), expected.kept);
+        release._close(); return;
+    }
+    assert.ok(line >= 0, 'Actual original reporting predicate must exist');
+    const session = new Session(); session.connect();
+    let kept;
+    session.on('Debugger.paused', event => {
+        session.post('Debugger.evaluateOnCallFrame', { callFrameId: event.params.callFrames[0].callFrameId, expression: 'JSON.stringify(kept)', returnByValue: true }, (error, response) => {
+            assert.ifError(error); kept = JSON.parse(response.result.value);
+            session.post('Debugger.resume');
+        });
+    });
+    try {
+        session.post('Debugger.enable');
+        session.post('Debugger.setBreakpointByUrl', { url: new URL('../dist/predict/harmonic.js', import.meta.url).href, lineNumber: line });
+        const publicEvents = events(total, start, stop);
+        assert.ok(kept && kept.length > publicEvents.length, 'Genuine padding survivor excluded by existing reporting filter required');
+        const expected = { input_sha256: sha256(Buffer.from(m1Inputs.predictSource)), original_module: pin('js/dist/predict/harmonic.js'), start, stop, kept, public_events: publicEvents };
+        fs.writeFileSync(path.join(directory, 'original-root-phase.json'), JSON.stringify(expected, null, 2));
+        console.log(JSON.stringify({ surface: 'real native debugger pre-filter kept', total: kept.length, reported: publicEvents.length, excluded: kept.filter(row => !publicEvents.some(publicRow => publicRow[0] === row[0])) }));
+    } finally { session.disconnect(); release._close(); }
+});
+
+test('M1 B41 fractional instant uses the exact original native year-cache terms', () => {
+    const release = releaseFromJson(new TextEncoder().encode(m1Inputs.predictSource), []);
+    const station = release.requireStation('OTC-P-0001'), constants = station.recommendedSet, table = predictionAstroTable(release);
+    assert.ok(constants && table);
+    const model = { station, release_view: release, constant_set: constants, convention: constants.convention, astro_table: table._raw,
+        required_constituents: constants.raw.constituents, reference_bin: null, mean_term: 0, datum_source: constants.raw.datum };
+    const seconds = 1433116800.4369507, total = new Sum(table, constants.raw.constituents);
+    const directory = process.env.OTC_M1_PROOF ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS';
+    const phasePath = path.join(directory, 'original-year-phase.json');
+    let expected;
+    if (process.env.OTC_M1_YEAR_PHASE === 'red') {
+        const modulePath = path.join(packageRoot, 'dist/predict/harmonic.js');
+        const line = fs.readFileSync(modulePath, 'utf8').split('\n').findIndex(text => text.includes('const [origin, terms] = this.#year(year)'));
+        assert.ok(line >= 0);
+        const session = new Session(); session.connect();
+        session.on('Debugger.paused', event => {
+            session.post('Debugger.evaluateOnCallFrame', { callFrameId: event.params.callFrames[0].callFrameId, expression: 'JSON.stringify(this.#year(year))', returnByValue: true }, (error, response) => {
+                assert.ifError(error); expected = JSON.parse(response.result.value); session.post('Debugger.resume');
+            });
+        });
+        try {
+            session.post('Debugger.enable'); session.post('Debugger.setBreakpointByUrl', { url: new URL('../dist/predict/harmonic.js', import.meta.url).href, lineNumber: line });
+            const originalValue = total.value(seconds);
+            assert.ok(expected);
+            fs.writeFileSync(phasePath, JSON.stringify({ seconds, expected, original_value: originalValue, original_module: pin('js/dist/predict/harmonic.js'), input_sha256: sha256(Buffer.from(m1Inputs.predictSource)) }, null, 2));
+        } finally { session.disconnect(); }
+    } else expected = JSON.parse(fs.readFileSync(phasePath)).expected;
+    try {
+        const actual = evaluate_astronomy(model, seconds);
+        assert.deepEqual(actual.constituent_terms, expected[1]);
+        assert.equal(actual.epoch_hours, (seconds - expected[0]) / 3600);
+    } finally { release._close(); }
+});
+
+async function observeNodePruneChannels(baseUrl, directory) {
+    const cacheRoot = fs.mkdtempSync(path.join(directory, 'native-prune-cache-'));
+    for (const date of ['20991231.2', '20991231']) {
+        const seed = await OpenTideConstants.open({ release: date, baseUrl, cacheDir: cacheRoot, format: 'json', autoUpdate: false });
+        seed.close();
+    }
+    const client = await OpenTideConstants.open({ file: path.join(root, 'conformance/fixtures/good/OTC_20991231.2.jsonl'), cacheDir: cacheRoot });
+    const blocked = path.join(cacheRoot, 'v1/releases/20991231');
+    const removed = path.join(cacheRoot, 'v1/releases/20991231.2');
+    const result = [];
+    try {
+        fs.chmodSync(blocked, 0o555);
+        let failure;
+        try { client.prune({ keep: 0 }); throw new Error('Expected actual native filesystem prune failure'); }
+        catch (error) { if (error.code !== 'cache' || !error.removed?.length) throw error; failure = error; }
+        const partial = JSON.stringify(failure.removed) === JSON.stringify(['20991231.2']) && !fs.existsSync(removed) && fs.existsSync(blocked);
+        let mapped;
+        try { translate_native_binding({ native_profile: 'typescript_node', canonical_error: { code: 'cache', structured_fields: { message: failure.message, removed: failure.removed }, cause: failure.cause } }); }
+        catch (error) { mapped = error; }
+        result.push({ id: 'B04.channel.node_prune_partial_effect', passed: partial && mapped instanceof failure.constructor && mapped.message === failure.message && mapped.cause === failure.cause && JSON.stringify(mapped.removed) === JSON.stringify(failure.removed) && Object.isFrozen(mapped.removed), value_json: JSON.stringify({ code: mapped?.code, removed: mapped?.removed, actual_partial_effect: partial }) });
+        let terminal;
+        try { translate_native_binding({ native_profile: 'typescript_node', native_exception: failure, member_id: 'Client.prune' }); }
+        catch (error) { terminal = error; }
+        result.push({ id: 'B04.channel.node_prune_terminal', passed: terminal === failure, value_json: JSON.stringify({ exact_exception_identity: terminal === failure }) });
+    } finally { fs.chmodSync(blocked, 0o755); client.close(); }
+    return result;
+}
+
+test('M1 actual Node canonical leaves match authenticated original native values', async () => {
+    const directory = process.env.OTC_M1_PROOF ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS';
+    const server = m1Server();
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let observed;
+    try {
+        observed = await observeM1({ ...m1Inputs, moduleRoot: path.join(packageRoot, 'dist'), baseUrl: `http://127.0.0.1:${server.address().port}/fixture-good/`, cacheDir: fs.mkdtempSync(path.join(directory, 'dto-cache-')) });
+        if (m1Inputs.requiredNativeChannels) observed.result.push(...await observeNodePruneChannels(`http://127.0.0.1:${server.address().port}/fixture-good/`, directory));
+    } finally { await new Promise(resolve => server.close(resolve)); }
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, `${process.env.OTC_M1_PHASE ?? 'current'}-node.json`), JSON.stringify(observed, null, 2));
+    console.log(JSON.stringify(observed));
+    assert.deepEqual(observed.result.filter(row => !row.passed), []);
+});
+
+test('M1 metadata B03 actual ordered native failure value', () => {
+    const nativeFailure = new InvalidArgumentError('file cannot be combined with release, offline or onNetworkError');
+    const input = { code: nativeFailure.code, structured_fields: { message: nativeFailure.message }, cause: null };
+    const actual = select_canonical_error('open', [input], null);
+    assert.strictEqual(actual, input);
+    assert.equal(actual.code, 'invalid_argument');
+    const directory = process.env.OTC_M1_PROOF ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS';
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(path.join(directory, 'b03-fresh-result.json'), JSON.stringify({ id: 'B03', input, actual, source: pin('js/src/canonical.ts'), build: pin('js/dist/canonical.js'), fixture: pin('js/test/canonical-shape.test.mjs'), stdout: JSON.stringify(actual), canonical_output_concept: 'canonical_error', value_preserved_by_identity: actual === input }, null, 2));
+    console.log(JSON.stringify(actual));
+});
+
+test('M1 B42 copied datum errors preserve the original native fields and order', async () => {
+    const release = releaseFromJson(new TextEncoder().encode(m1Inputs.predictSource), []);
+    const table = predictionAstroTable(release);
+    const cases = JSON.parse(fs.readFileSync(path.join(root, 'conformance/cases/predict-datum.json'))).cases;
+    const steps = cases.find(row => row.id === 'predict-datum/unavailable').steps.filter(step => step.op === 'heights_at');
+    const observeError = async call => {
+        try { await call(); assert.fail('Expected original native datum failure'); }
+        catch (error) { assert.equal(error.code, 'datum_unavailable'); return { name: error.name, code: error.code, message: error.message, missing: error.missing }; }
+    };
+    try {
+        assert.ok(table);
+        for (const { args } of steps) {
+            const station = release.requireStation(args.station_id), constants = station.constantSet(args.set_id);
+            assert.ok(constants);
+            const times = args.times.map(value => new Date(value));
+            const expected = await observeError(() => release.heightsAt(station, times, { setId: args.set_id, datum: args.datum }));
+            const model = { station, release_view: release, constant_set: constants, convention: constants.convention,
+                astro_table: table._raw, required_constituents: constants.raw.constituents, reference_bin: null, mean_term: 0, datum_source: constants.raw.datum ?? null };
+            const actual = await observeError(() => evaluate_harmonic_height(model, times.map(value => Math.floor(value.getTime() / 1000)), args.datum));
+            assert.deepEqual(actual, expected);
+        }
+    } finally { release._close(); }
+});
+
+test('M1 actual Chromium canonical leaves match authenticated original native values', async () => {
+    const server = m1Server();
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    let browser;
+    try {
+        browser = await chromium.launch({ headless: true });
+        const page = await browser.newPage(); await page.goto(`http://127.0.0.1:${server.address().port}/`);
+        const observed = await page.evaluate(({ inputs, code }) => globalThis.eval(`(${code})`)({ ...inputs, moduleRoot: '/dist', baseUrl: location.origin + '/fixture-good/', cacheDir: 'dto-native' }), { inputs: m1Inputs, code: observeM1.toString() });
+        const directory = process.env.OTC_M1_PROOF ?? '/Users/jpr5/.local/share/copilotkit/cr/otc-codex-takeover/execution/sdk-core-sync/canonical-behavior/holistic-reset/implementation-plan/M1-TS';
+        fs.mkdirSync(directory, { recursive: true });
+        fs.writeFileSync(path.join(directory, `${process.env.OTC_M1_PHASE ?? 'current'}-browser.json`), JSON.stringify(observed, null, 2));
+        console.log(JSON.stringify(observed));
+        assert.deepEqual(observed.result.filter(row => !row.passed), []);
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+});

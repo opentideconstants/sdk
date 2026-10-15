@@ -1,0 +1,15 @@
+# find_package(opentideconstants): the imported target
+# opentideconstants::opentideconstants, installed by c/CMakeLists.txt.
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+# A static library brings its own dependencies to the application's link.
+if(NOT @OTC_CONFIG_SHARED@)
+    find_dependency(Threads)
+    if(@OTC_WITH_FETCH@)
+        find_dependency(CURL)
+    endif()
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/opentideconstantsTargets.cmake")
+check_required_components(opentideconstants)

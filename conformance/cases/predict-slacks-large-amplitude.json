@@ -1,0 +1,833 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-slacks-large-amplitude",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-slacks-large-amplitude",
+   "title": "the slacks of the same bins: their count equals a 5 s scan of W (scan_5s_slacks compares the slack_* events only)",
+   "spec": "4.7",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "bin_number": 1,
+      "start": "2099-12-20T00:00:00Z",
+      "station_id": "OTC-P-0013",
+      "stop": "2099-12-25T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 1,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2099-12-20T02:59:40Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T06:05:58Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999995,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T09:12:17Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T12:18:35Z",
+         "type": "max_flood",
+         "velocity_ms": 5.107999999999834,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T15:24:54Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T18:31:12Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999884,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T21:37:31Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T00:43:50Z",
+         "type": "max_flood",
+         "velocity_ms": 5.10799999999998,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T03:50:08Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T06:56:27Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999632,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T10:02:45Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T13:09:04Z",
+         "type": "max_flood",
+         "velocity_ms": 5.107999999999985,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T16:15:22Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T19:21:41Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999871,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T22:27:59Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T01:34:18Z",
+         "type": "max_flood",
+         "velocity_ms": 5.107999999999849,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T04:40:36Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T07:46:55Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999992,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T10:53:13Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T13:59:32Z",
+         "type": "max_flood",
+         "velocity_ms": 5.1079999999996675,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T17:05:51Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T20:12:09Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999971,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T23:18:28Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T02:24:46Z",
+         "type": "max_flood",
+         "velocity_ms": 5.107999999999904,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T05:31:05Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T08:37:23Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999809,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T11:43:42Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T14:50:00Z",
+         "type": "max_flood",
+         "velocity_ms": 5.107999999999998,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T17:56:19Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T21:02:37Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999721,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T00:08:56Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T03:15:15Z",
+         "type": "max_flood",
+         "velocity_ms": 5.107999999999952,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T06:21:33Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T09:27:52Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.107999999999931,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T12:34:10Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T15:40:29Z",
+         "type": "max_flood",
+         "velocity_ms": 5.1079999999997625,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T18:46:47Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T21:53:06Z",
+         "type": "max_ebb",
+         "velocity_ms": -5.1080000000000005,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "current_events"
+    },
+    {
+     "args": {
+      "bin_number": 2,
+      "start": "2099-12-20T00:00:00Z",
+      "station_id": "OTC-P-0013",
+      "stop": "2099-12-25T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 2,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2099-12-20T02:59:40Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T06:05:58Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.661999999999992,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T09:12:17Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T12:18:35Z",
+         "type": "max_flood",
+         "velocity_ms": 7.6619999999997495,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T15:24:54Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T18:31:12Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.661999999999827,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-20T21:37:31Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T00:43:50Z",
+         "type": "max_flood",
+         "velocity_ms": 7.661999999999971,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T03:50:08Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T06:56:27Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.6619999999994475,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T10:02:45Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T13:09:04Z",
+         "type": "max_flood",
+         "velocity_ms": 7.661999999999978,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T16:15:22Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T19:21:41Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.661999999999806,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-21T22:27:59Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T01:34:18Z",
+         "type": "max_flood",
+         "velocity_ms": 7.6619999999997725,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T04:40:36Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T07:46:55Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.6619999999999875,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T10:53:13Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T13:59:32Z",
+         "type": "max_flood",
+         "velocity_ms": 7.661999999999501,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T17:05:51Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T20:12:09Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.661999999999956,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-22T23:18:28Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T02:24:46Z",
+         "type": "max_flood",
+         "velocity_ms": 7.661999999999855,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T05:31:05Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T08:37:23Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.661999999999712,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T11:43:42Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T14:50:00Z",
+         "type": "max_flood",
+         "velocity_ms": 7.661999999999997,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T17:56:19Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-23T21:02:37Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.661999999999582,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T00:08:56Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T03:15:15Z",
+         "type": "max_flood",
+         "velocity_ms": 7.661999999999928,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T06:21:33Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T09:27:52Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.661999999999897,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T12:34:10Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T15:40:29Z",
+         "type": "max_flood",
+         "velocity_ms": 7.661999999999645,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T18:46:47Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2099-12-24T21:53:06Z",
+         "type": "max_ebb",
+         "velocity_ms": -7.662000000000001,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "current_events"
+    },
+    {
+     "args": {
+      "bin_number": 3,
+      "start": "2025-12-22T00:00:00Z",
+      "station_id": "OTC-P-0013",
+      "stop": "2025-12-23T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-b",
+       "bin_number": 3,
+       "convention_id": "predict-large-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0013/noaa",
+       "station_id": "OTC-P-0013",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2025-12-22T02:09:14Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2025-12-22T08:08:15Z",
+         "type": "max_ebb",
+         "velocity_ms": -38.16399999999956,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2025-12-22T14:07:16Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2025-12-22T20:06:17Z",
+         "type": "max_flood",
+         "velocity_ms": 38.1639999999996,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "current_events"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-b",
+         "bin": {
+          "$bin": [
+           "OTC-P-0013/noaa",
+           1
+          ]
+         },
+         "start": "2099-12-20T00:00:00Z",
+         "stop": "2099-12-25T00:00:00Z"
+        },
+        "crosscheck": "scan_5s_slacks",
+        "entry": "current_events_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-b",
+         "bin": {
+          "$bin": [
+           "OTC-P-0013/noaa",
+           2
+          ]
+         },
+         "start": "2099-12-20T00:00:00Z",
+         "stop": "2099-12-25T00:00:00Z"
+        },
+        "crosscheck": "scan_5s_slacks",
+        "entry": "current_events_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-b",
+         "bin": {
+          "$bin": [
+           "OTC-P-0013/noaa",
+           3
+          ]
+         },
+         "start": "2025-12-22T00:00:00Z",
+         "stop": "2025-12-23T00:00:00Z"
+        },
+        "crosscheck": "scan_5s_slacks",
+        "entry": "current_events_strict"
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

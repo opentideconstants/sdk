@@ -1,0 +1,33 @@
+# Checksum-sensitive data must keep the bytes as committed on every
+# platform. Git must not convert line endings in these files (for example
+# core.autocrlf=true on Windows), because the conformance suite checks the
+# fixtures by SHA-256 and compares the generated JSON (conformance/cases and
+# conformance/cross) byte for byte. build_cases.py and gen_fold_table.py
+# write LF bytes on every OS.
+# The SDK copies of the name fold table, and the TypeScript and C tables
+# generated from it, are also compared with the suite's table.
+*.gz                  binary
+*.jsonl               -text
+*.sha256              -text
+conformance/fixtures/** -text
+conformance/cases/*.json -text
+conformance/cross/*.json -text
+conformance/api.json  -text
+conformance/schemas/** -text
+name_fold.json        -text
+js/src/fold-table.ts  -text
+c/src/otc_fold_table.c -text
+# Byte-checked on every platform too: the vendored sources (their SHA-256 is
+# checked), the C supported-formats.json (c.yml compares the bundle's copy with
+# the committed bytes), and the Ruby README: test_readme.rb finds its code
+# blocks by a "```ruby" line that ends in LF, so a CRLF checkout hides them.
+# gen_sources.py --check compares the C fold table byte for byte.
+c/vendor/**           -text
+c/supported-formats.json -text
+ruby/README.md        -text
+# build_cases.py checks predict_expected.json's calls_sha256 against the bytes
+# of predict_calls.json, so both keep their committed bytes on every platform.
+conformance/tools/predict_calls.json -text
+conformance/tools/predict_expected.json -text
+# The prediction vectors are checked against SHA256SUMS by run_vectors.py.
+conformance/vectors/** -text

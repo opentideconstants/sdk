@@ -1,0 +1,642 @@
+/* Station queries (SDK spec 4.4, 4.4.1, 6.3). Every query reads the index
+ * built at open; only the stations returned are read from the file. */
+#include "otc_internal.h"
+
+#define OTC_EARTH_R_KM 6371.0088
+#define OTC_DEG2RAD 0.017453292519943295
+
+/* An enum filter compares the typed value: a value in the data that the library
+ * does not know is "other", so "other" matches it and its raw string matches
+ * nothing (spec 4.4, CR2 DR7). A field with no value matches no filter value. */
+static int typed_is(const char *name, const char *want)
+{
+    return name && !strcmp(name, want);
+}
+
+/* Discovery uses one eligible source path for both source predicates. */
+static int commercial(const otc_release *rel, const char *id)
+{
+    const otc_licence *l = otc__find_licence(rel, id);
+    return l && l->commercial_use;
+}
+static int eligible(const otc_release *rel, const cJSON *s, const otc_filter *f, const char *own)
+{
+    const char *qc = otc__jstr(s, "qc_status");
+    const cJSON *fallback = otc__jget(s, "fallback");
+    if (!qc || (strcmp(qc, "ok") && strcmp(qc, "flagged"))) return 0;
+    if (fallback ? !(f && f->include_fallback) : (strcmp(qc, "ok") && !(f && f->include_flagged))) return 0;
+    if (own && !otc__find_licence(rel, own)) return 0;
+    if (!rel->commercial_only) return 1;
+    if (!rel->commercial_upstream && otc__jstr_is(otc__jstr_item(fallback, "reason"), "licence_reading")) return 0;
+    return commercial(rel, otc__jstr(s, "licence_id")) && (!own || commercial(rel, own));
+}
+static int source_matches(const cJSON *s, const otc_filter *f)
+{
+    return !f || ((!f->source || otc__jstr_is(otc__jstr_item(s, "source"), f->source))
+        && (!f->source_type || typed_is(otc_source_type_name(otc__parse_source_type(otc__jstr(s, "source_type"))), f->source_type)));
+}
+static int usable(const cJSON *s)
+{
+    const char *qc = otc__jstr(s, "qc_status");
+    return qc && (!strcmp(qc, "ok") || !strcmp(qc, "flagged"));
+}
+
+/* A base/sparse index does not supply policy facts. Borrow actual metadata for
+ * this decision only; discovery summaries and the release remain immutable. */
+static otc_status policy_entry(const otc_release *rel, const otc__entry *e, otc__entry *view, cJSON **record)
+{
+    otc_status st;
+    *record = NULL;
+    *view = *e;
+    if (!rel->index_used || !e->index_policy_missing) return OTC_OK;
+    st = otc__read_station_line(rel, e->id, e->offset, e->length, e->view, record);
+    if (st != OTC_OK) return st;
+    view->sets_json = (cJSON *)otc__jget(*record, "constant_sets");
+    view->own_offsets = (cJSON *)otc__jget(*record, "subordinate_offsets");
+    view->current_offsets = (cJSON *)otc__jget(*record, "current_offsets");
+    view->has_offsets = cJSON_IsObject(view->own_offsets);
+    return OTC_OK;
+}
+static const cJSON *first_reference(const otc__entry *ref, const char *quantity, int64_t bin)
+{
+    const cJSON *s;
+    if (!ref) return NULL;
+    cJSON_ArrayForEach(s, ref->sets_json) {
+        const cJSON *b;
+        if (!usable(s) || !otc__jstr_is(otc__jstr_item(s, "quantity"), quantity)) continue;
+        if (!strcmp(quantity, "water_level")) {
+            if (otc__jstr_is(otc__jstr_item(s, "source"), "noaa")) return s;
+        } else cJSON_ArrayForEach(b, otc__jget(s, "current_bins")) {
+            double n = cJSON_IsNumber(b) ? b->valuedouble : otc__jnum(b, "bin");
+            if (n == (double)bin) return s;
+        }
+    }
+    return NULL;
+}
+static int ordinary_paths(const otc_release *rel, const otc_filter *f, const otc__entry *e)
+{
+    const cJSON *s, *co;
+    const otc__entry *ref;
+    cJSON_ArrayForEach(s, e->sets_json) if (eligible(rel, s, f, NULL) && source_matches(s, f)) return 1;
+    if (!otc__jstr(e->own_offsets, "offset_id") && e->has_offsets) {
+        otc__entry view;
+        cJSON *record = NULL;
+        otc_status st;
+        int matched;
+        ref = otc__find_entry(rel, e->ref_id);
+        if (ref) {
+            st = policy_entry(rel, ref, &view, &record);
+            if (st != OTC_OK) return -(int)st;
+            s = first_reference(&view, "water_level", 0);
+            matched = s && eligible(rel, s, f, e->off_licence) && source_matches(s, f);
+            cJSON_Delete(record);
+            if (matched) return 1;
+        }
+    }
+    cJSON_ArrayForEach(co, e->current_offsets) {
+        int64_t bin = otc__jint(co, "bin"), rb = otc__jint(co, "reference_bin");
+        if (bin < 1 || rb < 1 || bin > INT64_C(9007199254740991) || rb > INT64_C(9007199254740991)) continue;
+        ref = otc__find_entry(rel, otc__jstr(co, "reference_station_id"));
+        if (ref) {
+            otc__entry view;
+            cJSON *record = NULL;
+            otc_status st = policy_entry(rel, ref, &view, &record);
+            int matched;
+            if (st != OTC_OK) return -(int)st;
+            s = first_reference(&view, "current", rb);
+            matched = s && eligible(rel, s, f, otc__jstr(co, "licence_id")) && source_matches(s, f);
+            cJSON_Delete(record);
+            if (matched) return 1;
+        }
+    }
+    return 0;
+}
+static int historical_table_ok(const otc_release *rel, const cJSON *conv, const cJSON *set)
+{
+    const cJSON *table = NULL, *candidate, *row, *x, *cons;
+    double first, last;
+    const char *id = otc__jstr(conv, "astro_table_id");
+    if (!id) return 0;
+    cJSON_ArrayForEach(candidate, otc__jget(rel->meta, "astro_tables")) {
+        if (otc__jstr_is(otc__jstr_item(candidate, "astro_table_id"), id)) { table = candidate; break; }
+    }
+    first = otc__jnum(table, "first_year"); last = otc__jnum(table, "last_year");
+    if (!table || !isfinite(first) || !isfinite(last) || first != floor(first) || last != floor(last) || first > last || last - first >= INT_MAX || !cJSON_IsObject(otc__jget(table, "constituents"))) return 0;
+    cJSON_ArrayForEach(row, otc__jget(table, "constituents")) {
+        static const char *const keys[] = {"v0u_deg", "f"}; size_t k;
+        if (!cJSON_IsObject(row)) return 0;
+        for (k=0; k<2; k++) {
+            const cJSON *values = otc__jget(row, keys[k]);
+            if (!cJSON_IsArray(values) || (double)cJSON_GetArraySize(values) != last-first+1) return 0;
+            cJSON_ArrayForEach(x, values) if (!cJSON_IsNumber(x) || !isfinite(x->valuedouble)) return 0;
+        }
+        x = otc__jget(row, "speed_deg_per_hour");
+        if (x && (!cJSON_IsNumber(x) || !isfinite(x->valuedouble) || x->valuedouble < 0)) return 0;
+    }
+    cJSON_ArrayForEach(cons, otc__jget(set, "constituents")) {
+        const char *name = otc__jstr(cons, "name");
+        row = name ? otc__jget(otc__jget(table, "constituents"), name) : NULL;
+        if (!row || !isfinite(otc__jnum(row, "speed_deg_per_hour"))) return 0;
+    }
+    return 1;
+}
+
+int otc__ordinary_path(const otc_release *rel, const otc__entry *e)
+{
+    otc__entry view;
+    cJSON *record = NULL;
+    int result;
+    if (!e || policy_entry(rel, e, &view, &record) != OTC_OK) return 0;
+    result = ordinary_paths(rel, NULL, &view);
+    cJSON_Delete(record);
+    return result > 0;
+}
+
+static int historical_path(const otc_release *rel, const otc__entry *e)
+{
+    const cJSON *off = e->own_offsets, *s, *datum, *conv;
+    const otc__entry *ref;
+    otc_station_t *st = NULL;
+    const otc_set *set;
+    const char *sid;
+    int ok, ordinary;
+    otc__entry reference;
+    cJSON *record = NULL;
+    otc_status status;
+    if (!otc__jstr(off, "offset_id") || rel->historical_excluded) return 0;
+    if (rel->commercial_only ? e->eff_pos >= 0 : e->has_rec) return 0;
+    ordinary = ordinary_paths(rel, NULL, e);
+    if (ordinary) return ordinary < 0 ? ordinary : 0;
+    ref = otc__find_entry(rel, otc__jstr(off, "reference_station_id"));
+    if (!ref) return 0;
+    status = policy_entry(rel, ref, &reference, &record);
+    if (status != OTC_OK) return -(int)status;
+    s = first_reference(&reference, "water_level", 0);
+    if (!s || !otc__jstr_is(otc__jstr_item(s, "qc_status"), "ok") || otc__jget(s, "fallback")) { cJSON_Delete(record); return 0; }
+    if (rel->commercial_only && (!commercial(rel, otc__jstr(off, "licence_id")) || !commercial(rel, otc__jstr(s, "licence_id")))) { cJSON_Delete(record); return 0; }
+    sid = otc__jstr(s, "set_id");
+    if (!sid) { cJSON_Delete(record); return 0; }
+    status = otc_station(rel, ref->id, &st);
+    if (status != OTC_OK) { cJSON_Delete(record); return -(int)status; }
+    status = otc_station_set(st, sid, &set);
+    cJSON_Delete(record);
+    if (status != OTC_OK) { otc_station_free(st); return -(int)status; }
+    s = set->json;
+    datum = otc__jget(s, "datum"); conv = set->conv ? set->conv->json : NULL;
+    ok = otc__jstr_is(otc__jstr_item(s, "source_record_id"), otc__jstr(otc__jget(otc__jget(off, "provenance"), "reference_binding"), "noaa_id"))
+        && otc__jstr_is(otc__jstr_item(conv, "v0_model"), "schureman_tcd")
+        && otc__jstr_is(otc__jstr_item(conv, "nodal_handling"), "f_u_at_prediction")
+        && otc__jstr_is(otc__jstr_item(datum, "chart_datum"), "mllw")
+        && isfinite(otc__jnum(datum, "msl_offset_m"))
+        && otc__jnum(otc__jget(datum, "named"), "mllw") == 0.0
+        && otc__jstr_is(otc__jstr_item(otc__jget(otc__jget(datum, "basis"), "mllw"), "kind"), "published");
+    ok = ok && historical_table_ok(rel, conv, s);
+    otc_station_free(st);
+    return ok;
+}
+
+int otc__filter_match(const otc_release *rel, const otc_filter *f, const otc__entry *e)
+{
+    otc__entry view;
+    cJSON *record = NULL;
+    otc_status status;
+    int result;
+    if (f && f->country && otc__strcmp_null(e->country, f->country)) return 0;
+    if (f && f->type && !typed_is(otc_station_type_name(e->type), f->type)) return 0;
+    if (f && f->kind && !typed_is(otc_kind_name(e->kind), f->kind)) return 0;
+    status = policy_entry(rel, e, &view, &record);
+    if (status != OTC_OK) return -(int)status;
+    result = ordinary_paths(rel, f, &view);
+    if (!result) {
+        result = historical_path(rel, &view);
+        if (result > 0) result = source_matches(view.own_offsets, f);
+    }
+    cJSON_Delete(record);
+    return result;
+}
+
+static int filter_ok(const otc_filter *f)
+{
+    return !f || f->struct_size >= sizeof *f;
+}
+
+/* ---------------------------------------------------------------- lookups */
+
+static otc_status load_entry(const otc_release *rel, const otc__entry *e, otc_station_t **out)
+{
+    cJSON *root = NULL;
+    otc_status st = otc__read_station_line(rel, e->id, e->offset, e->length, e->view, &root);
+    if (st != OTC_OK) return st;
+    st = otc__station_build(rel, root, e->kind, rel->commercial_only ? e->eff_pos : OTC__REC_FROM_LINE, out);
+    return st == OTC_OK ? st : otc__fail(rel, st, "cannot build station %s", e->id);
+}
+
+otc_status otc_station(const otc_release *rel, const char *id, otc_station_t **out)
+{
+    const otc__entry *e;
+    if (out) *out = NULL;
+    if (!rel || !out || !id) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_station: NULL argument");
+    e = otc__find_entry(rel, id);
+    if (!e) return OTC_E_NOT_FOUND;
+    return load_entry(rel, e, out);
+}
+
+otc_status otc_require_station(const otc_release *rel, const char *id, otc_station_t **out)
+{
+    otc_status st = otc_station(rel, id, out);
+    if (st != OTC_E_NOT_FOUND) return st;
+    if (otc__find_tomb(rel, id)) {
+        /* the error carries the tombstone (spec 4.4): its fields are in the message, and
+         * otc_tombstone(rel, id, &t) gives the object */
+        otc_tombstone_t *t = NULL;
+        const char *in = NULL, *reason = NULL, *into = NULL;
+        otc_status st2 = otc_tombstone(rel, id, &t);
+        if (st2 != OTC_OK) return st2;   /* the tombstone cannot be read: that failure (already recorded) */
+        in = otc__jstr(t->root, "removed_in");
+        reason = otc__jstr(t->root, "removed_reason");
+        into = otc__jstr(t->root, "merged_into");
+        if (into)
+            st2 = otc__fail(rel, OTC_E_STATION_REMOVED, "station %s was removed in %s (%s), merged into %s", id,
+                            in ? in : "?", reason ? reason : "?", into);
+        else
+            st2 = otc__fail(rel, OTC_E_STATION_REMOVED, "station %s was removed in %s (%s)", id, in ? in : "?",
+                            reason ? reason : "?");
+        otc_tombstone_free(t);
+        return st2;
+    }
+    return otc__fail(rel, OTC_E_STATION_NOT_FOUND, "no station %s", id);
+}
+
+otc_status otc_tombstone(const otc_release *rel, const char *id, otc_tombstone_t **out)
+{
+    const otc__tomb *t;
+    cJSON *root = NULL;
+    otc_status st;
+    if (out) *out = NULL;
+    if (!rel || !out || !id) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_tombstone: NULL argument");
+    t = otc__find_tomb(rel, id);
+    if (!t) return OTC_E_NOT_FOUND;
+    st = otc__read_station_line(rel, t->id, t->offset, t->length, t->view, &root);
+    if (st != OTC_OK) return st;
+    *out = (otc_tombstone_t *)malloc(sizeof **out);
+    if (!*out) { cJSON_Delete(root); return otc__fail(rel, OTC_E_NOMEM, "out of memory"); }
+    (*out)->root = root;
+    return OTC_OK;
+}
+
+void otc_tombstone_free(otc_tombstone_t *t)
+{
+    if (!t) return;
+    cJSON_Delete(t->root);
+    free(t);
+}
+
+otc_status otc_station_by_alias(const otc_release *rel, const char *system, const char *alias_id,
+                                otc_station_t **out)
+{
+    size_t lo = 0, hi;
+    if (out) *out = NULL;
+    if (!rel || !out || !system || !alias_id)
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_station_by_alias: NULL argument");
+    hi = rel->n_alias;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        const otc__alias *a = &rel->alias[mid];
+        int c = strcmp(a->system, system);
+        if (!c) c = otc__bytes_cmp(a->alias, a->alias_len, alias_id, strlen(alias_id));   /* in full (CR2 DR33) */
+        if (!c) return otc_station(rel, a->station, out);
+        if (c < 0) lo = mid + 1;
+        else hi = mid;
+    }
+    return OTC_E_NOT_FOUND;
+}
+
+otc_status otc_stations(const otc_release *rel, const otc_filter *filter, const char **ids, size_t cap,
+                        size_t *count)
+{
+    size_t i, n = 0;
+    if (!rel || !count || (!ids && cap) || !filter_ok(filter))
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_stations: bad argument");
+    for (i = 0; i < rel->n_st; i++) {
+        int match = otc__filter_match(rel, filter, &rel->st[i]);
+        if (match < 0) { *count = 0; return (otc_status)-match; }
+        if (!match) continue;
+        if (ids && n < cap) ids[n] = rel->st[i].id;
+        n++;
+    }
+    *count = n;
+    if (!ids) return OTC_OK;
+    return n > cap ? OTC_E_BUFFER_TOO_SMALL : OTC_OK;
+}
+
+/* -------------------------------------------------------------- iteration */
+
+struct otc_iter {
+    const otc_release *rel;
+    otc_filter         filter;
+    char              *strs[5];
+    size_t             pos;
+};
+
+otc_status otc_iter_open(const otc_release *rel, const otc_filter *filter, otc_iter **out)
+{
+    otc_iter *it;
+    if (out) *out = NULL;
+    if (!rel || !out || !filter_ok(filter)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_iter_open: bad argument");
+    it = (otc_iter *)calloc(1, sizeof *it);
+    if (!it) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+    it->rel = rel;
+    otc_filter_init(&it->filter);
+    if (filter) {
+        /* copy the strings: the caller's filter need not outlive the call */
+        it->filter.country = it->strs[0] = otc__strdup(filter->country);
+        it->filter.type = it->strs[1] = otc__strdup(filter->type);
+        it->filter.kind = it->strs[2] = otc__strdup(filter->kind);
+        it->filter.source = it->strs[3] = otc__strdup(filter->source);
+        it->filter.source_type = it->strs[4] = otc__strdup(filter->source_type);
+        if ((filter->country && !it->strs[0]) || (filter->type && !it->strs[1]) || (filter->kind && !it->strs[2])
+            || (filter->source && !it->strs[3]) || (filter->source_type && !it->strs[4])) {
+            otc_iter_close(it);
+            return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+        }
+    }
+    *out = it;
+    return OTC_OK;
+}
+
+otc_status otc_iter_next(otc_iter *it, otc_station_t **out)
+{
+    if (out) *out = NULL;
+    if (!it || !out) return OTC_E_INVALID_ARGUMENT;
+    while (it->pos < it->rel->n_st) {
+        const otc__entry *e = &it->rel->st[it->pos++];
+        int match = otc__filter_match(it->rel, &it->filter, e);
+        if (match < 0) return (otc_status)-match;
+        if (match) return load_entry(it->rel, e, out);
+    }
+    return OTC_E_NOT_FOUND;
+}
+
+void otc_iter_close(otc_iter *it)
+{
+    size_t i;
+    if (!it) return;
+    for (i = 0; i < 5; i++) free(it->strs[i]);
+    free(it);
+}
+
+/* ----------------------------------------------------------------- search */
+
+typedef struct ranked {
+    int               rank;
+    const otc__entry *e;
+} ranked;
+
+/* Folded names are compared as byte strings with a length: a name may hold a NUL (spec 4.4.1). */
+static int bytes_cmp(const char *a, size_t an, const char *b, size_t bn)
+{
+    int c = memcmp(a, b, an < bn ? an : bn);
+    return c ? c : (an < bn ? -1 : an > bn);
+}
+
+static int ranked_cmp(const void *a, const void *b)
+{
+    const ranked *x = (const ranked *)a, *y = (const ranked *)b;
+    int c;
+    if (x->rank != y->rank) return x->rank < y->rank ? -1 : 1;
+    c = bytes_cmp(x->e->folded, x->e->folded_len, y->e->folded, y->e->folded_len);
+    return c ? c : strcmp(x->e->id, y->e->id);
+}
+
+/* The first q in n at or after from, or NULL. */
+static const char *find_in(const char *n, size_t nl, size_t from, const char *q, size_t ql)
+{
+    size_t i;
+    for (i = from; i + ql <= nl; i++)
+        if (!memcmp(n + i, q, ql)) return n + i;
+    return NULL;
+}
+
+/* 0 exact, 1 prefix, 2 the start of a later word, 3 anywhere; -1 no match */
+static int name_rank(const char *n, size_t nl, const char *q, int exact)
+{
+    size_t ql = strlen(q);
+    const char *p;
+    if (nl == ql && !memcmp(n, q, ql)) return 0;
+    if (exact) return -1;
+    if (nl >= ql && !memcmp(n, q, ql)) return 1;
+    if (!nl) return -1;
+    for (p = find_in(n, nl, 1, q, ql); p; p = find_in(n, nl, (size_t)(p - n) + 1, q, ql))
+        if (p[-1] == ' ') return 2;
+    return find_in(n, nl, 0, q, ql) ? 3 : -1;
+}
+
+otc_status otc__query_search_arguments(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
+                                     otc_hit *out, size_t cap, size_t *count)
+{
+    if (!rel || !name || !count || (!out && cap) || !filter_ok(filter))
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_search: bad argument");
+    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
+    return OTC_OK;
+}
+
+otc_status otc__query_search_folded_arguments(const otc_release *rel, const char *folded)
+{
+    if (!folded[0]) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "the search query is empty");
+    return OTC_OK;
+}
+
+otc_status otc_search(const otc_release *rel, const char *name, const otc_filter *filter, size_t limit,
+                      otc_hit *out, size_t cap, size_t *count)
+{
+    char *q;
+    ranked *r;
+    size_t i, n = 0, total;
+    otc_status status = otc__query_search_arguments(rel, name, filter, limit, out, cap, count);
+    if (status != OTC_OK) return status;
+    q = otc__fold(name);
+    if (!q) return otc__fail(rel, OTC_E_NOMEM, "out of memory");
+    status = otc__query_search_folded_arguments(rel, q);
+    if (status != OTC_OK) {
+        free(q);
+        return status;
+    }
+    r = (ranked *)malloc((rel->n_st ? rel->n_st : 1) * sizeof *r);
+    if (!r) { free(q); return otc__fail(rel, OTC_E_NOMEM, "out of memory"); }
+    for (i = 0; i < rel->n_st; i++) {
+        int k, match = otc__filter_match(rel, filter, &rel->st[i]);
+        if (match < 0) { free(q); free(r); *count = 0; return (otc_status)-match; }
+        if (!match) continue;
+        k = name_rank(rel->st[i].folded, rel->st[i].folded_len, q, filter && filter->match_exact);
+        if (k < 0) continue;
+        r[n].rank = k;
+        r[n].e = &rel->st[i];
+        n++;
+    }
+    free(q);
+    if (n > 1) qsort(r, n, sizeof *r, ranked_cmp);
+    total = limit < n ? limit : n;
+    for (i = 0; out && i < total && i < cap; i++) {
+        out[i].id = r[i].e->id;
+        out[i].name = r[i].e->name;
+        out[i].name_len = r[i].e->name_len;
+    }
+    free(r);
+    *count = total;
+    if (!out) return OTC_OK;
+    return total > cap ? OTC_E_BUFFER_TOO_SMALL : OTC_OK;
+}
+
+/* -------------------------------------------------------------------- geo */
+
+static double haversine(double lat1, double lon1, double lat2, double lon2)
+{
+    double p1 = lat1 * OTC_DEG2RAD, p2 = lat2 * OTC_DEG2RAD;
+    double dp = p2 - p1, dl = (lon2 - lon1) * OTC_DEG2RAD;
+    double a = sin(dp / 2) * sin(dp / 2) + cos(p1) * cos(p2) * sin(dl / 2) * sin(dl / 2);
+    double s = sqrt(a);
+    return 2 * OTC_EARTH_R_KM * asin(s < 1.0 ? s : 1.0);
+}
+
+static int bad_point(double lat, double lon)
+{
+    return !(lat >= -90.0 && lat <= 90.0) || !(lon >= -180.0 && lon <= 180.0);
+}
+
+static int nearby_cmp(const void *a, const void *b)
+{
+    const otc_nearby *x = (const otc_nearby *)a, *y = (const otc_nearby *)b;
+    if (x->distance_km != y->distance_km) return x->distance_km < y->distance_km ? -1 : 1;
+    return strcmp(x->id, y->id);
+}
+
+/* All stations within max_km (infinite: all), sorted by distance then id. */
+static otc_status geo_scan(const otc_release *rel, double lat, double lon, double max_km, const otc_filter *f,
+                           otc_nearby **out, size_t *n_out)
+{
+    otc_nearby *hits = (otc_nearby *)malloc((rel->n_st ? rel->n_st : 1) * sizeof *hits);
+    /* latitude prefilter (spec 6.3): the distance is at least R * |dlat| */
+    double band = isinf(max_km) ? 1000.0 : max_km / (OTC_EARTH_R_KM * OTC_DEG2RAD) + 1e-9;
+    size_t i, n = 0;
+    if (!hits) return OTC_E_NOMEM;
+    for (i = 0; i < rel->n_st; i++) {
+        const otc__entry *e = &rel->st[i];
+        double d;
+        if (fabs(e->lat - lat) > band) continue;
+        {
+            int match = otc__filter_match(rel, f, e);
+            if (match < 0) { free(hits); return (otc_status)-match; }
+            if (!match) continue;
+        }
+        d = haversine(lat, lon, e->lat, e->lon);
+        if (d > max_km) continue;
+        hits[n].id = e->id;
+        hits[n].distance_km = d;
+        n++;
+    }
+    if (n > 1) qsort(hits, n, sizeof *hits, nearby_cmp);
+    *out = hits;
+    *n_out = n;
+    return OTC_OK;
+}
+
+otc_status otc__query_near_arguments(const otc_release *rel, double lat, double lon, double radius_km, const otc_filter *filter,
+                                   size_t limit, otc_nearby *out, size_t cap, size_t *count)
+{
+    if (!rel || !count || (!out && cap) || !filter_ok(filter))
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_near: bad argument");
+    if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
+    if (!(radius_km >= 0)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "radius_km must be >= 0");
+    if (limit == 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "limit must be 1 or more, or OTC_NO_LIMIT");
+    return OTC_OK;
+}
+
+otc_status otc_near(const otc_release *rel, double lat, double lon, double radius_km, const otc_filter *filter,
+                    size_t limit, otc_nearby *out, size_t cap, size_t *count)
+{
+    otc_nearby *hits = NULL;
+    size_t n = 0, total, i;
+    otc_status st;
+    st = otc__query_near_arguments(rel, lat, lon, radius_km, filter, limit, out, cap, count);
+    if (st != OTC_OK) return st;
+    st = geo_scan(rel, lat, lon, radius_km, filter, &hits, &n);
+    if (st != OTC_OK) return st == OTC_E_NOMEM ? otc__fail(rel, st, "out of memory") : st;
+    total = limit < n ? limit : n;
+    for (i = 0; out && i < total && i < cap; i++) out[i] = hits[i];
+    free(hits);
+    *count = total;
+    if (!out) return OTC_OK;
+    return total > cap ? OTC_E_BUFFER_TOO_SMALL : OTC_OK;
+}
+
+otc_status otc__query_nearest_arguments(const otc_release *rel, double lat, double lon, double *max_km,
+                                      const otc_filter *filter, otc_nearby *hit)
+{
+    if (!rel || !hit || !filter_ok(filter)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_nearest: bad argument");
+    if (bad_point(lat, lon)) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "lat or lon out of range");
+    if (isnan(*max_km)) *max_km = INFINITY;
+    if (*max_km < 0) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "max_km must be >= 0");
+    return OTC_OK;
+}
+
+otc_status otc_nearest(const otc_release *rel, double lat, double lon, double max_km, const otc_filter *filter,
+                       otc_nearby *hit)
+{
+    otc_nearby *hits = NULL;
+    size_t n = 0;
+    otc_status st;
+    if (hit) {   /* a failed call leaves no value behind */
+        hit->id = NULL;
+        hit->distance_km = NAN;
+    }
+    st = otc__query_nearest_arguments(rel, lat, lon, &max_km, filter, hit);
+    if (st != OTC_OK) return st;
+    st = geo_scan(rel, lat, lon, max_km, filter, &hits, &n);
+    if (st != OTC_OK) return st == OTC_E_NOMEM ? otc__fail(rel, st, "out of memory") : st;
+    if (n == 0) {
+        free(hits);
+        return OTC_E_NOT_FOUND;
+    }
+    *hit = hits[0];
+    free(hits);
+    return OTC_OK;
+}
+
+/* ------------------------------------------------------------------ links */
+
+otc_status otc_reference_station(const otc_release *rel, const otc_station_t *st, otc_station_t **out)
+{
+    const cJSON *off;
+    const char *ref;
+    if (out) *out = NULL;
+    if (!rel || !st || !out) return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_reference_station: NULL argument");
+    if (st->rel != rel || !otc__find_entry(rel, otc__jstr(st->root, "station_id")))   /* CR2 DR24 */
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_reference_station: the station is not one of this release");
+    if (otc_station_type(st) != OTC_STATION_TYPE_SUBORDINATE) return OTC_E_NOT_FOUND;
+    off = otc__jget(st->root, "subordinate_offsets");
+    ref = otc__jstr(off, "reference_station_id");
+    if (!ref) return OTC_E_NOT_FOUND;
+    return otc_station(rel, ref, out);
+}
+
+otc_status otc_subordinates_of(const otc_release *rel, const otc_station_t *st, const char **ids, size_t cap,
+                               size_t *count)
+{
+    const char *id;
+    size_t i, n = 0;
+    if (!rel || !st || !count || (!ids && cap))
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_subordinates_of: bad argument");
+    id = otc__jstr(st->root, "station_id");
+    if (st->rel != rel || !otc__find_entry(rel, id))   /* CR2 DR24: null, unknown or another release's station */
+        return otc__fail(rel, OTC_E_INVALID_ARGUMENT, "otc_subordinates_of: the station is not one of this release");
+    for (i = 0; i < rel->n_st; i++) {
+        const otc__entry *e = &rel->st[i];
+        if (e->type != OTC_STATION_TYPE_SUBORDINATE || !e->has_offsets || otc__strcmp_null(e->ref_id, id) != 0)
+            continue;
+        if (ids && n < cap) ids[n] = e->id;
+        n++;
+    }
+    *count = n;
+    if (!ids) return OTC_OK;
+    return n > cap ? OTC_E_BUFFER_TOO_SMALL : OTC_OK;
+}

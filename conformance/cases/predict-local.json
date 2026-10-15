@@ -1,0 +1,2107 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-local",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-local/station-zone",
+   "title": "to_local() on extremes at America/New_York, Europe/Oslo and Australia/Lord_Howe stations, across a daylight-saving change; tz is the station's zone, resolved",
+   "spec": "4.1, 5.3",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "localtime"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2021-03-13T12:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2021-03-15T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2021-03-13T15:13:32Z",
+         "type": "high",
+         "height_m": 0.8654036569743349,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2021-03-13T21:49:51Z",
+         "type": "low",
+         "height_m": -1.7420772653253582,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2021-03-14T04:37:51Z",
+         "type": "high",
+         "height_m": 1.4080953931007623,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2021-03-14T10:33:38Z",
+         "type": "low",
+         "height_m": -0.6821835207036959,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2021-03-14T15:54:23Z",
+         "type": "high",
+         "height_m": 0.9367546267893294,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2021-03-14T22:30:57Z",
+         "type": "low",
+         "height_m": -1.7520533963251779,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "America/New_York",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2021-03-13T15:13:32Z",
+         "type": "high",
+         "height_m": 0.8654036569743349,
+         "local_time": "2021-03-13T10:13:32-05:00",
+         "utc_offset_s": -18000
+        },
+        {
+         "time": "2021-03-13T21:49:51Z",
+         "type": "low",
+         "height_m": -1.7420772653253582,
+         "local_time": "2021-03-13T16:49:51-05:00",
+         "utc_offset_s": -18000
+        },
+        {
+         "time": "2021-03-14T04:37:51Z",
+         "type": "high",
+         "height_m": 1.4080953931007623,
+         "local_time": "2021-03-13T23:37:51-05:00",
+         "utc_offset_s": -18000
+        },
+        {
+         "time": "2021-03-14T10:33:38Z",
+         "type": "low",
+         "height_m": -0.6821835207036959,
+         "local_time": "2021-03-14T06:33:38-04:00",
+         "utc_offset_s": -14400
+        },
+        {
+         "time": "2021-03-14T15:54:23Z",
+         "type": "high",
+         "height_m": 0.9367546267893294,
+         "local_time": "2021-03-14T11:54:23-04:00",
+         "utc_offset_s": -14400
+        },
+        {
+         "time": "2021-03-14T22:30:57Z",
+         "type": "low",
+         "height_m": -1.7520533963251779,
+         "local_time": "2021-03-14T18:30:57-04:00",
+         "utc_offset_s": -14400
+        }
+       ]
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "start": "2022-10-29T12:00:00Z",
+      "station_id": "OTC-P-0002",
+      "stop": "2022-10-31T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2022-10-29T13:31:18Z",
+         "type": "high",
+         "height_m": 0.7134790680495408,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2022-10-29T19:48:53Z",
+         "type": "low",
+         "height_m": -0.7008022768211941,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2022-10-30T02:02:35Z",
+         "type": "high",
+         "height_m": 0.6140652400092856,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2022-10-30T08:07:32Z",
+         "type": "low",
+         "height_m": -0.5593153879177387,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2022-10-30T14:15:32Z",
+         "type": "high",
+         "height_m": 0.6042323123484319,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2022-10-30T20:35:49Z",
+         "type": "low",
+         "height_m": -0.638227345126363,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": "Europe/Oslo",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2022-10-29T13:31:18Z",
+         "type": "high",
+         "height_m": 0.7134790680495408,
+         "local_time": "2022-10-29T15:31:18+02:00",
+         "utc_offset_s": 7200
+        },
+        {
+         "time": "2022-10-29T19:48:53Z",
+         "type": "low",
+         "height_m": -0.7008022768211941,
+         "local_time": "2022-10-29T21:48:53+02:00",
+         "utc_offset_s": 7200
+        },
+        {
+         "time": "2022-10-30T02:02:35Z",
+         "type": "high",
+         "height_m": 0.6140652400092856,
+         "local_time": "2022-10-30T03:02:35+01:00",
+         "utc_offset_s": 3600
+        },
+        {
+         "time": "2022-10-30T08:07:32Z",
+         "type": "low",
+         "height_m": -0.5593153879177387,
+         "local_time": "2022-10-30T09:07:32+01:00",
+         "utc_offset_s": 3600
+        },
+        {
+         "time": "2022-10-30T14:15:32Z",
+         "type": "high",
+         "height_m": 0.6042323123484319,
+         "local_time": "2022-10-30T15:15:32+01:00",
+         "utc_offset_s": 3600
+        },
+        {
+         "time": "2022-10-30T20:35:49Z",
+         "type": "low",
+         "height_m": -0.638227345126363,
+         "local_time": "2022-10-30T21:35:49+01:00",
+         "utc_offset_s": 3600
+        }
+       ]
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "start": "2023-04-01T00:00:00Z",
+      "station_id": "OTC-P-0003",
+      "stop": "2023-04-02T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0003/noaa",
+       "station_id": "OTC-P-0003",
+       "timezone": "Australia/Lord_Howe",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2023-04-01T01:37:11Z",
+         "type": "low",
+         "height_m": -0.43808898302345156,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-04-01T07:33:17Z",
+         "type": "high",
+         "height_m": 0.46609967898494287,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-04-01T13:48:52Z",
+         "type": "low",
+         "height_m": -0.6488269062915764,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-04-01T20:19:18Z",
+         "type": "high",
+         "height_m": 0.6751904243569186,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-04-02T02:32:57Z",
+         "type": "low",
+         "height_m": -0.5222913077647185,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-04-02T08:26:50Z",
+         "type": "high",
+         "height_m": 0.529715366190481,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0003/noaa",
+       "station_id": "OTC-P-0003",
+       "timezone": "Australia/Lord_Howe",
+       "tz": "Australia/Lord_Howe",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2023-04-01T01:37:11Z",
+         "type": "low",
+         "height_m": -0.43808898302345156,
+         "local_time": "2023-04-01T12:37:11+11:00",
+         "utc_offset_s": 39600
+        },
+        {
+         "time": "2023-04-01T07:33:17Z",
+         "type": "high",
+         "height_m": 0.46609967898494287,
+         "local_time": "2023-04-01T18:33:17+11:00",
+         "utc_offset_s": 39600
+        },
+        {
+         "time": "2023-04-01T13:48:52Z",
+         "type": "low",
+         "height_m": -0.6488269062915764,
+         "local_time": "2023-04-02T00:48:52+11:00",
+         "utc_offset_s": 39600
+        },
+        {
+         "time": "2023-04-01T20:19:18Z",
+         "type": "high",
+         "height_m": 0.6751904243569186,
+         "local_time": "2023-04-02T06:49:18+10:30",
+         "utc_offset_s": 37800
+        },
+        {
+         "time": "2023-04-02T02:32:57Z",
+         "type": "low",
+         "height_m": -0.5222913077647185,
+         "local_time": "2023-04-02T13:02:57+10:30",
+         "utc_offset_s": 37800
+        },
+        {
+         "time": "2023-04-02T08:26:50Z",
+         "type": "high",
+         "height_m": 0.529715366190481,
+         "local_time": "2023-04-02T18:56:50+10:30",
+         "utc_offset_s": 37800
+        }
+       ]
+      }
+     },
+     "op": "to_local"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2021-03-13T12:00:00Z",
+         "stop": "2021-03-15T00:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 0
+       },
+       "local": {
+        "zone": "America/New_York"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0002/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2022-10-29T12:00:00Z",
+         "stop": "2022-10-31T00:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 2
+       },
+       "local": {
+        "zone": "Europe/Oslo"
+       }
+      }
+     },
+     {
+      "authored_step": 4,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0003/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2023-04-01T00:00:00Z",
+         "stop": "2023-04-02T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 5,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 4
+       },
+       "local": {
+        "zone": "Australia/Lord_Howe"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-local/named-zone",
+   "title": "to_local(Asia/Kolkata) and to_local(Pacific/Chatham) (+5:30; +13:45 and +12:45)",
+   "spec": "4.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "localtime"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-11T00:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-01-10T15:48:53Z",
+         "type": "high",
+         "height_m": 1.185691527657872,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-01-10T22:03:13Z",
+         "type": "low",
+         "height_m": -1.6060589811406876,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "tz": "Asia/Kolkata"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "Asia/Kolkata",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": "2024-01-10T09:23:25+05:30",
+         "utc_offset_s": 19800
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": "2024-01-10T15:15:19+05:30",
+         "utc_offset_s": 19800
+        },
+        {
+         "time": "2024-01-10T15:48:53Z",
+         "type": "high",
+         "height_m": 1.185691527657872,
+         "local_time": "2024-01-10T21:18:53+05:30",
+         "utc_offset_s": 19800
+        },
+        {
+         "time": "2024-01-10T22:03:13Z",
+         "type": "low",
+         "height_m": -1.6060589811406876,
+         "local_time": "2024-01-11T03:33:13+05:30",
+         "utc_offset_s": 19800
+        }
+       ]
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "start": "2024-04-06T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-04-07T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-04-06T03:10:39Z",
+         "type": "high",
+         "height_m": 1.4036864752627758,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-04-06T09:01:40Z",
+         "type": "low",
+         "height_m": -0.6143644733197972,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-04-06T14:35:32Z",
+         "type": "high",
+         "height_m": 0.6670939675652148,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-04-06T20:45:55Z",
+         "type": "low",
+         "height_m": -1.548432461410194,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-04-07T03:49:11Z",
+         "type": "high",
+         "height_m": 1.4205008431012651,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-04-07T09:40:54Z",
+         "type": "low",
+         "height_m": -0.6519747343982745,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "tz": "Pacific/Chatham"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "Pacific/Chatham",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2024-04-06T03:10:39Z",
+         "type": "high",
+         "height_m": 1.4036864752627758,
+         "local_time": "2024-04-06T16:55:39+13:45",
+         "utc_offset_s": 49500
+        },
+        {
+         "time": "2024-04-06T09:01:40Z",
+         "type": "low",
+         "height_m": -0.6143644733197972,
+         "local_time": "2024-04-06T22:46:40+13:45",
+         "utc_offset_s": 49500
+        },
+        {
+         "time": "2024-04-06T14:35:32Z",
+         "type": "high",
+         "height_m": 0.6670939675652148,
+         "local_time": "2024-04-07T03:20:32+12:45",
+         "utc_offset_s": 45900
+        },
+        {
+         "time": "2024-04-06T20:45:55Z",
+         "type": "low",
+         "height_m": -1.548432461410194,
+         "local_time": "2024-04-07T09:30:55+12:45",
+         "utc_offset_s": 45900
+        },
+        {
+         "time": "2024-04-07T03:49:11Z",
+         "type": "high",
+         "height_m": 1.4205008431012651,
+         "local_time": "2024-04-07T16:34:11+12:45",
+         "utc_offset_s": 45900
+        },
+        {
+         "time": "2024-04-07T09:40:54Z",
+         "type": "low",
+         "height_m": -0.6519747343982745,
+         "local_time": "2024-04-07T22:25:54+12:45",
+         "utc_offset_s": 45900
+        }
+       ]
+      }
+     },
+     "op": "to_local"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-01-10T00:00:00Z",
+         "stop": "2024-01-11T00:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 0
+       },
+       "local": {
+        "zone": "Asia/Kolkata"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-04-06T00:00:00Z",
+         "stop": "2024-04-07T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 2
+       },
+       "local": {
+        "zone": "Pacific/Chatham"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-local/unknown-zone",
+   "title": "unknown_time_zone for Mars/Olympus, XYZ3, posix/, right/, posixrules, localtime and Factory",
+   "spec": "4.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "localtime"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-10T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "tz": "Mars/Olympus"
+     },
+     "expect": {
+      "error": "unknown_time_zone",
+      "error_fields": {
+       "zone": "Mars/Olympus"
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "tz": "XYZ3"
+     },
+     "expect": {
+      "error": "unknown_time_zone",
+      "error_fields": {
+       "zone": "XYZ3"
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "tz": "posix/Europe/Oslo"
+     },
+     "expect": {
+      "error": "unknown_time_zone",
+      "error_fields": {
+       "zone": "posix/Europe/Oslo"
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "tz": "right/Europe/Oslo"
+     },
+     "expect": {
+      "error": "unknown_time_zone",
+      "error_fields": {
+       "zone": "right/Europe/Oslo"
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "tz": "posixrules"
+     },
+     "expect": {
+      "error": "unknown_time_zone",
+      "error_fields": {
+       "zone": "posixrules"
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "tz": "localtime"
+     },
+     "expect": {
+      "error": "unknown_time_zone",
+      "error_fields": {
+       "zone": "localtime"
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "tz": "Factory"
+     },
+     "expect": {
+      "error": "unknown_time_zone",
+      "error_fields": {
+       "zone": "Factory"
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0002",
+      "stop": "2024-01-10T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-01-10T04:09:05Z",
+         "type": "low",
+         "height_m": -0.734786658265387,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-01-10T10:15:35Z",
+         "type": "high",
+         "height_m": 0.8034937006213969,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "tz": "Europe/Oslo"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": "Europe/Oslo",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2024-01-10T04:09:05Z",
+         "type": "low",
+         "height_m": -0.734786658265387,
+         "local_time": "2024-01-10T05:09:05+01:00",
+         "utc_offset_s": 3600
+        },
+        {
+         "time": "2024-01-10T10:15:35Z",
+         "type": "high",
+         "height_m": 0.8034937006213969,
+         "local_time": "2024-01-10T11:15:35+01:00",
+         "utc_offset_s": 3600
+        }
+       ]
+      }
+     },
+     "op": "to_local"
+    }
+   ],
+   "note": "the last step: Europe/Oslo, a link to Europe/Berlin in tzdata 2026e, is accepted (in C a symbolic link)",
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-01-10T00:00:00Z",
+         "stop": "2024-01-10T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 4,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 5,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 6,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 7,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 8,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0002/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-01-10T00:00:00Z",
+         "stop": "2024-01-10T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 9,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 8
+       },
+       "local": {
+        "zone": "Europe/Oslo"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-local/missing-dependency",
+   "title": "without the optional dependency, to_local is local_time_unavailable",
+   "spec": "4.1, 5.4",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "localtime_module"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-10T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "America/New_York",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": "2024-01-09T22:53:25-05:00",
+         "utc_offset_s": -18000
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": "2024-01-10T04:45:19-05:00",
+         "utc_offset_s": -18000
+        }
+       ]
+      }
+     },
+     "expect_if_missing": {
+      "localtime": {
+       "error": "local_time_unavailable"
+      }
+     },
+     "op": "to_local"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-01-10T00:00:00Z",
+         "stop": "2024-01-10T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 0
+       },
+       "local": {
+        "zone": "America/New_York"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-local/missing-tzdir",
+   "title": "C: TZDIR set to a path that does not exist: local_time_unavailable naming the directory",
+   "spec": "4.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "localtime",
+    "tzdir_env"
+   ],
+   "steps": [
+    {
+     "driver": "restart_runner",
+     "env": {
+      "TZDIR": "${tmp}/no-such-zoneinfo"
+     }
+    },
+    {
+     "args": {
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-10T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {},
+     "expect": {
+      "error": "local_time_unavailable",
+      "error_message": {
+       "$contains": "no-such-zoneinfo"
+      }
+     },
+     "op": "to_local"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {}
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-01-10T00:00:00Z",
+         "stop": "2024-01-10T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-local/not-built",
+   "title": "C without the local-time module: not_built; with the module but no zone rules: local_time_unavailable",
+   "spec": "4.1, 5.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-10T12:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "America/New_York",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": "2024-01-09T22:53:25-05:00",
+         "utc_offset_s": -18000
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": "2024-01-10T04:45:19-05:00",
+         "utc_offset_s": -18000
+        }
+       ]
+      }
+     },
+     "expect_if_missing": {
+      "localtime_module": {
+       "error": "not_built"
+      },
+      "localtime": {
+       "error": "local_time_unavailable"
+      }
+     },
+     "op": "to_local"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-01-10T00:00:00Z",
+         "stop": "2024-01-10T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 0
+       },
+       "local": {
+        "zone": "America/New_York"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "id": "predict-local/format",
+   "title": "UTC ends in +00:00, not Z; local midnight is hour 00, not 24 (Europe/Oslo across its spring change)",
+   "spec": "4.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "localtime"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2022-06-01T22:00:00Z",
+      "station_id": "OTC-P-0001",
+      "step_s": 3600,
+      "stop": "2022-06-02T02:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2022-06-01T22:00:00Z",
+         "height_m": -0.7019665781893306,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2022-06-01T23:00:00Z",
+         "height_m": -1.0161824636353356,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2022-06-02T00:00:00Z",
+         "height_m": -1.0092107391347527,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2022-06-02T01:00:00Z",
+         "height_m": -0.6738002641922454,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {
+      "tz": "UTC"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "UTC",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2022-06-01T22:00:00Z",
+         "height_m": -0.7019665781893306,
+         "local_time": "2022-06-01T22:00:00+00:00",
+         "utc_offset_s": 0
+        },
+        {
+         "time": "2022-06-01T23:00:00Z",
+         "height_m": -1.0161824636353356,
+         "local_time": "2022-06-01T23:00:00+00:00",
+         "utc_offset_s": 0
+        },
+        {
+         "time": "2022-06-02T00:00:00Z",
+         "height_m": -1.0092107391347527,
+         "local_time": "2022-06-02T00:00:00+00:00",
+         "utc_offset_s": 0
+        },
+        {
+         "time": "2022-06-02T01:00:00Z",
+         "height_m": -0.6738002641922454,
+         "local_time": "2022-06-02T01:00:00+00:00",
+         "utc_offset_s": 0
+        }
+       ]
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "start": "2023-03-25T22:00:00Z",
+      "station_id": "OTC-P-0002",
+      "step_s": 3600,
+      "stop": "2023-03-26T03:00:00Z"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2023-03-25T22:00:00Z",
+         "height_m": -0.11374890636557224,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-03-25T23:00:00Z",
+         "height_m": 0.2623944941409504,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-03-26T00:00:00Z",
+         "height_m": 0.5779667522806081,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-03-26T01:00:00Z",
+         "height_m": 0.7576299544511855,
+         "local_time": null,
+         "utc_offset_s": null
+        },
+        {
+         "time": "2023-03-26T02:00:00Z",
+         "height_m": 0.7600870446747756,
+         "local_time": null,
+         "utc_offset_s": null
+        }
+       ]
+      }
+     },
+     "op": "heights"
+    },
+    {
+     "args": {},
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0002/noaa",
+       "station_id": "OTC-P-0002",
+       "timezone": "Europe/Oslo",
+       "tz": "Europe/Oslo",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2023-03-25T22:00:00Z",
+         "height_m": -0.11374890636557224,
+         "local_time": "2023-03-25T23:00:00+01:00",
+         "utc_offset_s": 3600
+        },
+        {
+         "time": "2023-03-25T23:00:00Z",
+         "height_m": 0.2623944941409504,
+         "local_time": "2023-03-26T00:00:00+01:00",
+         "utc_offset_s": 3600
+        },
+        {
+         "time": "2023-03-26T00:00:00Z",
+         "height_m": 0.5779667522806081,
+         "local_time": "2023-03-26T01:00:00+01:00",
+         "utc_offset_s": 3600
+        },
+        {
+         "time": "2023-03-26T01:00:00Z",
+         "height_m": 0.7576299544511855,
+         "local_time": "2023-03-26T03:00:00+02:00",
+         "utc_offset_s": 7200
+        },
+        {
+         "time": "2023-03-26T02:00:00Z",
+         "height_m": 0.7600870446747756,
+         "local_time": "2023-03-26T04:00:00+02:00",
+         "utc_offset_s": 7200
+        }
+       ]
+      }
+     },
+     "op": "to_local"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2022-06-01T22:00:00Z",
+          "2022-06-01T23:00:00Z",
+          "2022-06-02T00:00:00Z",
+          "2022-06-02T01:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 0
+       },
+       "local": {
+        "check": [
+         {
+          "local_time": "2022-06-01T22:00:00+00:00",
+          "time": "2022-06-01T22:00:00Z",
+          "utc_offset_s": 0
+         },
+         {
+          "local_time": "2022-06-01T23:00:00+00:00",
+          "time": "2022-06-01T23:00:00Z",
+          "utc_offset_s": 0
+         },
+         {
+          "local_time": "2022-06-02T00:00:00+00:00",
+          "time": "2022-06-02T00:00:00Z",
+          "utc_offset_s": 0
+         },
+         {
+          "local_time": "2022-06-02T01:00:00+00:00",
+          "time": "2022-06-02T01:00:00Z",
+          "utc_offset_s": 0
+         }
+        ],
+        "zone": "UTC"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0002/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2023-03-25T22:00:00Z",
+          "2023-03-25T23:00:00Z",
+          "2023-03-26T00:00:00Z",
+          "2023-03-26T01:00:00Z",
+          "2023-03-26T02:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 2
+       },
+       "local": {
+        "check": [
+         {
+          "local_time": "2023-03-25T23:00:00+01:00",
+          "time": "2023-03-25T22:00:00Z",
+          "utc_offset_s": 3600
+         },
+         {
+          "local_time": "2023-03-26T00:00:00+01:00",
+          "time": "2023-03-25T23:00:00Z",
+          "utc_offset_s": 3600
+         },
+         {
+          "local_time": "2023-03-26T01:00:00+01:00",
+          "time": "2023-03-26T00:00:00Z",
+          "utc_offset_s": 3600
+         },
+         {
+          "local_time": "2023-03-26T03:00:00+02:00",
+          "time": "2023-03-26T01:00:00Z",
+          "utc_offset_s": 7200
+         },
+         {
+          "local_time": "2023-03-26T04:00:00+02:00",
+          "time": "2023-03-26T02:00:00Z",
+          "utc_offset_s": 7200
+         }
+        ],
+        "zone": "Europe/Oslo"
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

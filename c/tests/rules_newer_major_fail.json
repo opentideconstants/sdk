@@ -1,0 +1,6 @@
+[{"match": "^/good/OTC_latest-f1\\.json$", "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+  "set": {"/min_reader_version": "1.9"}},
+ {"match": "^/good/OTC_index\\.json$", "action": "json", "file": "good/OTC_index.json", "pointer": "",
+  "set": {"/releases/0/min_reader_version": "1.9", "/releases/1/min_reader_version": "1.9"}},
+ {"match": "^/good/OTC_latest\\.json$", "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+  "set": {"/format_version": "2.0", "/datestamp": "21000101"}}]

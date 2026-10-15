@@ -1,0 +1,4 @@
+{
+  "description": "Only unaccepted prediction profiles are listed. Ruby, TypeScript and C entries were removed after native vector and mutation acceptance; Swift uses its accepted native prediction profile.",
+  "entries": []
+}

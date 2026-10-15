@@ -1,0 +1,515 @@
+# The Ruby conformance runner (SDK spec §7.1, conformance/README.md).
+#
+# It speaks the runner protocol on stdin/stdout and calls only the public API
+# of the opentideconstants gem.
+#
+#     uv run conformance/driver.py --runner "ruby conformance/runners/ruby/runner.rb"
+#
+# By default it loads the gem from ruby/lib in this repository. With
+# OTC_RUBY_USE_INSTALLED=1 it loads the installed gem instead.
+unless ENV["OTC_RUBY_USE_INSTALLED"] == "1"
+    $LOAD_PATH.unshift(File.expand_path("../../../ruby/lib", __dir__))
+end
+require "json"
+require "opentideconstants"
+
+$stdout.sync = true
+
+# The SDK base error class and version. A gem without either fails the handshake (stderr and exit status 3): a
+# stand-in would hide a missing class or version.
+%i[Error VERSION].each do |name|
+    next if OpenTideConstants.const_defined?(name, false)
+    $stderr.puts("cannot load the SDK: OpenTideConstants::#{name} is not defined")
+    exit(3)
+end
+SDK_ERROR = OpenTideConstants::Error
+
+class Runner
+    FILTERS = %w[country type kind source source_type include_flagged include_fallback].freeze
+
+    def initialize
+        @client = nil
+        @held = {}
+        @prediction = nil
+    end
+
+    def hello
+        { "hello" => { "runner" => "ruby", "version" => OpenTideConstants::VERSION,
+                       "features" => %w[fs fetch json eager stream predict localtime_module] + localtime_features } }
+    end
+
+    def localtime_features
+        begin
+            require "tzinfo"
+            TZInfo::DataSource.get
+            ["localtime"]
+        rescue LoadError, TZInfo::DataSourceNotFound
+            []
+        end
+    end
+
+    def handle(req)
+        op = req["op"]
+        args = req["args"] || {}
+        target = req["on"] ? @held.fetch(req["on"]) : nil
+        { "ok" => true, "result" => finite(dispatch(op, args, target)) }
+    rescue SDK_ERROR => e
+        begin
+            { "ok" => false, "error" => encode_error(e) }
+        rescue StandardError, ScriptError => x # an error while encoding the SDK error is still one reply
+            { "ok" => false, "error" => { "code" => "uncaught:#{x.class}", "message" => "cannot encode the SDK error: #{x.message}" } }
+        end
+    rescue StandardError, ScriptError => e
+        { "ok" => false, "error" => { "code" => "uncaught:#{e.class}", "message" => "#{e.message} #{e.backtrace&.first(3)&.join(' | ')}" } }
+    end
+
+    # Closes the client at shutdown; a close that fails is reported (stderr, and false for a non-zero exit).
+    def close
+        @client&.close
+        true
+    rescue StandardError => e
+        $stderr.puts("close failed at shutdown: #{e.class}: #{e.message}")
+        false
+    end
+
+    private
+
+    # The result as strict JSON: NaN is null (README "Result encodings"); an infinite number cannot be encoded.
+    def finite(v)
+        case v
+        when Float
+            raise FloatDomainError, "the SDK returned #{v}, which JSON cannot carry" if v.infinite?
+            v.nan? ? nil : v
+        when Hash then v.to_h { |k, x| [k, finite(x)] }
+        when Array then v.map { |x| finite(x) }
+        when String, Integer, true, false, nil then v
+        else raise TypeError, "the runner cannot encode a #{v.class} as JSON"
+        end
+    end
+
+    def sym_kw(args, names)
+        out = {}
+        names.each { |n| out[n.to_sym] = args[n] if args.key?(n) }
+        out
+    end
+
+    def filters(args)
+        sym_kw(args, FILTERS)
+    end
+
+    # R: the held release, or the client (which forwards to its current release).
+    def rel(target)
+        target || @client.release
+    end
+
+    def q(target)
+        target || @client
+    end
+
+    def find_station(args, target)
+        rel(target).station(args["station_id"])
+    end
+
+    def find_set(args, target)
+        st = find_station(args, target)
+        st && st.constant_set(args["set_id"])
+    end
+
+    def dispatch(op, args, target)
+        case op
+        when "open"
+            # Drop the old client first: if its close fails, the next steps
+            # must not run against it (they would report "release is closed").
+            old, @client = @client, nil
+            old&.close
+            opts = {}
+            args.each { |k, v| opts[k.to_sym] = v }
+            @client = OpenTideConstants.new(**opts)
+            { "loaded_from" => s(@client.loaded_from), "datestamp" => @client.release.datestamp,
+              "format_version" => @client.release.format_version }
+        when "close"
+            old, @client = @client, nil
+            old&.close
+            {}
+        when "hold_release"
+            @held[args["name"]] = @client.release
+            {}
+        when "loaded_from" then { "loaded_from" => s(@client.loaded_from) }
+        when "last_error"
+            err = @client.last_error
+            { "code" => err && err.code.to_s }
+        when "release_metadata"
+            r = rel(target)
+            { "datestamp" => r.datestamp, "created" => time(r.created), "format_version" => r.format_version,
+              "concept_doi" => r.concept_doi, "zenodo_version_doi" => r.zenodo_version_doi,
+              "source_versions" => r.source_versions,
+              "build_commit" => r.build_commit, "changelog_url" => r.changelog_url }
+        when "release_files"
+            { "files" => rel(target).files.map { |f| file_info(f) }.sort_by { |f| f["name"] } }
+        when "releases" then { "releases" => @client.releases.map { |i| release_info(i) } }
+        when "latest" then { "release" => release_info(@client.latest) }
+        when "check_for_update"
+            i = @client.check_for_update
+            { "release" => i && release_info(i) }
+        when "newer_format_major" then { "newer_format_major" => @client.newer_format_major }
+        when "update"
+            u = @client.update!
+            { "updated" => u.updated, "from" => u.from, "to" => u.to }
+        when "download"
+            pos = args.key?("release") ? [args["release"]] : []
+            paths = @client.download(*pos, **sym_kw(args, %w[to formats overwrite]))
+            { "paths" => paths.map { |p| File.basename(p) }.sort }
+        when "verify" then { "verified" => @client.verify }
+        when "cached_releases" then { "datestamps" => @client.cached_releases }
+        when "prune" then { "removed" => @client.prune(**sym_kw(args, %w[keep])) }
+        when "station_count" then { "station_count" => rel(target).station_count }
+        when "tombstone_count" then { "tombstone_count" => rel(target).tombstone_count }
+        when "stats" then { "stats" => stats(rel(target).stats) }
+        when "constituent_names" then { "names" => rel(target).constituent_names }
+        when "conventions" then { "conventions" => rel(target).conventions.map { |c| convention(c) } }
+        when "convention"
+            c = rel(target).convention(args["convention_id"])
+            { "convention" => c && convention(c) }
+        when "licences" then { "licences" => rel(target).licences.map { |l| licence(l) } }
+        when "licence"
+            l = rel(target).licence(args["licence_id"])
+            { "licence" => l && licence(l) }
+        when "citation" then { "citation" => rel(target).citation }
+        when "attribution"
+            if args.key?("station_ids")
+                ids = args["station_ids"]
+                # an unknown or removed id gives nil, which goes to the SDK as it is (D2 a: invalid_argument)
+                sts = ids.nil? ? nil : ids.map { |id| rel(target).station(id) }
+                { "attribution" => q(target).attribution(sts) }
+            else
+                { "attribution" => q(target).attribution }
+            end
+        when "station"
+            st = q(target).station(args["station_id"])
+            { "station" => st && station(st) }
+        when "require_station" then { "station" => station(q(target).require_station(args["station_id"])) }
+        when "tombstone"
+            t = q(target).tombstone(args["station_id"])
+            { "tombstone" => t && tombstone(t) }
+        when "station_by_alias"
+            st = q(target).station_by_alias(args["system"], args["alias_id"])
+            { "station_id" => st && st.station_id }
+        when "stations" then { "station_ids" => q(target).stations(**filters(args)).map(&:station_id) }
+        when "iter_stations"
+            ids = []
+            q(target).each_station(**filters(args)) { |st| ids << st.station_id }
+            { "station_ids" => ids }
+        when "search"
+            { "station_ids" => q(target).search(**sym_kw(args, %w[name limit match]), **filters(args)).map(&:station_id) }
+        when "near"
+            hits = q(target).near(**sym_kw(args, %w[lat lon radius_km limit]), **filters(args))
+            { "station_ids" => hits.map { |h| h.station.station_id }, "distance_km" => hits.map(&:distance_km) }
+        when "nearest"
+            h = q(target).nearest(**sym_kw(args, %w[lat lon max_km]), **filters(args))
+            { "station_id" => h && h.station.station_id, "distance_km" => h && h.distance_km }
+        when "reference_station", "subordinates_of"
+            # station_id null goes to the SDK as nil, and station_on looks the station up in a held release (a
+            # foreign Station): both must be invalid_argument (CR2 DR24)
+            passed = args["station_id"].nil? || args.key?("station_on")
+            st = args["station_id"].nil? ? nil : (args.key?("station_on") ? @held.fetch(args["station_on"]) : rel(target)).station(args["station_id"])
+            if st.nil? && !passed
+                op == "reference_station" ? { "station_id" => nil } : { "station_ids" => nil }
+            elsif op == "reference_station"
+                ref = q(target).reference_station(st)
+                { "station_id" => ref && ref.station_id }
+            else
+                { "station_ids" => q(target).subordinates_of(st).map(&:station_id) }
+            end
+        when "station_validation"
+            st = find_station(args, target)
+            { "validation" => st ? st.validation.map { |v| validation(v) } : nil }
+        when "subordinate_offsets"
+            st = find_station(args, target)
+            off = st && st.subordinate_offsets
+            { "offsets" => off && offsets(off) }
+        when "recommended_set"
+            st = find_station(args, target)
+            set = st && st.recommended_set
+            { "set_id" => set && set.set_id }
+        when "constant_sets"
+            st = find_station(args, target)
+            { "set_ids" => st ? st.constant_sets(**sym_kw(args, %w[include_no_constants])).map(&:set_id) : nil }
+        when "constant_set"
+            set = find_set(args, target)
+            { "set" => set && constant_set(set) }
+        when "constituents"
+            set = find_set(args, target)
+            { "constituents" => set ? set.constituents.map { |c| constituent(c) } : nil }
+        when "constituent"
+            set = find_set(args, target)
+            c = set && set.constituent(args["name"])
+            { "constituent" => c && constituent(c) }
+        when "provenance"
+            set = find_set(args, target)
+            p = set && set.provenance
+            { "provenance" => p && provenance(p), "raw" => p && p.raw }
+        when "set_validation"
+            set = find_set(args, target)
+            { "validation" => set ? set.validation.map { |v| validation(v) } : nil }
+        when "heights", "heights_at", "extremes", "currents", "current_events"
+            kw = args.reject { |k, _| k == "station_id" }.to_h { |k, v| [k.to_sym, v] }
+            %i[start stop].each { |k| kw[k] = prediction_time(kw[k]) if kw[k].is_a?(String) }
+            if op == "heights_at"
+                times = kw.delete(:times)
+                times = times.map { |v| v.is_a?(String) ? prediction_time(v) : v } if times.is_a?(Array)
+                @prediction = q(target).heights_at(args["station_id"], times, **kw)
+            else
+                @prediction = q(target).public_send(op, args["station_id"], **kw)
+            end
+            {"prediction" => prediction(@prediction)}
+        when "to_local"
+            raise ArgumentError, "no prediction held" unless @prediction
+            @prediction = @prediction.to_local(args.fetch("tz", "station"))
+            {"prediction" => prediction(@prediction)}
+        when "astro_table", "valid_range", "equilibrium_argument", "node_factor", "equilibrium_for_year", "node_factor_for_year"
+            table = rel(target).astro_table(args["id"])
+            if op == "astro_table"
+                {"astro_table" => table && {"first_year" => table.valid_range[0], "last_year" => table.valid_range[1]}}
+            else
+                raise OpenTideConstants::InvalidArgumentError, "astro table unavailable" unless table
+                if op == "valid_range"
+                    {"first_year" => table.valid_range[0], "last_year" => table.valid_range[1]}
+                else
+                    at = args.key?("at") ? prediction_time(args["at"]) : args["year"]
+                    {"value" => table.public_send(op, args["name"], at)}
+                end
+            end
+        when "datums", "ranges"
+            kw = args.reject { |k, _| k == "station_id" }.to_h { |k, v| [k.to_sym, v] }
+            value = q(target).public_send(op, args["station_id"], **kw)
+            encoded = value.is_a?(Array) ? value.map { |v| prediction_value(v) } : prediction_value(value)
+            {op => encoded}
+        when "raw" then { "raw" => raw(args, target) }
+        else
+            raise ArgumentError, "unknown op #{op}"
+        end
+    end
+
+    def raw(args, target)
+        obj = case args["object"]
+              when "station" then find_station(args, target)
+              when "tombstone" then rel(target).tombstone(args["station_id"])
+              when "set" then find_set(args, target)
+              when "constituent"
+                  set = find_set(args, target)
+                  set && set.constituent(args["name"])
+              when "convention" then rel(target).convention(args["convention_id"])
+              when "licence" then rel(target).licence(args["licence_id"])
+              end
+        obj && obj.raw
+    end
+
+    # ---- encodings (conformance/README.md "Result encodings")
+
+    def prediction_time(value)
+        return value unless value.is_a?(String)
+        OpenTideConstants::Util.time(value)
+    end
+
+    def prediction_value(value)
+        case value
+        when Time then time(value)
+        when Symbol then value.to_s
+        when Hash then value.to_h { |k, v| [k.to_s, prediction_value(v)] }
+        when Array then value.map { |v| prediction_value(v) }
+        when nil, String, Numeric, true, false then value
+        else
+            value.instance_variables.reject { |v| v == :@_local }.to_h do |v|
+                [v.to_s.delete_prefix("@"), prediction_value(value.instance_variable_get(v))]
+            end
+        end
+    end
+
+    def prediction(value)
+        fields = %w[station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m bin_number omitted_event_types tz tz_version release algorithm]
+        out = fields.to_h { |key| [key, value.respond_to?(key) ? prediction_value(value.public_send(key)) : nil] }
+        out["items"] = value.items.map { |item| prediction_value(item) }
+        out
+    end
+
+    def s(v)
+        v.nil? ? nil : v.to_s
+    end
+
+    def time(t)
+        t.nil? ? nil : t.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    end
+
+    def encode_error(e)
+        fields = {}
+        %i[url status file expected actual path removed constituent first_year last_year missing zone reference_station_id].each do |f|
+            fields[f.to_s] = e.public_send(f) if e.respond_to?(f)
+        end
+        code = e.code.to_s
+        message = e.message.to_s
+        if e.respond_to?(:tombstone) && e.tombstone
+            # a tombstone the runner cannot encode fails the step (the code too, so a code-only check fails), and the
+            # message says why
+            begin
+                fields["tombstone"] = tombstone(e.tombstone)
+            rescue StandardError, ScriptError => te
+                fields["tombstone"] = code = "uncaught:#{te.class}"
+                message = "#{message} (the runner cannot encode the tombstone: #{te.class}: #{te.message})"
+            end
+        end
+        { "code" => code, "message" => message, "fields" => finite(fields) }
+    end
+
+    def file_info(f)
+        { "name" => f.name, "url" => f.url, "size" => f.size, "sha256" => f.sha256 }
+    end
+
+    def release_info(i)
+        { "datestamp" => i.datestamp, "format_version" => i.format_version, "concept_doi" => i.concept_doi,
+          "zenodo_version_doi" => i.zenodo_version_doi, "content_sha256" => i.content_sha256,
+          "files" => i.files.map { |f| file_info(f) }.sort_by { |f| f["name"] } }
+    end
+
+    def build(b)
+        { "build_commit" => b.build_commit, "built_at" => time(b.built_at), "fetched_at" => time(b.fetched_at),
+          "run_id" => b.run_id, "tool_versions" => b.tool_versions && b.tool_versions.to_h { |k, v| [k.to_s, v] } }
+    end
+
+    # Encode what the SDK returns: a Hash with its own keys, or a typed object by its fields. A missing key is not filled in.
+    def as_returned(v, fields)
+        return nil if v.nil?
+        return v.to_h { |k, x| [k.to_s, x.is_a?(Symbol) ? x.to_s : x] } if v.is_a?(Hash)
+        fields.to_h { |f| x = v.public_send(f); [f, x.is_a?(Symbol) ? x.to_s : x] }
+    end
+
+    # TimeBase: typed fields; correction is an object {from, to} or nil; evidence is a list of objects.
+    def time_base(t)
+        return nil if t.nil?
+        { "code" => s(t.code), "reason" => t.reason, "declared" => t.declared, "published" => t.published,
+          "correction" => as_returned(t.correction, %w[from to]),
+          "months_dropped" => t.months_dropped.to_a, "decided_in" => t.decided_in,
+          "decided_build_commit" => t.decided_build_commit,
+          "evidence" => t.evidence.map { |e| as_returned(e, %w[comparator_kind comparator_id distance_km lag_min detail]) } }
+    end
+
+    def stats(st)
+        %i[type kind country source qc_status].to_h do |k|
+            counts = st.public_send(k)
+            raise TypeError, "stats.#{k} is #{counts.inspect}, not a Hash" unless counts.is_a?(Hash) # never {} for nil
+            [k.to_s, counts.to_h { |v, n| [v.to_s, n] }]
+        end
+    end
+
+    def station(st)
+        set = st.recommended_set
+        out = { "station_id" => st.station_id, "name" => st.name, "country" => st.country, "lat" => st.lat,
+          "lon" => st.lon, "type" => s(st.type), "kind" => s(st.kind), "timezone" => st.timezone,
+          "aliases" => st.aliases.to_h { |k, v| [k.to_s, v] }, "status" => s(st.status),
+          "is_reference" => st.reference?, "is_subordinate" => st.subordinate?, "is_tide" => st.tide?,
+          "is_current" => st.current?, "recommended_set_id" => set && set.set_id }
+        out["recommended_is_fallback"] = st.recommended_is_fallback unless st.recommended_is_fallback.nil?
+        out
+    end
+
+    def tombstone(t)
+        { "station_id" => t.station_id, "name" => t.name, "status" => s(t.status),
+          "removed_in" => t.removed_in, "removed_reason" => s(t.removed_reason), "merged_into" => t.merged_into,
+          "detail" => t.detail }
+    end
+
+    def constant_set(set)
+        span = set.record_span
+        datum = set.datum
+        out = { "set_id" => set.set_id, "source" => set.source, "source_type" => s(set.source_type),
+          "quantity" => s(set.quantity), "source_record_id" => set.source_record_id,
+          "source_version" => set.source_version,
+          "record_span" => span && { "start" => time(span.start), "end" => time(span.end), "good_samples" => span.good_samples },
+          "datum" => datum && { "msl_offset_m" => datum.msl_offset_m, "named" => datum.named },
+          "qc_status" => s(set.qc_status),
+          "qc_flags" => set.qc_flags.map { |f| { "flag" => s(f.flag), "reason" => f.reason, "values" => f.values } },
+          "dropped_constituents" => set.dropped_constituents.map { |d| { "name" => d.name, "dropped_reason" => s(d.dropped_reason), "detail" => d.detail } },
+          "time_base" => time_base(set.time_base),
+          "is_recommended" => set.recommended?, "convention_id" => set.convention.convention_id,
+          "licence_id" => set.licence.licence_id, "constituent_count" => set.constituents.size }
+        out["fallback"] = as_returned(set.fallback, %w[reason basis otc_finding preferred_set_id]) unless set.fallback.nil?
+        out
+    end
+
+    def constituent(c)
+        { "name" => c.name, "source_name" => c.source_name, "doodson" => c.doodson,
+          "speed_deg_per_hour" => c.speed_deg_per_hour, "amplitude_m" => c.amplitude_m, "phase_deg" => c.phase_deg,
+          "amp_uncertainty_m" => c.amp_uncertainty_m, "phase_uncertainty_deg" => c.phase_uncertainty_deg,
+          "kept_reason" => c.kept_reason }
+    end
+
+    def convention(c)
+        { "convention_id" => c.convention_id, "phase_reference" => s(c.phase_reference),
+          "utc_offset_hours" => c.utc_offset_hours, "v0_model" => c.v0_model, "nodal_handling" => s(c.nodal_handling),
+          "nodal_formula_ids" => c.nodal_formula_ids, "constituent_table_version" => c.constituent_table_version,
+          "tables_sha256" => c.tables_sha256, "canary" => c.canary }
+    end
+
+    def licence(l)
+        { "licence_id" => l.licence_id, "spdx" => l.spdx, "provider" => l.provider, "citation" => l.citation,
+          "attribution" => l.attribution, "url" => l.url, "commercial_use" => l.commercial_use,
+          "restriction" => l.restriction, "terms_url" => l.terms_url }
+    end
+
+    def provenance(p)
+        { "build" => p.build && build(p.build), "adapter_version" => p.adapter_version, "input_sha256" => p.input_sha256,
+          "selection_reason" => p.selection_reason, "decision" => p.decision,
+          "carried_from_release" => p.carried_from_release }
+    end
+
+    VALIDATION_NUMS = %w[time_mae_min time_p95_min time_bias_min height_mae_m range_error_m missed_events extra_events].freeze
+
+    def validation(v)
+        out = { "set_id" => v.set_id, "reference_source" => v.reference_source, "reference_station" => v.reference_station,
+                "reference_distance_km" => v.reference_distance_km, "window" => v.window }
+        VALIDATION_NUMS.each { |k| out[k] = v.public_send(k) }
+        prev = v.previous_release
+        out["previous_release"] = prev && VALIDATION_NUMS.to_h { |k| [k, prev.public_send(k)] }
+        out
+    end
+
+    def offsets(o)
+        { "reference_station_id" => o.reference_station_id, "time_offset_high_min" => o.time_offset_high_min,
+          "time_offset_low_min" => o.time_offset_low_min, "height_offset_high" => o.height_offset_high,
+          "height_offset_low" => o.height_offset_low, "height_adjusted_type" => s(o.height_adjusted_type),
+          "licence_id" => o.licence_id }
+    end
+end
+
+runner = Runner.new
+$stdout.write(JSON.generate(runner.hello) + "\n")
+$stdin.each_line do |line|
+    # the protocol is UTF-8 whatever the locale; a line that is not valid UTF-8 cannot be stripped or parsed: an
+    # error reply below, and the runner goes on
+    line = line.dup.force_encoding(Encoding::UTF_8)
+    req = if line.valid_encoding?
+        next if line.strip.empty?
+        begin
+            JSON.parse(line)
+        rescue JSON::ParserError => e
+            e
+        end
+    else
+        EncodingError.new("the request line is not valid UTF-8")
+    end
+    reply = if req.is_a?(Hash)
+        runner.handle(req)
+    else
+        # a request the runner cannot read: an error reply, and the runner goes on
+        msg = req.is_a?(Exception) ? req.message : "a request must be a JSON object"
+        $stderr.puts("bad request line: #{msg}")
+        { "ok" => false, "error" => { "code" => "uncaught:#{req.is_a?(Exception) ? req.class : 'BadRequest'}",
+                                      "message" => "bad request line: #{msg}" } }
+    end
+    line_out = begin
+        JSON.generate(reply)
+    rescue StandardError => e # a reply the runner cannot encode is still one line
+        JSON.generate({ "ok" => false, "error" => { "code" => "uncaught:#{e.class}", "message" => "cannot encode the reply: #{e.message}" } })
+    end
+    $stdout.write(line_out + "\n")
+end
+exit(runner.close ? 0 : 1)

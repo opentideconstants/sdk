@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist/canonical-shape",
+    "stripInternal": false,
+    "paths": {
+      "#node": [
+        "./src/node.ts"
+      ]
+    }
+  },
+  "include": [
+    "src/canonical.ts",
+    "src/canonical-types.ts",
+    "test/canonical-shape.ts"
+  ]
+}

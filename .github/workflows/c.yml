@@ -1,0 +1,408 @@
+name: C library
+
+on:
+  push:
+    paths: ["c/**", "conformance/**", ".github/workflows/c.yml", ".gitattributes"]
+  pull_request:
+    paths: ["c/**", "conformance/**", ".github/workflows/c.yml", ".gitattributes"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every run step uses bash, on Windows too. The default Windows shell (pwsh)
+# exits with the status of the last command only, so a failing command
+# earlier in a step is lost. GitHub runs `shell: bash` as bash -eo pipefail.
+defaults:
+  run:
+    shell: bash
+
+# A newer push to the same branch or pull request cancels the older run;
+# every run on main finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  conformance:
+    name: ${{ matrix.os }} ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, cc: gcc, runner: c/build/otc_runner }
+          - { os: ubuntu-24.04, cc: clang, runner: c/build/otc_runner }
+          - { os: macos-14, cc: clang, runner: c/build/otc_runner }
+          - { os: windows-2022, cc: msvc, runner: c/build/Debug/otc_runner.exe }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - name: Configure
+        shell: bash
+        run: |
+          if [ "${{ matrix.cc }}" = msvc ]; then
+            cmake -S c -B c/build -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          else
+            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_BUILD_TESTS=ON
+          fi
+      # The library, c/tests and the runner, all with warnings as errors
+      - name: Build
+        run: cmake --build c/build --config Debug --parallel
+      # The vendored cJSON and SHA-256 are renamed otc__*, so an application can
+      # link its own copies; nm fails the job on any other global symbol (C80)
+      - name: Every global symbol of the library starts with otc_ (nm)
+        if: runner.os != 'Windows'
+        run: python c/tools/gen_sources.py --symbols c/build/libopentideconstants.a
+      # The C library's own tests (c/tests); they use POSIX calls, so not on Windows
+      - name: Authenticated native vector input (Ruby; no production H4 publication)
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
+      - name: C library tests (c/tests)
+
+        if: runner.os != 'Windows'
+        run: cd c/build && OTC_TEST_PYTHON=python ctest -LE source_acceptance --output-on-failure
+      - name: All immutable native prediction vectors
+        run: python conformance/tools/run_vectors.py --runner ${{ matrix.runner }} --no-expected-failures
+      - name: Conformance suite (profile c, no otc_fetch)
+
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c' }}
+      - name: Conformance suite, every query in 8 threads
+        env: { OTC_RUNNER_THREADS: "8" }
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c' }}
+
+  # The otc_fetch module (libcurl): the runner says hello as c-fetch, so every
+  # download, network, cache and update case runs. --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c-fetch' }} makes the
+  # driver fail if the runner does not claim fetch, instead of skipping those cases.
+  conformance-fetch:
+    name: fetch ${{ matrix.os }} ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, cc: gcc, runner: c/build/otc_runner }
+          - { os: ubuntu-24.04, cc: clang, runner: c/build/otc_runner }
+          - { os: macos-14, cc: clang, runner: c/build/otc_runner }
+          - { os: windows-2022, cc: msvc, runner: c/build/Debug/otc_runner.exe }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - name: libcurl (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
+      - name: libcurl (Windows, vcpkg)
+        if: runner.os == 'Windows'
+        run: vcpkg install curl:x64-windows
+      - name: Configure
+        shell: bash
+        run: |
+          if [ "${{ matrix.cc }}" = msvc ]; then
+            cmake -S c -B c/build -DOTC_WITH_FETCH=ON -DCMAKE_TOOLCHAIN_FILE="$VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON
+          else
+            cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_WITH_FETCH=ON -DOTC_BUILD_TESTS=ON
+          fi
+      # The library, c/tests and the runner, all with warnings as errors
+      - name: Build
+        run: cmake --build c/build --config Debug --parallel
+      - name: Every global symbol of the library starts with otc_ (nm)
+        if: runner.os != 'Windows'
+        run: python c/tools/gen_sources.py --symbols c/build/libopentideconstants.a
+      # The C library's own tests (c/tests), the test_fetch_* ones against the fixture server; not on Windows (POSIX calls)
+      - name: Authenticated native vector input (Ruby; no production H4 publication)
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
+      - name: C library tests (c/tests)
+        if: runner.os != 'Windows'
+        run: cd c/build && OTC_TEST_PYTHON=python ctest -LE source_acceptance --output-on-failure
+      - name: All immutable native prediction vectors
+        run: python conformance/tools/run_vectors.py --runner ${{ matrix.runner }} --no-expected-failures
+      - name: Conformance suite (profile c-fetch)
+
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c-fetch' }}
+      - name: Conformance suite, every query in 8 threads
+        env: { OTC_RUNNER_THREADS: "8" }
+        run: python conformance/driver.py --runner ${{ matrix.runner }} --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c-fetch' }}
+
+  sanitizers:
+    name: ubuntu ${{ matrix.cc }} ${{ matrix.sanitize }} fetch=${{ matrix.fetch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { cc: clang, sanitize: "address,undefined", fetch: "OFF" }
+          - { cc: gcc, sanitize: "address,undefined", fetch: "OFF" }
+          - { cc: clang, sanitize: "thread", fetch: "OFF" }
+          - { cc: clang, sanitize: "address,undefined", fetch: "ON" }
+          - { cc: gcc, sanitize: "address,undefined", fetch: "ON" }
+          - { cc: clang, sanitize: "thread", fetch: "ON" }
+    # The driver does not check a runner's exit status when it closes it, so a report
+    # written at exit (a leak) would not fail a case. Every report goes to a log file,
+    # and the job fails if any log file exists.
+    env:
+      ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:log_path=${{ github.workspace }}/san/asan
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1:log_path=${{ github.workspace }}/san/ubsan
+      TSAN_OPTIONS: halt_on_error=1:log_path=${{ github.workspace }}/san/tsan
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - if: matrix.fetch == 'ON'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev
+      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=${{ matrix.cc }} -DOTC_SANITIZE=${{ matrix.sanitize }} -DOTC_WITH_FETCH=${{ matrix.fetch }} -DOTC_BUILD_TESTS=ON
+      - run: cmake --build c/build --parallel
+      # TSan on recent Ubuntu kernels needs fewer ASLR bits.
+      - run: sudo sysctl vm.mmap_rnd_bits=28
+      - run: mkdir -p san
+      # c/tests under the same sanitizer (the out-of-memory tests replace malloc, so CMake leaves them out here)
+      - name: Authenticated native vector input (Ruby; no production H4 publication)
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
+      - name: C library tests (c/tests)
+        run: cd c/build && OTC_TEST_PYTHON=python ctest -LE source_acceptance --output-on-failure
+      - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
+      - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
+        env: { OTC_RUNNER_THREADS: "8" }
+      # Also after a failed run, so the report that failed it is printed.
+      - name: No sanitizer reports
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -n "$(ls -A san)" ]; then head -50 san/*; exit 1; fi
+          echo "no sanitizer report files"
+
+  valgrind:
+    name: valgrind fetch=${{ matrix.fetch }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        fetch: ["OFF", "ON"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind libcurl4-openssl-dev
+      - run: cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_FETCH=${{ matrix.fetch }} -DOTC_BUILD_TESTS=ON && cmake --build c/build --parallel
+      # The driver ignores the runner's exit status at close, so every Valgrind report
+      # goes to a log file per process; the job fails if any of them is not empty.
+      - run: mkdir -p vg
+      # Portable c/tests under Valgrind. Full-H4 source_acceptance is a mandatory local gate.
+      # Out-of-memory tests replace the allocator and are excluded from Valgrind.
+      # A test that skips itself exits 77 (TEST_SKIP_RC in c/tests/otc_test.h, ctest's
+      # SKIP_RETURN_CODE): it is listed as skipped, not failed. Any other non-zero
+      # exit fails the step; 99 is a Valgrind error.
+      - name: Authenticated native vector input (Ruby; no production H4 publication)
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
+      - name: C library tests (c/tests) under Valgrind
+        env:
+          OTC_TEST_PYTHON: python
+          VG: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect
+        run: |
+          cd c/build
+          skipped=""
+          ran=0
+          for t in test_*; do
+            [ -f "$t" ] && [ -x "$t" ] || continue
+            case $t in *_oom*|test_core_native|test_noaa_historical) continue ;; esac
+            log="$GITHUB_WORKSPACE/vg/ctest-$t-%p.log"
+            rc=0
+            case $t in
+              test_fetch_*)
+                rules="../tests/rules_${t#test_fetch_}.json"
+                [ -f "$rules" ] || rules=""
+                printf '#!/bin/sh\nexec %s --log-file=%s ./%s\n' "$VG" "$log" "$t" > "vg-$t.sh"
+                chmod +x "vg-$t.sh"
+                # shellcheck disable=SC2086  # an empty rules is no argument
+                sh ../tests/run_with_server.sh "./vg-$t.sh" $rules || rc=$?
+                ;;
+              *)
+                # shellcheck disable=SC2086  # VG is a command with its options
+                $VG --log-file="$log" "./$t" || rc=$?
+                ;;
+            esac
+            ran=$((ran + 1))
+            case $rc in
+              0) ;;
+              77) echo "SKIPPED $t"; skipped="$skipped $t" ;;
+              *) echo "FAILED $t (exit $rc)"; exit 1 ;;
+            esac
+          done
+          test "$ran" -gt 10
+          echo "$ran tests under Valgrind; skipped:${skipped:- none}"
+      - name: Conformance suite under Valgrind
+        env:
+          OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/%p.log
+        run: python conformance/driver.py --runner conformance/runners/c/run.sh --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
+      - name: Conformance suite under Valgrind, 4 threads
+        env:
+          OTC_RUNNER_THREADS: "4"
+          OTC_C_RUNNER_WRAP: valgrind -q --error-exitcode=99 --leak-check=full --errors-for-leak-kinds=definite,indirect --log-file=${{ github.workspace }}/vg/mt-%p.log
+        run: python conformance/driver.py --runner conformance/runners/c/run.sh --profile ${{ matrix.fetch == 'ON' && 'c-fetch' || 'c' }}
+      # Also after a failed run, so the report that failed it is printed. Each wrapped step
+      # must leave its own logs (ctest-*, <pid>, mt-<pid>): one step alone does not meet the
+      # count of another (R3-319).
+      - name: No Valgrind reports
+        if: ${{ !cancelled() }}
+        run: |
+          ctest_logs=$(find vg -type f -name 'ctest-*' | wc -l)
+          single=$(find vg -type f -name '[0-9]*.log' | wc -l)
+          mt=$(find vg -type f -name 'mt-*.log' | wc -l)
+          echo "valgrind log files: c/tests $ctest_logs, conformance $single, conformance 4 threads $mt"
+          bad=$(find vg -type f -size +0)
+          if [ -n "$bad" ]; then echo "$bad" | xargs head -60; exit 1; fi
+          test "$ctest_logs" -gt 10
+          test "$single" -gt 400
+          test "$mt" -gt 400
+          echo "every valgrind log is empty"
+
+  # The installed library as an application gets it (R2-241): a static or a
+  # shared build, with or without otc_fetch, installed with cmake --install,
+  # then a consumer built through opentideconstants.pc (run without
+  # LD_LIBRARY_PATH) and through find_package, before and after the install
+  # is moved. One lane also installs a sanitizer build, and one an absolute
+  # CMAKE_INSTALL_LIBDIR under an install-time --prefix (C72), also with an
+  # absolute CMAKE_INSTALL_DATADIR (R3-316).
+  install:
+    name: install ${{ matrix.os }} shared=${{ matrix.shared }} fetch=${{ matrix.fetch }} ${{ matrix.sanitize }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, cc: gcc, shared: "OFF", fetch: "OFF", sanitize: "", abs_libdir: true }
+          - { os: ubuntu-24.04, cc: gcc, shared: "ON", fetch: "OFF", sanitize: "" }
+          - { os: ubuntu-24.04, cc: gcc, shared: "OFF", fetch: "ON", sanitize: "" }
+          - { os: ubuntu-24.04, cc: clang, shared: "ON", fetch: "ON", sanitize: "" }
+          - { os: ubuntu-24.04, cc: clang, shared: "OFF", fetch: "OFF", sanitize: "address,undefined" }
+          - { os: macos-14, cc: clang, shared: "OFF", fetch: "OFF", sanitize: "" }
+          - { os: macos-14, cc: clang, shared: "ON", fetch: "OFF", sanitize: "" }
+          - { os: macos-14, cc: clang, shared: "OFF", fetch: "ON", sanitize: "" }
+          - { os: macos-14, cc: clang, shared: "ON", fetch: "ON", sanitize: "" }
+    env:
+      CC: ${{ matrix.cc }}
+      PYTHON: python
+      OTC_SHARED: ${{ matrix.shared }}
+      OTC_FETCH: ${{ matrix.fetch }}
+      OTC_SAN: ${{ matrix.sanitize }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - name: libcurl and pkg-config (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libcurl4-openssl-dev pkg-config
+      - name: pkg-config (macOS)
+        if: runner.os == 'macOS'
+        run: command -v pkg-config || brew install pkgconf
+      - name: Build and install
+        run: |
+          cmake -S c -B c/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$CC" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_BUILD_RUNNER=OFF -DBUILD_SHARED_LIBS="$OTC_SHARED" -DOTC_WITH_FETCH="$OTC_FETCH" -DOTC_SANITIZE="$OTC_SAN"
+          cmake --build c/build --parallel
+          cmake --install c/build --prefix "$RUNNER_TEMP/otc"
+      - name: A consumer links and runs through pkg-config and find_package, also after the install is moved
+        run: sh c/tests/consumer/check_install.sh "$RUNNER_TEMP/otc" "$([ "$OTC_FETCH" = ON ] && echo 1 || echo 0)"
+      - name: An absolute CMAKE_INSTALL_LIBDIR with an install-time --prefix
+        if: matrix.abs_libdir
+        run: |
+          abs="$RUNNER_TEMP/otc-abs"
+          cmake -S c -B c/build-abs -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$CC" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_BUILD_RUNNER=OFF -DCMAKE_INSTALL_PREFIX=/nonexistent/otc -DCMAKE_INSTALL_LIBDIR="$abs/lib"
+          cmake --build c/build-abs --parallel
+          cmake --install c/build-abs --prefix "$abs"
+          sh c/tests/consumer/check_install.sh "$abs" 0 fixed
+          # LIBDIR and DATADIR both absolute: the CMake package still follows the --prefix
+          absd="$RUNNER_TEMP/otc-absd"
+          cmake -S c -B c/build-absd -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER="$CC" -DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DOTC_BUILD_RUNNER=OFF -DCMAKE_INSTALL_PREFIX=/nonexistent/otc -DCMAKE_INSTALL_LIBDIR="$absd/lib" -DCMAKE_INSTALL_DATADIR="$absd/share"
+          cmake --build c/build-absd --parallel
+          cmake --install c/build-absd --prefix "$absd"
+          sh c/tests/consumer/check_install.sh "$absd" 0 fixed
+
+  # The single-file bundle with the C99 compilers people use: gcc and clang on
+  # Linux, Apple clang on macOS. The runner on it also runs every query in 8
+  # threads, as the CMake build does.
+  amalgamation:
+    name: amalgamation ${{ matrix.os }} ${{ matrix.cc }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04, cc: gcc }
+          - { os: ubuntu-24.04, cc: clang }
+          - { os: macos-14, cc: clang }
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - run: python c/tools/gen_sources.py --check
+      - run: python c/tools/check_manifest.py
+      - run: python c/tools/amalgamate.py --out dist
+      # against the committed bytes, so a checkout that changed them (CRLF) fails here (R3-319)
+      - name: The bundle carries supported-formats.json as committed (spec 7.4)
+        run: git show HEAD:c/supported-formats.json | cmp - dist/supported-formats.json
+      - name: Build with only cc -std=c99
+        run: $CC -std=c99 -c dist/opentideconstants.c -o dist/otc.o
+      - name: Vendored tzcode bytes and licence stay pinned
+        run: |
+          ruby -rjson -rdigest <<'RUBY'
+          source = JSON.parse(File.read('c/vendor/tzcode/source.json'))
+          source.fetch('files').each do |name, expected|
+              path = File.join('c/vendor/tzcode', name)
+              abort "tzcode bytes changed: #{name}" unless Digest::SHA256.file(path).hexdigest == expected
+          end
+          RUBY
+      - name: Native tzcode symbols stay namespaced
+        run: ruby c/tools/check_exports.sh dist/otc.o
+      - name: Every global symbol of the bundle starts with otc_ (nm)
+
+        run: python c/tools/gen_sources.py --symbols dist/otc.o
+      - name: No warnings with -Wall -Wextra -pedantic
+        run: $CC -std=c99 -Wall -Wextra -pedantic -Werror -c dist/opentideconstants.c -o /dev/null
+      - name: The runner on the amalgamation passes the suite
+        run: |
+          $CC -std=c99 -pthread -Idist -Ic/vendor/cjson -DCJSON_HIDE_SYMBOLS -DOTC_RUNNER_PREDICT=1 -DOTC_RUNNER_LOCALTIME=1 conformance/runners/c/runner.c c/vendor/cjson/cJSON.c dist/otc.o -lm -o dist/otc_runner
+          python conformance/driver.py --runner dist/otc_runner --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c' }}
+      - name: The runner on the amalgamation passes the suite, every query in 8 threads
+        env: { OTC_RUNNER_THREADS: "8" }
+        run: python conformance/driver.py --runner dist/otc_runner --profile ${{ runner.os == 'Windows' && 'c-no-localtime' || 'c' }}
+      - name: Vendored files match their recorded SHA-256
+        run: |
+          cd c && shasum -a 256 -c <<'SUMS'
+          298581a04a36c0165da4b0aade235c23088cb2faa58651d720ea2f3706ed0b0d  vendor/cjson/cJSON.c
+          25b0145150d500498e4d209cec69c18c42cf818bffcc54690be3b895a2a16dee  vendor/cjson/cJSON.h
+          a36dda207c36db5818729c54e7ad4e8b0c6fba847491ba64f372c1a2037b6d5c  vendor/cjson/LICENSE
+          7a74437adc78576b8faff060f9573ba88a6da798914f45d263c75b149add3d27  vendor/sha256/sha-256.c
+          c2173d83813a0c29fcc3345ce489766efeadee6a52ca927ecd0f917a120df9fb  vendor/sha256/sha-256.h
+          506de94a03e23bbc34e32a8b628b56688ac7c33672982388822816887727f1ac  vendor/sha256/LICENSE.md
+          SUMS
+
+  prediction-options:
+    name: native prediction=${{ matrix.predict }} localtime=OFF
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        predict: ["ON", "OFF"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with: { python-version: "3.12" }
+      - run: cmake -S c -B c/build -DOTC_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DOTC_WITH_PREDICT=${{ matrix.predict }} -DOTC_WITH_LOCALTIME=OFF
+      - run: cmake --build c/build --parallel
+      - name: Authenticated native vector input
+        run: ruby c/tests/materialize_vectors.rb "${{ runner.temp }}/otc-native-vectors"
+      - run: ctest --test-dir c/build -LE source_acceptance --output-on-failure
+      - run: python conformance/driver.py --runner c/build/otc_runner --profile ${{ matrix.predict == 'ON' && 'c-no-localtime' || 'c-no-predict' }} --no-expected-failures

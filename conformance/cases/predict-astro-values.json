@@ -1,0 +1,604 @@
+{
+ "suite_version": "1.0",
+ "group": "predict-astro-values",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "predict-astro-values",
+   "title": "every Astro function inside the range and at its edges, on table A and table B; no row: unsupported_constituent; out of range: time_out_of_range",
+   "spec": "5.2",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict"
+   ],
+   "steps": [
+    {
+     "args": {},
+     "expect": {
+      "astro_table": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "astro_table"
+    },
+    {
+     "args": {
+      "id": "otc-test-predict-b"
+     },
+     "expect": {
+      "astro_table": {
+       "first_year": 2020,
+       "last_year": 2100
+      }
+     },
+     "op": "astro_table"
+    },
+    {
+     "args": {
+      "id": "no-such-table"
+     },
+     "expect": {
+      "astro_table": null
+     },
+     "op": "astro_table"
+    },
+    {
+     "args": {
+      "at": "2000-01-01T00:00:00Z",
+      "name": "M2"
+     },
+     "expect": {
+      "value": 120.0
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {
+      "at": "2000-01-01T00:00:00Z",
+      "name": "M2"
+     },
+     "expect": {
+      "value": 1.0
+     },
+     "op": "node_factor"
+    },
+    {
+     "args": {
+      "at": "2000-01-01T00:00:00Z",
+      "name": "K1"
+     },
+     "expect": {
+      "value": 15.0
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {
+      "at": "2000-01-01T00:00:00Z",
+      "name": "K1"
+     },
+     "expect": {
+      "value": 1.064
+     },
+     "op": "node_factor"
+    },
+    {
+     "args": {
+      "at": "2015-06-01T12:34:56Z",
+      "name": "M2"
+     },
+     "expect": {
+      "value": 14.228060756446212
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {
+      "at": "2015-06-01T12:34:56Z",
+      "name": "M2"
+     },
+     "expect": {
+      "value": 1.0067
+     },
+     "op": "node_factor"
+    },
+    {
+     "args": {
+      "at": "2015-06-01T12:34:56Z",
+      "name": "K1"
+     },
+     "expect": {
+      "value": 358.61267398488417
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {
+      "at": "2015-06-01T12:34:56Z",
+      "name": "K1"
+     },
+     "expect": {
+      "value": 1.0339
+     },
+     "op": "node_factor"
+    },
+    {
+     "args": {
+      "at": "2030-12-31T23:59:59Z",
+      "name": "M2"
+     },
+     "expect": {
+      "value": 166.0547408599523
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {
+      "at": "2030-12-31T23:59:59Z",
+      "name": "M2"
+     },
+     "expect": {
+      "value": 1.0166
+     },
+     "op": "node_factor"
+    },
+    {
+     "args": {
+      "at": "2030-12-31T23:59:59Z",
+      "name": "K1"
+     },
+     "expect": {
+      "value": 20.576757925387938
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {
+      "at": "2030-12-31T23:59:59Z",
+      "name": "K1"
+     },
+     "expect": {
+      "value": 0.9719
+     },
+     "op": "node_factor"
+    },
+    {
+     "args": {
+      "name": "M2",
+      "year": 2000
+     },
+     "expect": {
+      "value": 120.0
+     },
+     "op": "equilibrium_for_year"
+    },
+    {
+     "args": {
+      "name": "M2",
+      "year": 2000
+     },
+     "expect": {
+      "value": 1.0
+     },
+     "op": "node_factor_for_year"
+    },
+    {
+     "args": {
+      "name": "M2",
+      "year": 2015
+     },
+     "expect": {
+      "value": 91.15
+     },
+     "op": "equilibrium_for_year"
+    },
+    {
+     "args": {
+      "name": "M2",
+      "year": 2015
+     },
+     "expect": {
+      "value": 1.0067
+     },
+     "op": "node_factor_for_year"
+    },
+    {
+     "args": {
+      "name": "M2",
+      "year": 2030
+     },
+     "expect": {
+      "value": 65.31
+     },
+     "op": "equilibrium_for_year"
+    },
+    {
+     "args": {
+      "name": "M2",
+      "year": 2030
+     },
+     "expect": {
+      "value": 1.0166
+     },
+     "op": "node_factor_for_year"
+    },
+    {
+     "args": {
+      "at": "2099-12-31T23:59:59Z",
+      "id": "otc-test-predict-b",
+      "name": "K1"
+     },
+     "expect": {
+      "value": 300.6067579253868
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {},
+     "expect": {
+      "first_year": 2000,
+      "last_year": 2030
+     },
+     "op": "valid_range"
+    },
+    {
+     "args": {
+      "id": "otc-test-predict-b"
+     },
+     "expect": {
+      "first_year": 2020,
+      "last_year": 2100
+     },
+     "op": "valid_range"
+    },
+    {
+     "args": {
+      "at": "2015-06-01T00:00:00Z",
+      "name": "ZZ9"
+     },
+     "expect": {
+      "error": "unsupported_constituent",
+      "error_fields": {
+       "constituent": "ZZ9"
+      }
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {
+      "at": "2015-06-01T00:00:00Z",
+      "name": "ZZ9"
+     },
+     "expect": {
+      "error": "unsupported_constituent",
+      "error_fields": {
+       "constituent": "ZZ9"
+      }
+     },
+     "op": "node_factor"
+    },
+    {
+     "args": {
+      "name": "ZZ9",
+      "year": 2015
+     },
+     "expect": {
+      "error": "unsupported_constituent",
+      "error_fields": {
+       "constituent": "ZZ9"
+      }
+     },
+     "op": "equilibrium_for_year"
+    },
+    {
+     "args": {
+      "name": "ZZ9",
+      "year": 2015
+     },
+     "expect": {
+      "error": "unsupported_constituent",
+      "error_fields": {
+       "constituent": "ZZ9"
+      }
+     },
+     "op": "node_factor_for_year"
+    },
+    {
+     "args": {
+      "at": "1999-12-31T23:59:59Z",
+      "name": "M2"
+     },
+     "expect": {
+      "error": "time_out_of_range",
+      "error_fields": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "equilibrium_argument"
+    },
+    {
+     "args": {
+      "at": "2031-01-01T00:00:00Z",
+      "name": "M2"
+     },
+     "expect": {
+      "error": "time_out_of_range",
+      "error_fields": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "node_factor"
+    },
+    {
+     "args": {
+      "name": "M2",
+      "year": 1999
+     },
+     "expect": {
+      "error": "time_out_of_range",
+      "error_fields": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "equilibrium_for_year"
+    },
+    {
+     "args": {
+      "name": "M2",
+      "year": 2031
+     },
+     "expect": {
+      "error": "time_out_of_range",
+      "error_fields": {
+       "first_year": 2000,
+       "last_year": 2030
+      }
+     },
+     "op": "node_factor_for_year"
+    }
+   ],
+   "note": "the values are the table's, by the formulas of 5.2 (hand-written)",
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 4,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 5,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 6,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 7,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 8,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 9,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 10,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 11,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 12,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 13,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 14,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 15,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 16,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 17,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 18,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 19,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 20,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 21,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 22,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 23,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 24,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 25,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 26,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 27,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 28,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 29,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 30,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     },
+     {
+      "authored_step": 31,
+      "source": "authored_interface",
+      "authored_controls": {
+       "strict": null
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

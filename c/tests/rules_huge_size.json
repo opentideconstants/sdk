@@ -1,0 +1,7 @@
+[{"match": "^/good/OTC_latest-f1\\.json$", "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+  "set": {"/files/2/size": 1e300, "/files/3/size": -5.5}},
+ {"match": "^/wrongbody/OTC_latest-f1\\.json$", "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+  "set": {"/files/2/size": 1e300}},
+ {"match": "^/wrongbody/OTC_20991231\\.2\\.jsonl$", "action": "file", "file": "good/OTC_20991231.jsonl"},
+ {"match": "^/wrongbody/OTC_20991231\\.2\\.sha256$", "action": "file", "file": "good/OTC_20991231.2.sha256"},
+ {"match": "^/wrongbody/OTC_20991231\\.2\\.meta\\.json$", "action": "file", "file": "good/OTC_20991231.2.meta.json"}]

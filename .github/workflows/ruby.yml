@@ -1,0 +1,123 @@
+name: Ruby SDK
+
+on:
+  push:
+    paths:
+      - "ruby/**"
+      - "conformance/**"
+      - ".github/workflows/ruby.yml"
+      - ".gitattributes"
+  pull_request:
+    paths:
+      - "ruby/**"
+      - "conformance/**"
+      - ".github/workflows/ruby.yml"
+      - ".gitattributes"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every run step uses bash, on Windows too. The default Windows shell (pwsh)
+# exits with the status of the last command only, so a failing command
+# earlier in a step is lost. GitHub runs `shell: bash` as bash -eo pipefail.
+defaults:
+  run:
+    shell: bash
+
+# A newer push to the same branch or pull request cancels the older run;
+# every run on main finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  conformance:
+    name: ${{ matrix.os }} / Ruby ${{ matrix.ruby }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        ruby: ["3.3"]
+        include:
+          - os: ubuntu-latest
+            ruby: "3.0"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false }
+      - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          ruby-version: ${{ matrix.ruby }}
+      # Ruby 3.0 bundles rbs 1.4, which cannot parse the quoted symbol types in
+      # ruby/sig (such as :"json.gz"). rbs 3.4 is the newest that supports Ruby 3.0.
+      - name: A newer rbs for the signature tests (Ruby 3.0)
+        if: matrix.ruby == '3.0'
+        run: gem install rbs -v 3.4.4 --no-document
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - name: The gem's fold table is the suite's
+        shell: bash
+        run: cmp conformance/name_fold.json ruby/lib/opentideconstants/name_fold.json
+      - name: Unit tests
+        run: ruby -Iruby/lib ruby/test/test_unit.rb
+      # Install into an empty gem directory, and use only that directory from
+      # here on, so no other copy of the gem can be loaded.
+      - name: Build and install the gem
+        shell: bash
+        working-directory: ruby
+        run: |
+          gem build opentideconstants.gemspec
+          # spec 7.4: the gem ships supported-formats.json, the same bytes (as python.yml, typescript.yml, c.yml)
+          rm -rf "$RUNNER_TEMP/unpacked"
+          gem unpack opentideconstants-*.gem --target "$RUNNER_TEMP/unpacked"
+          cmp supported-formats.json "$RUNNER_TEMP"/unpacked/opentideconstants-*/supported-formats.json
+          gems="$RUNNER_TEMP/gems"
+          gem install --local --no-document --install-dir "$gems" opentideconstants-*.gem
+          # The runner claims localtime only when tzinfo can load zone data, and the
+          # conformance profile requires it. Windows has no system zone files.
+          gem install --no-document --install-dir "$gems" tzinfo
+          if [ "${{ runner.os }}" = Windows ]; then gem install --no-document --install-dir "$gems" tzinfo-data; fi
+          echo "GEM_HOME=$gems" >> "$GITHUB_ENV"
+          echo "GEM_PATH=$gems" >> "$GITHUB_ENV"
+      - name: The runner loads the gem that was just built
+        env:
+          OTC_RUBY_USE_INSTALLED: "1"
+        run: |
+          version=$(ruby -Iruby/lib -e 'require "opentideconstants/version"; print OpenTideConstants::VERSION')
+          # shellcheck disable=SC2016  # the single quotes hold Ruby code
+          ruby -e '
+            require "opentideconstants"
+            spec = Gem.loaded_specs["opentideconstants"] or abort "opentideconstants was not loaded from a gem"
+            home = File.realpath(ENV.fetch("GEM_HOME"))
+            file = $LOADED_FEATURES.find { |f| f.end_with?("/opentideconstants.rb") }
+            abort "loaded #{file}, not from #{home}" unless file && File.realpath(file).start_with?(home + "/")
+            abort "loaded version #{spec.version}, built #{ARGV[0]}" unless spec.version.to_s == ARGV[0]
+            puts "loaded #{file} (#{spec.version})"
+          ' "$version"
+      - name: API manifest check (installed gem)
+        shell: bash
+        env:
+          OTC_RUBY_USE_INSTALLED: "1"
+        run: ruby conformance/runners/ruby/check_api.rb
+      - name: Conformance suite (installed gem)
+        shell: bash
+        env:
+          OTC_RUBY_USE_INSTALLED: "1"
+        run: uv run conformance/driver.py --runner "ruby conformance/runners/ruby/runner.rb" --all-steps --report ruby-report.json
+      - name: Native prediction vectors (installed gem)
+        env:
+          OTC_RUBY_USE_INSTALLED: "1"
+        run: uv run conformance/tools/run_vectors.py --runner "ruby conformance/runners/ruby/runner.rb" --no-expected-failures --report ruby-vectors.json
+      # The full H4 source gate requires a separately provisioned authenticated
+      # artifact and its explicit OTC_CORE_NATIVE_JSONL environment. It is not
+      # replaced by these bundled fixtures or reported as a CI result here.
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ruby-conformance-${{ matrix.os }}-${{ matrix.ruby }}
+          path: |
+            ruby-report.json
+            ruby-vectors.json
+          if-no-files-found: error

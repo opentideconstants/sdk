@@ -1,0 +1,2 @@
+[{"match": "^/good/OTC_latest-f1\\.json$", "action": "json", "file": "good/OTC_latest-f1.json", "pointer": "",
+  "set": {"/files": []}}]
