@@ -627,6 +627,27 @@ test("DR59: a non-string build run_id is invalid_release in each native file mod
     }
 });
 
+test("DR59: build tool_versions must be a nullable map of strings in each native file mode", async () => {
+    for (const value of [false, { engine: 17 }, { engine: null }]) {
+        const root = tmpdir();
+        try {
+            const doc = JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_20991231.2.json")));
+            doc.stations[0].constant_sets[0].provenance.build.tool_versions = value;
+            const prefix = path.join(root, "OTC_20991231.2");
+            fs.writeFileSync(`${prefix}.json`, JSON.stringify(doc));
+            fs.writeFileSync(`${prefix}.jsonl`, doc.stations.map(station => JSON.stringify(station) + "\n").join(""));
+            const meta = { ...doc };
+            delete meta.stations;
+            fs.writeFileSync(`${prefix}.meta.json`, JSON.stringify(meta));
+            for (const [extension, mode] of [["json", "eager"], ["jsonl", "eager"], ["jsonl", "stream"]]) {
+                await assert.rejects(otc.OpenTideConstants.open({ file: `${prefix}.${extension}`, mode }), isCode("invalid_release"));
+            }
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    }
+});
+
 test("T34: a cache directory that cannot be read is a cache error, not an empty cache", { skip: process.getuid?.() === 0 }, async () => {
     const { listDir } = await import("../dist/node.js");
     const d = tmpdir();
