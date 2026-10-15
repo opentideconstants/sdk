@@ -50,6 +50,11 @@ jobs:
       - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with:
           ruby-version: ${{ matrix.ruby }}
+      # Ruby 3.0 bundles rbs 1.4, which cannot parse the quoted symbol types in
+      # ruby/sig (such as :"json.gz"). rbs 3.4 is the newest that supports Ruby 3.0.
+      - name: A newer rbs for the signature tests (Ruby 3.0)
+        if: matrix.ruby == '3.0'
+        run: gem install rbs -v 3.4.4 --no-document
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - name: The gem's fold table is the suite's
         shell: bash
