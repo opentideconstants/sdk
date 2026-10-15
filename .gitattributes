@@ -29,3 +29,5 @@ ruby/README.md        -text
 # of predict_calls.json, so both keep their committed bytes on every platform.
 conformance/tools/predict_calls.json -text
 conformance/tools/predict_expected.json -text
+# The prediction vectors are checked against SHA256SUMS by run_vectors.py.
+conformance/vectors/** -text
