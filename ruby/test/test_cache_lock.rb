@@ -105,6 +105,47 @@ class CacheLockTest < Minitest::Test
         c&.close
     end
 
+    def test_doi_note_preserves_uppercase_receipt_and_verified_cached_open
+        c = nil
+        stamp = "20991231.2"
+        expected_raw = JSON.parse(File.binread(fixture("good", "OTC_#{stamp}.json")))["stations"].find { |row| row["station_id"] == "OTC-T-0001" }
+        [[ :eager, %w[json] ], [ :eager, %w[jsonl meta.json] ], [ :stream, %w[jsonl meta.json] ]].each do |mode, extensions|
+            root = tmpdir
+            dir = File.join(root, "v1", "releases", stamp)
+            FileUtils.mkdir_p(dir)
+            payloads = extensions.to_h do |ext|
+                name = "OTC_#{stamp}.#{ext}"
+                bytes = File.binread(fixture("good", name))
+                File.binwrite(File.join(dir, name), bytes)
+                [name, bytes]
+            end
+            rows = payloads.to_h do |name, bytes|
+                [name, { "size" => bytes.bytesize, "sha256" => Digest::SHA256.hexdigest(bytes).upcase,
+                         "future_file" => { "retain" => true } }]
+            end
+            receipt = { "datestamp" => stamp, "files" => rows, "by" => "original-producer", "verified_at" => "2026-10-01T00:00:00Z",
+                        "zenodo_version_doi" => "10.1/old", "future_receipt" => [7, true] }
+            marker = File.join(dir, ".verified")
+            File.binwrite(marker, JSON.generate(receipt))
+            OTC::Cache.new(root).note_version_doi(stamp, "10.1/new")
+            noted_bytes = File.binread(marker)
+            assert_equal receipt.merge("zenodo_version_doi" => "10.1/new"), JSON.parse(noted_bytes)
+
+            c = OTC.new(cache_dir: root, release: stamp, mode: mode, offline: true, verify_on_open: true)
+            assert_equal :cache, c.loaded_from
+            assert_equal expected_raw, c.station("OTC-T-0001").raw
+            assert_equal noted_bytes, File.binread(marker)
+            payloads.each do |name, bytes|
+                assert_equal bytes, File.binread(File.join(dir, name))
+                assert_equal rows[name]["sha256"].downcase, c.release.files.find { |file| file.name == name }.sha256
+            end
+            c.close
+            c = nil
+        end
+    ensure
+        c&.close
+    end
+
     def two_cached(srv)
         cache = tmpdir
         OTC.new(release: "20991231", base_url: srv.url("/"), cache_dir: cache).close
