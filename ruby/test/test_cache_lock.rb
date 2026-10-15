@@ -265,6 +265,39 @@ class CacheLockTest < Minitest::Test
         c&.close
     end
 
+    def test_prune_preserves_external_data_behind_partial_release_symlinks
+        posix_only
+        c = nil
+        { "empty-marker" => "{}", "broken-json" => "{broken json", "absent-marker" => nil }.each do |label, marker|
+            root = tmpdir
+            external = File.join(root, "external-user-data")
+            releases = File.join(root, "cache", "v1", "releases")
+            FileUtils.mkdir_p([external, releases])
+            File.binwrite(File.join(external, "source-record-original"), "external record and provenance #{label}\n")
+            File.binwrite(File.join(external, ".verified"), marker) if marker
+            link = File.join(releases, "20991231.30")
+            File.symlink("../../../external-user-data", link)
+            File.utime(Time.now - 300, Time.now - 300, external)
+            original_mtime = File.mtime(external)
+            originals = Dir.children(external).to_h { |name| [name, File.binread(File.join(external, name))] }
+            c = OTC.new(file: fixture("good", "OTC_20991231.2.json"), cache_dir: File.join(root, "cache"))
+            original_raw = JSON.generate(c.station("OTC-T-0001").raw)
+
+            assert_equal [], c.prune(keep: 0), label
+            assert_equal originals.keys.sort, Dir.children(external).sort, label
+            originals.each { |name, bytes| assert_equal bytes, File.binread(File.join(external, name)), label }
+            assert_equal original_mtime, File.mtime(external), label
+            assert File.symlink?(link), label
+            assert_equal "../../../external-user-data", File.readlink(link), label
+            refute File.exist?(File.join(external, ".lock")), label
+            assert_equal original_raw, JSON.generate(c.station("OTC-T-0001").raw), label
+            c.close
+            c = nil
+        end
+    ensure
+        c&.close
+    end
+
     # R13-A1: prune protects only the current release directory. On POSIX,
     # an earlier held stream release still reads its removed files.
     def test_prune_removes_an_earlier_held_release_and_keeps_the_current_one
