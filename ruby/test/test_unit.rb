@@ -53,6 +53,67 @@ class VersionTest < Minitest::Test
 end
 
 class FormatOneTest < Minitest::Test
+    def test_build_tool_versions_requires_a_nullable_map_of_strings
+        source = File.join(FIXTURES, "good/OTC_20991231.2.json")
+        source_pin = Digest::SHA256.file(source).hexdigest
+        base = JSON.parse(File.binread(source))
+        observations = []
+        cases = {
+            "container-string" => "bad", "container-number" => 17, "container-boolean" => true,
+            "container-false" => false, "container-array" => [], "member-null" => { "tool" => nil },
+            "member-boolean" => { "tool" => true }, "member-number" => { "tool" => 17 },
+            "member-array" => { "tool" => [] }, "member-object" => { "tool" => {} },
+            "missing" => :missing, "null" => nil, "empty" => {},
+            "strings" => { "ruby" => "3.2.2", "empty" => "", "unknown🌊" => "future" }
+        }
+        cases.each do |name, value|
+            doc = Marshal.load(Marshal.dump(base))
+            station_raw = doc.fetch("stations").first
+            set_raw = station_raw.fetch("constant_sets").first
+            build_raw = set_raw.fetch("provenance").fetch("build")
+            value == :missing ? build_raw.delete("tool_versions") : build_raw["tool_versions"] = value
+            invalid = name.start_with?("container-", "member-")
+            Dir.mktmpdir("otc-tool-versions") do |directory|
+                prefix = File.join(directory, "OTC_20991231.2")
+                File.write(prefix + ".json", JSON.generate(doc))
+                Zlib::GzipWriter.open(prefix + ".json.gz") { |gzip| gzip.write(JSON.generate(doc)) }
+                File.write(prefix + ".jsonl", doc.fetch("stations").map { |station| JSON.generate(station) + "\n" }.join)
+                File.write(prefix + ".meta.json", JSON.generate(doc.reject { |key, _row| key == "stations" }))
+                [["json", :eager], ["json.gz", :eager], ["jsonl", :eager], ["jsonl", :stream]].each do |format, mode|
+                    path = prefix + "." + format
+                    before = Digest::SHA256.file(path).hexdigest
+                    row = { case: name, format: format, mode: mode.to_s, expected_invalid: invalid }
+                    begin
+                        client = OpenTideConstants.new(file: path, mode: mode)
+                        station = client.station(station_raw.fetch("station_id"))
+                        set = station.constant_set(set_raw.fetch("set_id"))
+                        actual = set.provenance.build.tool_versions
+                        row[:actual_value] = actual
+                        assert_equal station_raw, station.raw
+                        assert_equal set_raw, set.raw
+                        unless invalid
+                            expected = value == :missing ? nil : value
+                            expected.nil? ? assert_nil(actual) : assert_equal(expected, actual)
+                        end
+                        row[:pass] = !invalid
+                    rescue OpenTideConstants::Error => error
+                        row[:error_code] = error.code
+                        row[:pass] = invalid && error.code == "invalid_release"
+                    ensure
+                        client&.close
+                    end
+                    assert_equal before, Digest::SHA256.file(path).hexdigest
+                    observations << row
+                end
+            end
+        end
+        assert_equal source_pin, Digest::SHA256.file(source).hexdigest
+        if (path = ENV["OTC_TOOL_VERSIONS_PROOF_PATH"])
+            File.write(path, JSON.pretty_generate(observations) + "\n")
+        end
+        assert_empty observations.reject { |row| row[:pass] }
+    end
+
     def test_build_run_id_requires_a_string_when_present
         source = File.join(FIXTURES, "good/OTC_20991231.2.json")
         source_pin = Digest::SHA256.file(source).hexdigest
