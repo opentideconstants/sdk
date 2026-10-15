@@ -1161,7 +1161,7 @@ def run_action(st, ctx, srv, proxy):
     elif kind == "write":
         p = Path(a["path"])
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(a["text"], encoding="utf-8")
+        p.write_bytes(a["text"].encode("utf-8"))   # the exact bytes: write_text would give CRLF on Windows
     elif kind == "delete":
         Path(a["path"]).unlink()
     elif kind == "mkdir":
