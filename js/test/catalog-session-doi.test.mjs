@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,7 +9,7 @@ import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import { OpenTideConstants } from '../dist/index.js';
 
-const fixture = new URL('../../conformance/fixtures/good/', import.meta.url).pathname;
+const fixture = fileURLToPath(new URL('../../conformance/fixtures/good/', import.meta.url));
 const stamp = '20991231.2';
 const oldDoi = '10.5072/zenodo.old';
 const newDoi = '10.5072/zenodo.catalog';

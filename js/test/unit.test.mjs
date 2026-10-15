@@ -1,4 +1,5 @@
 // Unit tests of pure helpers. The conformance suite (conformance/) is the main test.
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as otc from "../dist/index.js";
@@ -275,7 +276,7 @@ test("T104: syncZenodo does not rewrite .verified while another process holds th
 
 test("T15: prune(null) is not a raw TypeError, and prune on a read-only release is a cache error", async () => {
     const root = tmpdir();
-    const fixtures = new URL("../../conformance/fixtures/good/", import.meta.url).pathname;
+    const fixtures = fileURLToPath(new URL("../../conformance/fixtures/good/", import.meta.url));
     const c = await otc.OpenTideConstants.open({ file: path.join(fixtures, "OTC_20991231.2.jsonl"), cacheDir: root });
     try {
         assert.deepEqual([...c.prune(null)], []);
@@ -350,7 +351,7 @@ test("R2-008: attribution never drops a licence it cannot find: invalid_release,
     assert.throws(() => r.attribution([r.station("S")]), isCode("invalid_release"));
 });
 
-const GOOD = new URL("../../conformance/fixtures/good/", import.meta.url).pathname;
+const GOOD = fileURLToPath(new URL("../../conformance/fixtures/good/", import.meta.url));
 
 function readFixtureLine(offset, length) {
     const fd = fs.openSync(path.join(GOOD, "OTC_20991231.2.jsonl"), "r");
@@ -782,7 +783,7 @@ test("T23/D2: attribution prints a provider-less licence alone, counts a subordi
 });
 
 test("CR2 DR8/DR28: an unknown status is logged once at load and is in no query; a line with no status is active", async () => {
-    const fixtures = new URL("../../conformance/fixtures/bad/", import.meta.url).pathname;
+    const fixtures = fileURLToPath(new URL("../../conformance/fixtures/bad/", import.meta.url));
     const lines = [];
     const logger = { debug() {}, info() {}, warn: (m) => lines.push(m) };
     const c = await otc.OpenTideConstants.open({ file: path.join(fixtures, "unknown-status", "OTC_20991231.jsonl"), mode: "stream", logger });
@@ -1132,13 +1133,13 @@ test("Retry-After with an impossible HTTP date or the wrong weekday is ignored (
 test("a release whose created or record_span time is impossible is invalid_release (CR2 DR6)", async () => {
     const fx = new URL("../../conformance/fixtures/bad/", import.meta.url);
     for (const root of ["created-impossible", "record-span-hour-24"]) {
-        const file = new URL(`${root}/OTC_20991231.json`, fx).pathname;
+        const file = fileURLToPath(new URL(`${root}/OTC_20991231.json`, fx));
         await assert.rejects(otc.OpenTideConstants.open({ file }), (e) => e.code === "invalid_release", root);
     }
 });
 
 test("PK-R2-05: Object.prototype names are data: an alias system __proto__ and a source constructor", async () => {
-    const dir = new URL("../../conformance/fixtures/bad/proto-keys/", import.meta.url).pathname;
+    const dir = fileURLToPath(new URL("../../conformance/fixtures/bad/proto-keys/", import.meta.url));
     for (const name of ["OTC_20991231.json", "OTC_20991231.jsonl"]) {
         const c = await otc.OpenTideConstants.open({ file: path.join(dir, name), cacheDir: tmpdir() });
         const rel = c.release;
@@ -1425,7 +1426,7 @@ test("R2-117: an https proxy is verified against the default roots plus caFile, 
     const https = await import("node:https");
     const net = await import("node:net");
     const { spawn } = await import("node:child_process");
-    const TLS = new URL("./tls/", import.meta.url).pathname;
+    const TLS = fileURLToPath(new URL("./tls/", import.meta.url));
     const pem = (n) => fs.readFileSync(path.join(TLS, n));
     const target = https.createServer({ key: pem("target.key"), cert: pem("target.pem") }, (req, res) => res.end("target"));
     const proxyWith = (name) => https.createServer({ key: pem(`${name}.key`), cert: pem(`${name}.pem`) }, (req, res) => res.end("via-proxy"))
@@ -1544,7 +1545,7 @@ test("R2-109: a worker that fails after it ran (a DataCloneError) is not labelle
 });
 
 test("K-NC DR106: commercialOnly is a boolean; undefined is false; anything else, null included, is invalid_argument", async () => {
-    const file = path.join(new URL("../../conformance/fixtures/knc/", import.meta.url).pathname, "OTC_20991231.2.jsonl");
+    const file = path.join(fileURLToPath(new URL("../../conformance/fixtures/knc/", import.meta.url)), "OTC_20991231.2.jsonl");
     for (const v of [1, 0, "true", null, [true]]) {
         await assert.rejects(otc.OpenTideConstants.open({ file, commercialOnly: v }), isCode("invalid_argument"), JSON.stringify(v));
     }
