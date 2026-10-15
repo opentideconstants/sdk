@@ -183,6 +183,10 @@ public final class Release {
             try reader.seek(toOffset:offset)
             guard let bytes=try reader.read(upToCount:length),bytes.count==length else { throw OpenTideConstantsError.invalidRelease("short indexed line") }
             let d=try JSONValue.parse(bytes)
+            do { try Reader.validateSourceStation(d,conventions:convById,licences:licById) }
+            catch OpenTideConstantsError.invalidRelease(let message,let fields) {
+                throw OpenTideConstantsError.invalidRelease("index-v1.json: the line of \(e.id) is not a valid station: \(message)",fields)
+            }
             try compare_station_source(e,d)
             return d
         } catch {

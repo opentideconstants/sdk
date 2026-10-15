@@ -290,9 +290,7 @@ internal extension Reader {
                 if let indexPath { try? FileManager.default.removeItem(at:indexPath) }
             }
             if let (doc,admitted)=authenticated {
-                try eachLine(url) { line,_ in
-                    try validateSourceStation(JSONValue.parse(line),conventions:conventions,licences:licences)
-                }
+                // A fresh index is used as it is: each line is validated when it is read (Release.rawStation).
                 do {
                     let release=try Release(meta:meta,entries:admitted,documents:[:],jsonl:url,indexPath:indexPath,files:files,commercialOnly:commercialOnly,commercialBasis:commercialBasis,historicalOffsetsPolicy:historicalOffsetsPolicy)
                     return AuthenticatedStationIndex(release:release,document:doc)
