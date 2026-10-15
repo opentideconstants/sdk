@@ -1892,7 +1892,20 @@ class CanonicalShapeTest < Minitest::Test
     Minitest.after_run do
         directory = File.join(ROOT, "ruby/dist/canonical-shape")
         FileUtils.mkdir_p(directory)
-        File.write(File.join(directory, "invocations.json"), JSON.pretty_generate(EVENTS.sort_by { |event| event.fetch("id") }) + "\n")
+        # Some recorded values are binary (ASCII-8BIT) strings of UTF-8 bytes. The json gem in Ruby 3.0 refuses
+        # to generate those, and newer ones warn, so they are written as the UTF-8 text they hold.
+        text = lambda do |value|
+            case value
+            when Hash then value.to_h { |key, item| [text.call(key), text.call(item)] }
+            when Array then value.map { |item| text.call(item) }
+            when String
+                next value unless value.encoding == Encoding::BINARY
+                utf8 = value.dup.force_encoding(Encoding::UTF_8)
+                utf8.valid_encoding? ? utf8 : "hex:#{value.unpack1('H*')}"
+            else value
+            end
+        end
+        File.write(File.join(directory, "invocations.json"), JSON.pretty_generate(text.call(EVENTS.sort_by { |event| event.fetch("id") })) + "\n")
         puts "ACTUAL_NATIVE_INVOCATIONS runtime=#{EVENTS.count { |event| !event.fetch('id').include?('.S') }} actions=#{EVENTS.count { |event| event.fetch('id').include?('.S') }}"
     end
 end
