@@ -153,7 +153,8 @@ import OpenTideConstants
             }
             for symbol in actual {
                 let name = symbol["pathComponents"].array.last?.string?.split(separator: "(").first.map(String.init) ?? ""
-                if !expectedNames.contains(name) && name != "init" && name != "init?" { problems.append("extra public member \(owner).\(name)") }
+                // "==" is the Equatable witness (Station spells it out so that its origin token is not compared), not API.
+                if !expectedNames.contains(name) && name != "init" && name != "init?" && name != "==" { problems.append("extra public member \(owner).\(name)") }
             }
         }
         for (name, values) in api["enums"].object.sorted(by: { $0.key < $1.key }) {
@@ -469,16 +470,22 @@ import OpenTideConstants
             for _ in 0..<6 { root.deleteLastPathComponent() }
             if let supplied = env["OTC_SWIFT_API_SOURCE_ROOT"] { root = URL(fileURLWithPath: supplied) }
             let manifest = env["OTC_SWIFT_API_MANIFEST"] ?? root.appendingPathComponent("conformance/api.json").path
-            guard let native = env["OTC_CORE_NATIVE_JSON"] else { throw Failure(description: "OTC_CORE_NATIVE_JSON must name the actual small Otaru/NOAA/no_constants fixture") }
+            // The value proof and the self-test need the private small Otaru/NOAA/no_constants fixture. Without it,
+            // only the API surface is checked, and the output says that the other two did not run.
+            let native = env["OTC_CORE_NATIVE_JSON"]
             let api = try JSONDecoder().decode(JSONValue.self, from: Data(contentsOf: URL(fileURLWithPath: manifest)))
             let graph = try compilerGraph(root: root, executable: URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL)
             let surface = try surfaceProblems(api, graph)
             var problems = surface.problems
-            do { problems += try await valueProblems(api, path: native) } catch { problems.append("native value proof failed: \(error)") }
+            if let native {
+                do { problems += try await valueProblems(api, path: native) } catch { problems.append("native value proof failed: \(error)") }
+            } else {
+                print("SKIP native value proof and self-test: OTC_CORE_NATIVE_JSON is not set (it names the private small Otaru/NOAA/no_constants fixture)")
+            }
             for problem in problems { print("PROBLEM " + problem) }
             print("API manifest check (suite \(api["suite_version"].string ?? "unknown")): \(surface.names) applicable canonical public names; \(surface.rows) native member rows; \(problems.count) problems")
             if !problems.isEmpty { exit(1) }
-            if !CommandLine.arguments.contains("--no-self-test") { try selfTest(root: root, manifest: manifest, native: native) }
+            if let native, !CommandLine.arguments.contains("--no-self-test") { try selfTest(root: root, manifest: manifest, native: native) }
         } catch { print("PROBLEM \(error)"); exit(1) }
     }
 }
