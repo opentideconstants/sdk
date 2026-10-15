@@ -1084,7 +1084,10 @@ class OpenTideConstants:
                 doc = json.loads(body.decode("utf-8"))
             except (ValueError, UnicodeDecodeError) as e:
                 raise InvalidReleaseError("cached OTC_index.json: not JSON") from e
-            return tuple(self._index_infos(doc, self._url("OTC_index.json")))
+            infos = tuple(self._index_infos(doc, self._url("OTC_index.json")))
+            for i in infos:
+                self._note_entry(i)
+            return infos
         try:
             infos = tuple(self._fetch_index())
         except NetworkError as e:
@@ -1096,7 +1099,10 @@ class OpenTideConstants:
             except (ValueError, UnicodeDecodeError):
                 raise e from None
             self._log.warning("network error (%s); using the cached release index", e)
-            return tuple(self._index_infos(doc, self._url("OTC_index.json")))
+            infos = tuple(self._index_infos(doc, self._url("OTC_index.json")))
+            for i in infos:
+                self._note_entry(i)
+            return infos
         for i in infos:
             self._note_entry(i)
         return infos

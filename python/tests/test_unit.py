@@ -567,6 +567,60 @@ class ReceiptAcquisitionTest(unittest.TestCase):
         doc = self._check_receipt("public-doi-note")
         self.assertEqual(doc["zenodo_version_doi"], "10.5072/zenodo.2")
 
+    def test_cached_catalog_observes_doi_offline_and_after_network_failure(self):
+        failure_server = _Server(script={"/OTC_index.json": (503, {}, b"")})
+        self.addCleanup(failure_server.close)
+        for scenario in ("offline", "fallback", "fallback-busy"):
+            with self.subTest(cell=scenario), tempfile.TemporaryDirectory() as directory:
+                self.cache = Path(directory) / "cache"
+                self._open("eager").close()
+                path = self._receipt()
+                marker = json.loads(path.read_bytes())
+                marker.update(zenodo_version_doi="10.5072/zenodo.old", by="original-source-writer",
+                              verified_at="2026-10-14T00:00:00Z", unknown_receipt={"preserve": [True, None]})
+                for row in marker["files"].values():
+                    row["sha256"] = row["sha256"].upper()
+                    row["unknown_row"] = {"retain": True}
+                path.write_bytes(encode_cache_json(marker))
+                source = {name: (path.parent / name).read_bytes() for name in marker["files"]}
+                index = json.loads((GOOD / "OTC_index.json").read_bytes())
+                for row in index["releases"]:
+                    if row["datestamp"] == "20991231.2":
+                        row["zenodo_version_doi"] = "10.5072/zenodo.changed"
+                pointer = self.cache / "v1" / "pointer" / "OTC_index.json"
+                pointer.parent.mkdir(parents=True, exist_ok=True)
+                pointer.write_bytes(json.dumps(index).encode())
+                with otc.OpenTideConstants(release="20991231.2", mode="eager", cache_dir=str(self.cache),
+                                          base_url=failure_server.url, offline=scenario == "offline",
+                                          on_network_error="use_cache") as client:
+                    held = client.release
+                    raw = client.require_station("OTC-T-0001").raw
+                    self.assertEqual(held.zenodo_version_doi, "10.5072/zenodo.old")
+                    owner_bytes = None
+                    if scenario == "fallback-busy":
+                        lock = path.parent / ".lock"
+                        lock.mkdir()
+                        owner_bytes = json.dumps({"pid": os.getpid(), "started_at": time.strftime(
+                            "%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "token": "other-owner"}).encode()
+                        (lock / "owner.json").write_bytes(owner_bytes)
+                    before_bytes = path.read_bytes()
+                    catalog = client.releases()
+                    after = json.loads(path.read_bytes())
+                    print("NATIVE_CACHED_CATALOG", scenario, json.dumps({"session": held.zenodo_version_doi,
+                          "receipt": after["zenodo_version_doi"]}), flush=True)
+                    self.assertEqual(catalog[0].zenodo_version_doi, "10.5072/zenodo.changed")
+                    self.assertEqual(client.require_station("OTC-T-0001").raw, raw)
+                    self.assertEqual({name: (path.parent / name).read_bytes() for name in source}, source)
+                    expected = copy.deepcopy(marker)
+                    if owner_bytes is None:
+                        expected["zenodo_version_doi"] = "10.5072/zenodo.changed"
+                    else:
+                        self.assertEqual(path.read_bytes(), before_bytes)
+                        self.assertEqual((path.parent / ".lock" / "owner.json").read_bytes(), owner_bytes)
+                    self.assertEqual(after, expected)
+                    self.assertEqual(held.zenodo_version_doi, "10.5072/zenodo.changed")
+
+
     def test_public_doi_note_preserves_raw_receipt_fields(self):
         cases = (("json-upper", "eager", ".json", False),
                  ("jsonl-upper", "stream", ".jsonl", False),
