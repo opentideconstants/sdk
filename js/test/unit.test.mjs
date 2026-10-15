@@ -535,31 +535,46 @@ test("T81: a null or missing digest excludes a cached file without removing its 
     }
 });
 
-test("T81: verifyOnOpen authenticates receipt-only cached payloads without a checksum sidecar", async () => {
+test("T81: verifyOnOpen authenticates receipt-only cached payloads without a checksum sidecar", async (t) => {
     for (const [mode, suffixes] of [["eager", ["json"]], ["eager", ["jsonl", "meta.json"]], ["stream", ["jsonl", "meta.json"]]]) {
-        const root = tmpdir();
-        const directory = path.join(root, "v1", "releases", "20991231.2");
-        let client;
-        try {
-            fs.mkdirSync(directory, { recursive: true });
-            const files = Object.fromEntries(suffixes.map(suffix => {
-                const name = `OTC_20991231.2.${suffix}`;
-                const bytes = fs.readFileSync(path.join(GOOD, name));
-                fs.writeFileSync(path.join(directory, name), bytes);
-                return [name, { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), url: null }];
-            }));
-            const marker = JSON.stringify({ files, datestamp: "20991231.2", format_version: "1.0", min_reader_version: "0.1" });
-            fs.writeFileSync(path.join(directory, ".verified"), marker);
-            client = await otc.OpenTideConstants.open({ release: "20991231.2", cacheDir: root, mode, offline: true, verifyOnOpen: true });
-            assert.deepEqual(client.requireStation("OTC-T-0001").raw,
-                JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_20991231.2.json"))).stations[0]);
-            assert.equal(fs.readFileSync(path.join(directory, ".verified"), "utf8"), marker);
-            for (const name of Object.keys(files)) assert.ok(fs.existsSync(path.join(directory, name)));
-            await assert.rejects(client.verify(), isCode("checksum_mismatch"));
-        } finally {
-            client?.close();
-            fs.rmSync(root, { recursive: true, force: true });
-        }
+        await t.test(`${mode}/${suffixes[0]}`, async () => {
+            const root = tmpdir();
+            const directory = path.join(root, "v1", "releases", "20991231.2");
+            let client;
+            try {
+                fs.mkdirSync(directory, { recursive: true });
+                const files = Object.fromEntries(suffixes.map(suffix => {
+                    const name = `OTC_20991231.2.${suffix}`;
+                    const bytes = fs.readFileSync(path.join(GOOD, name));
+                    fs.writeFileSync(path.join(directory, name), bytes);
+                    return [name, { size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex"), url: null }];
+                }));
+                const marker = JSON.stringify({ files, datestamp: "20991231.2", format_version: "1.0", min_reader_version: "0.1" });
+                fs.writeFileSync(path.join(directory, ".verified"), marker);
+                const options = { release: "20991231.2", cacheDir: root, mode, offline: true, verifyOnOpen: true };
+                client = await otc.OpenTideConstants.open(options);
+                assert.deepEqual(client.requireStation("OTC-T-0001").raw,
+                    JSON.parse(fs.readFileSync(path.join(GOOD, "OTC_20991231.2.json"))).stations[0]);
+                assert.equal(fs.readFileSync(path.join(directory, ".verified"), "utf8"), marker);
+                for (const name of Object.keys(files)) assert.ok(fs.existsSync(path.join(directory, name)));
+                await assert.rejects(client.verify(), isCode("checksum_mismatch"));
+                client.close();
+                client = null;
+
+                const payload = path.join(directory, `OTC_20991231.2.${suffixes[0]}`);
+                const original = fs.readFileSync(payload);
+                const tampered = Buffer.from(original.toString("utf8").replace("San Francisco", "Bad Francisco"));
+                assert.notDeepEqual(tampered, original);
+                assert.equal(tampered.length, original.length, "size checks must not detect this tamper");
+                fs.writeFileSync(payload, tampered);
+                assert.equal(fs.readFileSync(path.join(directory, ".verified"), "utf8"), marker);
+                assert.equal(fs.existsSync(path.join(directory, "OTC_20991231.2.sha256")), false);
+                await assert.rejects(async () => { client = await otc.OpenTideConstants.open(options); }, isCode("checksum_mismatch"));
+            } finally {
+                client?.close();
+                fs.rmSync(root, { recursive: true, force: true });
+            }
+        });
     }
 });
 
