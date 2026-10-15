@@ -24,6 +24,11 @@ class OpenTideConstants
         # A stale lock that cannot be removed this many times is a cache error (CR D3).
         LOCK_REMOVE_ATTEMPTS = 3
 
+        # Windows: a release blocked by a waiter reading owner.json tries again
+        # this many times (an open file cannot be deleted there).
+        RELEASE_ATTEMPTS = 20
+        RELEASE_RETRY_S = 0.05
+
         attr_reader :root
 
         def self.encode_cache_json(cache_document)
@@ -517,12 +522,21 @@ class OpenTideConstants
                     return
                 end
             end
+            attempt = 0
             begin
-                File.delete(owner_path)
-            rescue Errno::ENOENT
-                nil
+                begin
+                    File.delete(owner_path)
+                rescue Errno::ENOENT
+                    nil
+                end
+                Dir.rmdir(lock)
+            rescue Errno::EACCES
+                # On Windows a waiter reading owner.json blocks the delete: try again, bounded.
+                attempt += 1
+                raise if !Gem.win_platform? || attempt >= RELEASE_ATTEMPTS
+                sleep(RELEASE_RETRY_S)
+                retry
             end
-            Dir.rmdir(lock)
         rescue SystemCallError => e
             log(:warn, "cannot release the lock #{lock}: #{e.message}")
         end
