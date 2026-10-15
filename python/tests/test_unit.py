@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import operator
+import shutil
 import socket
 import struct
 import subprocess
@@ -1122,12 +1123,15 @@ class StreamIndexTest(unittest.TestCase):
         return otc.OpenTideConstants(cache_dir=str(self.cache), offline=True, mode="stream")
 
     def ruby_index(self, profile="current"):
+        ruby = os.environ.get("OTC_NATIVE_RUBY", "ruby")
+        if shutil.which(ruby) is None:
+            self.skipTest(f"{ruby} is not installed: the cross-SDK index cases need the Ruby SDK to write the index")
         self.index.unlink(missing_ok=True)
         writer = """client = OpenTideConstants.new(release: '20991231.2', cache_dir: ARGV.fetch(0),
                                     offline: true, mode: 'stream')
 client.close
 """
-        result = subprocess.run([os.environ.get("OTC_NATIVE_RUBY", "ruby"), "-I", str(ROOT / "ruby" / "lib"),
+        result = subprocess.run([ruby, "-I", str(ROOT / "ruby" / "lib"),
                                  "-ropentideconstants", "-e", writer, str(self.cache)],
                                 capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
