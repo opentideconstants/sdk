@@ -1043,7 +1043,8 @@ extension DatumLevel: APINativeValue {
             "control_source_id": try CheckAPI.native(self.controlSourceId),
             "uncertainty_m": try CheckAPI.native(self.uncertaintyM),
             "uncertainty_basis": try CheckAPI.native(self.uncertaintyBasis),
-            "flags": try CheckAPI.native(self.flags)
+            "flags": try CheckAPI.native(self.flags),
+            "fallback": try CheckAPI.native(self.fallback)
         ])
     }
 }
