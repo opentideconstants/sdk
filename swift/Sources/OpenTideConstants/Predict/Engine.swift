@@ -317,7 +317,7 @@ internal extension Predict {
         let chart = raw["chart_datum"].string.flatMap { named[$0]?.number }
         let levels = named.keys.sorted().map { key in
             let b = basis[key], control = b["control"], value = named[key]!.number!
-            return DatumLevel(key: key, valueM: value, aboveChartM: chart.map { value - $0 }, kind: b["kind"].string, method: b["method"].string, sourceName: b["source_name"].string, epoch: b["epoch"], dataSpan: b["data_span"], controlStationId: control["station_id"].string, controlSetId: control["set_id"].string, controlSourceId: control["source_id"].string, uncertaintyM: b["uncertainty_m"].number, uncertaintyBasis: b["uncertainty_basis"].string, flags: b["flags"].array.compactMap(\.string))
+            return DatumLevel(key: key, valueM: value, aboveChartM: chart.map { value - $0 }, kind: b["kind"].string, method: b["method"].string, sourceName: b["source_name"].string, epoch: b["epoch"], dataSpan: b["data_span"], controlStationId: control["station_id"].string, controlSetId: control["set_id"].string, controlSourceId: control["source_id"].string, uncertaintyM: b["uncertainty_m"].number, uncertaintyBasis: b["uncertainty_basis"].string, flags: b["flags"].array.compactMap(\.string), fallback: b["fallback"].isNull ? nil : b["fallback"])
         }
         return DatumInfo(setId: setId, zero: raw["zero"].string, zeroName: raw["zero_name"].string, chartDatum: raw["chart_datum"].string, mslOffsetM: raw["msl_offset_m"].number, levels: levels)
     }

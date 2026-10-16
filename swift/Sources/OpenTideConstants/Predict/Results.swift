@@ -297,6 +297,24 @@ public struct DatumLevel: Sendable, Equatable {
     public let uncertaintyM: Double?
     public let uncertaintyBasis: String?
     public let flags: [String]
+    public let fallback: JSONValue?
+    public init(key: String?, valueM: Double, aboveChartM: Double?, kind: String?, method: String?, sourceName: String?, epoch: JSONValue, dataSpan: JSONValue, controlStationId: String?, controlSetId: String?, controlSourceId: String?, uncertaintyM: Double?, uncertaintyBasis: String?, flags: [String], fallback: JSONValue? = nil) {
+        self.key = key
+        self.valueM = valueM
+        self.aboveChartM = aboveChartM
+        self.kind = kind
+        self.method = method
+        self.sourceName = sourceName
+        self.epoch = epoch
+        self.dataSpan = dataSpan
+        self.controlStationId = controlStationId
+        self.controlSetId = controlSetId
+        self.controlSourceId = controlSourceId
+        self.uncertaintyM = uncertaintyM
+        self.uncertaintyBasis = uncertaintyBasis
+        self.flags = flags
+        self.fallback = fallback
+    }
 }
 public struct DatumInfo: Sendable, Equatable {
     public let setId: String?
