@@ -206,8 +206,8 @@ class OpenTideConstants
         end
     end
     class DatumLevel
-        attr_reader :key, :value_m, :above_chart_m, :kind, :method, :source_name, :epoch, :data_span, :control_station_id, :control_set_id, :control_source_id, :uncertainty_m, :uncertainty_basis, :flags
-        def initialize(key: nil, value_m: nil, above_chart_m: nil, kind: nil, method: nil, source_name: nil, epoch: nil, data_span: nil, control_station_id: nil, control_set_id: nil, control_source_id: nil, uncertainty_m: nil, uncertainty_basis: nil, flags: [], _local: nil)
+        attr_reader :key, :value_m, :above_chart_m, :kind, :method, :source_name, :epoch, :data_span, :control_station_id, :control_set_id, :control_source_id, :uncertainty_m, :uncertainty_basis, :flags, :fallback
+        def initialize(key: nil, value_m: nil, above_chart_m: nil, kind: nil, method: nil, source_name: nil, epoch: nil, data_span: nil, control_station_id: nil, control_set_id: nil, control_source_id: nil, uncertainty_m: nil, uncertainty_basis: nil, flags: [], fallback: nil, _local: nil)
             @key = Util.deep_freeze(key)
             @value_m = Util.deep_freeze(value_m)
             @above_chart_m = Util.deep_freeze(above_chart_m)
@@ -222,6 +222,7 @@ class OpenTideConstants
             @uncertainty_m = Util.deep_freeze(uncertainty_m)
             @uncertainty_basis = Util.deep_freeze(uncertainty_basis)
             @flags = Util.deep_freeze(flags)
+            @fallback = fallback.nil? ? nil : Util.deep_freeze(JSON.parse(JSON.generate(fallback)))
             @_local = _local
             freeze
         end

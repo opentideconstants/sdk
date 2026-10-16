@@ -5,6 +5,67 @@ class PredictNativeTest < Minitest::Test
     def native_client
         OpenTideConstants.new(file: fixture("predict", "OTC_20991231.7.json"))
     end
+    def datum_fallback
+        {
+            "reason" => "datum_gate_failed",
+            "basis" => "Computed candidate pending acceptance",
+            "otc_finding" => "Datum gate is not established",
+            "extension" => { "diagnostics" => ["retained", { "accepted" => false }] }
+        }
+    end
+    def datum_fallback_client
+        document = JSON.parse(File.read(fixture("predict", "OTC_20991231.7.json")))
+        yield document
+        path = File.join(tmpdir, "OTC_20991231.7.json")
+        File.write(path, JSON.generate(document))
+        OpenTideConstants.new(file: path)
+    end
+    def test_datums_preserves_complete_per_level_fallback_on_selected_default_and_all_sets
+        c = datum_fallback_client do |document|
+            station_in(document, "OTC-P-0001")["constant_sets"].first["datum"]["basis"]["otc_lat"]["fallback"] = datum_fallback
+        end
+        infos = [c.datums("OTC-P-0001"), c.datums("OTC-P-0001", set_id: "OTC-P-0001/noaa"),
+                 c.datums("OTC-P-0001", all_sets: true).find { |info| info.set_id == "OTC-P-0001/noaa" }]
+        infos.each do |info|
+            computed = info.levels.find { |level| level.key == "otc_lat" }
+            assert_respond_to computed, :fallback
+            assert_equal datum_fallback, computed.fallback
+            assert_equal(-0.41, computed.value_m)
+            assert_equal "computed", computed.kind
+            assert_nil info.levels.find { |level| level.key == "lat" }.fallback
+            assert_raises(FrozenError) { computed.fallback["extension"]["diagnostics"][1]["accepted"] = true }
+        end
+        assert_empty c.datums("OTC-P-0001", set_id: "OTC-P-0001/gesla-fit").levels
+    ensure
+        c&.close
+    end
+    def test_datums_preserves_subordinate_fallback
+        c = datum_fallback_client do |document|
+            datum = station_in(document, "OTC-P-0061")["subordinate_offsets"]["datum"]
+            datum["named"]["otc_lat"] = -0.5
+            datum["basis"]["otc_lat"] = { "kind" => "computed", "method" => "harmonic_extremes", "fallback" => datum_fallback }
+        end
+        info = c.datums("OTC-P-0061")
+        assert_nil info.set_id
+        assert_respond_to info.levels.find { |level| level.key == "otc_lat" }, :fallback
+        assert_equal datum_fallback, info.levels.find { |level| level.key == "otc_lat" }.fallback
+        assert_nil info.levels.find { |level| level.key == "mllw" }.fallback
+    ensure
+        c&.close
+    end
+    def test_datum_level_fallback_is_optional_and_an_independent_deeply_frozen_copy
+        assert_respond_to OpenTideConstants::DatumLevel.new(key: "lat"), :fallback
+        assert_nil OpenTideConstants::DatumLevel.new(key: "lat").fallback
+        input = datum_fallback
+        expected = datum_fallback
+        level = OpenTideConstants::DatumLevel.new(key: "otc_lat", fallback: input)
+        refute input.frozen?
+        input["extension"]["diagnostics"][0].replace("changed")
+        input["basis"].replace("changed")
+        assert_equal expected, level.fallback
+        assert_raises(FrozenError) { level.fallback["basis"].replace("changed") }
+        assert_raises(FrozenError) { level.fallback["extension"]["diagnostics"] << "changed" }
+    end
     def test_native_time_rounding_immutability_and_metadata
         c = native_client
         t = Time.utc(2010, 3, 1)
