@@ -319,7 +319,9 @@ class Runner
         when Array then value.map { |v| prediction_value(v) }
         when nil, String, Numeric, true, false then value
         else
-            value.instance_variables.reject { |v| v == :@_local }.to_h do |v|
+            value.instance_variables.reject do |v|
+                v == :@_local || (value.is_a?(OpenTideConstants::DatumLevel) && v == :@fallback && value.fallback.nil?)
+            end.to_h do |v|
                 [v.to_s.delete_prefix("@"), prediction_value(value.instance_variable_get(v))]
             end
         end
