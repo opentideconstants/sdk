@@ -1,5 +1,5 @@
 import * as X from '../errors.js';
-import {Station,type Release,type ConstantSet,predictionStation as stationFor,predictionOptions as options,predictionChosen as chosen,predictionAstroTable} from '../release.js';
+import {Station,type Release,type ConstantSet,predictionStation as stationFor,predictionOptions as options,predictionChosen as chosen,predictionAstroTable,requireHistoricalTableCompatibility} from '../release.js';
 import {arr,num,obj,str,isObject,type JsonObject} from '../json.js';
 import {AstroTable,instant,utc,angle} from './astro.js';
 import {Sum,events,unroundedEvents,RAD,type Event} from './harmonic.js';
@@ -86,7 +86,9 @@ function context(release:Release,input:Station|string,quantity:string,setId:stri
             if(historical&&release.historicalOffsetsPolicy==='exclude')throw new X.HistoricalOffsetsExcludedError('historical_offsets_policy=exclude refuses historical prediction');
             const [parent,selected]=reference(release,tideOffsets,quantity);constants=selected;
             if(historical)requireHistoricalOffset(release,tideOffsets,constants,blockedBetter,offsetId!=null);
-            const table=tableFor(release,constants),result=contextFor(station,constants,table);result.reference=parent;result.offsets=tideOffsets;
+            const table=tableFor(release,constants);
+            if(historical)requireHistoricalTableCompatibility(table,constants.convention);
+            const result=contextFor(station,constants,table);result.reference=parent;result.offsets=tideOffsets;
             new Sum(table,objects(constants.raw,'constituents'));
             const referenceTerm=datumTerm(obj(constants.raw,'datum'),'chart',contextFor(parent,constants,table),true),subTerm=subordinateDatum(tideOffsets,datum,result);
             const highTime=num(tideOffsets,'time_offset_high_min')??0,lowTime=num(tideOffsets,'time_offset_low_min')??0,identity=kind==='R'?1:0;

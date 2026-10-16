@@ -57,7 +57,8 @@ internal enum Predict {
     }
     static func historicalReferenceTable(_ release: Release, constants: ConstantSet) throws -> AstroTable {
         let selected = try table(release, constants: constants)
-        guard selected.raw["v0_model"].string == constants.convention.v0Model else {
+        guard selected.raw["v0_model"].string == constants.convention.v0Model,
+              constants.convention.tablesSha256 == nil || selected.raw["tables_sha256"].string == constants.convention.tablesSha256 else {
             throw OpenTideConstantsError.unsupportedConvention("unsupported convention \(constants.convention.conventionId)")
         }
         for constituent in constants.raw["constituents"].array {

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import {createServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
+import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
 import {spawnSync} from 'node:child_process';
@@ -12,6 +13,53 @@ const vectors=JSON.parse(fs.readFileSync(new URL('../../conformance/vectors/1.0/
 let client;
 before(async()=>{assert.ok(process.env.OTC_PREDICT_NATIVE_JSON,'actual pinned vector release required');client=await sdk.OpenTideConstants.open({file:process.env.OTC_PREDICT_NATIVE_JSON});});
 after(()=>client?.close());
+test('native historical reference table model/hash compatibility and validation precedence', {skip:process.env.OTC_HISTORY_BROWSER_JSON?false:'OTC_HISTORY_BROWSER_JSON is not set: actual H4 historical input required'}, async()=>{
+    const original=JSON.parse(fs.readFileSync(process.env.OTC_HISTORY_BROWSER_JSON,'utf8'));
+    const directory=fs.mkdtempSync(path.join(os.tmpdir(),'otc-historical-table-'));
+    const start=new Date('2026-10-11T00:00:00Z'),stop=new Date('2026-10-12T00:00:00Z');
+    let expected;
+    try {
+        for(const mode of ['eager','stream'])for(const fault of ['valid','matching_hash','null_hash','wrong_model','wrong_convention_hash','wrong_table_hash','missing_table','missing_required_row','invalid_table_before_model']) {
+            const document=structuredClone(original),target=document.stations.find(s=>s.subordinate_offsets?.offset_id);
+            const reference=document.stations.find(s=>s.station_id===target.subordinate_offsets.reference_station_id);
+            const constants=reference.constant_sets.find(s=>s.source==='noaa'&&s.quantity==='water_level');
+            const convention=document.conventions.find(c=>c.convention_id===constants.convention_id);
+            const table=document.astro_tables.find(t=>t.astro_table_id===convention.astro_table_id);
+            if(fault==='matching_hash'||fault==='wrong_table_hash')convention.tables_sha256=table.tables_sha256;
+            if(fault==='null_hash')convention.tables_sha256=null;
+            if(fault==='wrong_model'||fault==='invalid_table_before_model')table.v0_model='private-unsupported-model';
+            if(fault==='wrong_convention_hash')convention.tables_sha256='0'.repeat(64);
+            if(fault==='wrong_table_hash')table.tables_sha256='0'.repeat(64);
+            if(fault==='missing_table')document.astro_tables=document.astro_tables.filter(t=>t!==table);
+            if(fault==='missing_required_row')delete table.constituents[constants.constituents[0].name];
+            if(fault==='invalid_table_before_model')table.constituents[constants.constituents[0].name].f=[];
+            const file=path.join(directory,`OTC_20261011.${mode==='eager'?'json':'jsonl'}`);
+            if(mode==='eager')fs.writeFileSync(file,JSON.stringify(document));
+            else {
+                const stations=document.stations;delete document.stations;
+                fs.writeFileSync(file,stations.map(s=>JSON.stringify(s)+'\n').join(''));
+                fs.writeFileSync(path.join(directory,'OTC_20261011.meta.json'),JSON.stringify(document));
+            }
+            const opened=await sdk.OpenTideConstants.open({file,mode});
+            try {
+                assert.ok(opened.station(target.station_id),'raw station remains accessible');
+                const admitted=['valid','matching_hash','null_hash'].includes(fault);
+                assert.equal(opened.stations().some(s=>s.station_id===target.station_id),admitted,`${mode} ${fault} discovery`);
+                for(const options of [{start,stop,datum:'chart'},{start,stop,datum:'chart',offsetId:target.subordinate_offsets.offset_id}]) {
+                    if(admitted) {
+                        const result=await opened.extremes(target.station_id,options);
+                        assert.equal(result.historical_offsets,true);assert.equal(result.items.length,4);
+                        expected??=result.items;
+                        assert.deepEqual(result.items,expected,`${mode} ${fault} exact events`);
+                    } else {
+                        const code={missing_table:'no_astro_table',missing_required_row:'unsupported_constituent',invalid_table_before_model:'invalid_argument'}[fault]??'unsupported_convention';
+                        await assert.rejects(opened.extremes(target.station_id,options),e=>e.code===code,`${mode} ${fault} prediction`);
+                    }
+                }
+            } finally {opened.close();}
+        }
+    } finally {fs.rmSync(directory,{recursive:true,force:true});}
+});
 test('native reader defers heavy engine until first actual prediction',()=>{
     const root=fileURLToPath(new URL('../..',import.meta.url));
     const trace=messages=>spawnSync(process.execPath,['conformance/runners/node/runner.mjs'],{
