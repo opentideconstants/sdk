@@ -419,7 +419,8 @@ def _datum_info(set_id, d):
         levels.append(DatumLevel(key, named[key], None if chart is None else named[key] - chart,
                                 b.get('kind'), b.get('method'), b.get('source_name'), freeze(b.get('epoch')),
                                 freeze(b.get('data_span')), control.get('station_id'), control.get('set_id'), control.get('source_id'),
-                                b.get('uncertainty_m'), b.get('uncertainty_basis'), tuple(b.get('flags') or ())))
+                                b.get('uncertainty_m'), b.get('uncertainty_basis'), tuple(b.get('flags') or ()),
+                                fallback=b.get('fallback')))
     return DatumInfo(set_id, d.get('zero'), d.get('zero_name'), d.get('chart_datum'), d.get('msl_offset_m'), tuple(levels))
 
 

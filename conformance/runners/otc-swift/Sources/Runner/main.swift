@@ -52,7 +52,13 @@ private enum HeldPrediction {
         if let value = value as? any RawRepresentable, let raw = value.rawValue as? String { return .string(raw) }
         if mirror.displayStyle == .collection { return .array(mirror.children.map { plain($0.value) }) }
         var result: [String: JSONValue] = [:]
-        for child in mirror.children { if let label = child.label { result[snake(label)] = plain(child.value) } }
+        for child in mirror.children {
+            if let label = child.label {
+                let field = plain(child.value)
+                if value is DatumLevel && label == "fallback" && field.isNull { continue }
+                result[snake(label)] = field
+            }
+        }
         return .object(result)
     }
     static func prediction(_ value: Any) -> JSONValue {

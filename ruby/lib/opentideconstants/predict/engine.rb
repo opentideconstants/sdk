@@ -228,7 +228,7 @@ class OpenTideConstants
             levels = named.keys.sort.map do |key|
                 b = basis[key] || {}
                 control = b["control"] || {}
-                DatumLevel.new(key: key, value_m: named[key], above_chart_m: chart.nil? ? nil : named[key] - chart, kind: b["kind"], method: b["method"], source_name: b["source_name"], epoch: b["epoch"], data_span: b["data_span"], control_station_id: control["station_id"], control_set_id: control["set_id"], control_source_id: control["source_id"], uncertainty_m: b["uncertainty_m"], uncertainty_basis: b["uncertainty_basis"], flags: b["flags"] || [])
+                DatumLevel.new(key: key, value_m: named[key], above_chart_m: chart.nil? ? nil : named[key] - chart, kind: b["kind"], method: b["method"], source_name: b["source_name"], epoch: b["epoch"], data_span: b["data_span"], control_station_id: control["station_id"], control_set_id: control["set_id"], control_source_id: control["source_id"], uncertainty_m: b["uncertainty_m"], uncertainty_basis: b["uncertainty_basis"], flags: b["flags"] || [], fallback: b["fallback"])
             end
             DatumInfo.new(set_id: set_id, zero: d["zero"], zero_name: d["zero_name"], chart_datum: d["chart_datum"], msl_offset_m: d["msl_offset_m"], levels: levels)
         end

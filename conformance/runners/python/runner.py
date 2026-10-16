@@ -192,7 +192,8 @@ def enc_prediction(result):
 def enc_datums(info):
     from dataclasses import fields
     encoded = {f.name: plain(getattr(info, f.name)) for f in fields(info) if f.name != 'levels'}
-    encoded['levels'] = [pick(level, [f.name for f in fields(level)]) for level in info.levels]
+    encoded['levels'] = [pick(level, [f.name for f in fields(level)
+                                    if f.name != 'fallback' or level.fallback is not None]) for level in info.levels]
     return encoded
 
 # --------------------------------------------------------------------------- ops

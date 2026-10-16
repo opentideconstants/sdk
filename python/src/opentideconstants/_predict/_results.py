@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime
-from typing import Any
+from typing import Any, Mapping
 from .._enums import ExtremeType, CurrentEventType, PredictionMethod
 from .._errors import UnknownTimeZoneError, LocalTimeUnavailableError
 
@@ -186,6 +186,7 @@ class DatumLevel:
     uncertainty_m: float | None
     uncertainty_basis: str | None
     flags: tuple[str, ...]
+    fallback: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

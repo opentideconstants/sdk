@@ -6576,6 +6576,24 @@
      "swift_declarations": [
       "let flags: [String]"
      ]
+    },
+    {
+     "name": "fallback",
+     "kind": "field",
+     "type": "object",
+     "nullable": true,
+     "languages": [
+      "python",
+      "ruby",
+      "typescript",
+      "swift"
+     ],
+     "note": "Complete per-level basis fallback metadata; null when absent.",
+     "swift": "fallback",
+     "swift_returns": "JSONValue?",
+     "swift_declarations": [
+      "let fallback: JSONValue?"
+     ]
     }
    ],
    "swift": "DatumLevel"

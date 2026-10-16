@@ -221,7 +221,7 @@ function encPrediction(result) {
 function encDatum(info) {
     if(info===null)return null;
     if(Array.isArray(info))return info.map(encDatum);
-    return {...pick(info,['set_id','zero','zero_name','chart_datum','msl_offset_m']),levels:info.levels.map(l=>pick(l,['key','value_m','above_chart_m','kind','method','source_name','epoch','data_span','control_station_id','control_set_id','control_source_id','uncertainty_m','uncertainty_basis','flags']))};
+    return {...pick(info,['set_id','zero','zero_name','chart_datum','msl_offset_m']),levels:info.levels.map(l=>pick(l,['key','value_m','above_chart_m','kind','method','source_name','epoch','data_span','control_station_id','control_set_id','control_source_id','uncertainty_m','uncertainty_basis','flags',...(l.fallback == null ? [] : ['fallback'])]))};
 }
 async function prediction(op,a,msg) {
     const t=target(msg),station=t.station(a.station_id);
