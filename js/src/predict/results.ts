@@ -302,6 +302,7 @@ export class DatumLevel {
     readonly uncertainty_m: number | null;
     readonly uncertainty_basis: string | null;
     readonly flags: readonly string[];
+    readonly fallback?: JsonObject | null;
     constructor(fields: DatumLevel) {
         this.key = fields.key;
         this.value_m = fields.value_m;
@@ -317,6 +318,7 @@ export class DatumLevel {
         this.uncertainty_m = fields.uncertainty_m;
         this.uncertainty_basis = fields.uncertainty_basis;
         this.flags = deepFreeze(fields.flags);
+        this.fallback = deepFreeze(fields.fallback ?? null);
         Object.freeze(this);
     }
 }
