@@ -857,6 +857,8 @@ extension Stats: APINativeValue {
 extension HeightPoint: APINativeValue {
     fileprivate func apiValue() throws -> JSONValue {
         .object([
+            "units": try CheckAPI.native(self.units),
+            "height": try CheckAPI.native(self.height),
             "time": try CheckAPI.native(self.time),
             "height_m": try CheckAPI.native(self.heightM),
             "local_time": try CheckAPI.native(self.localTime),
@@ -867,6 +869,8 @@ extension HeightPoint: APINativeValue {
 extension Extreme: APINativeValue {
     fileprivate func apiValue() throws -> JSONValue {
         .object([
+            "units": try CheckAPI.native(self.units),
+            "height": try CheckAPI.native(self.height),
             "time": try CheckAPI.native(self.time),
             "type": try CheckAPI.native(self.type),
             "height_m": try CheckAPI.native(self.heightM),
@@ -878,6 +882,10 @@ extension Extreme: APINativeValue {
 extension CurrentPoint: APINativeValue {
     fileprivate func apiValue() throws -> JSONValue {
         .object([
+            "units": try CheckAPI.native(self.units),
+            "velocity_major": try CheckAPI.native(self.velocityMajor),
+            "velocity_minor": try CheckAPI.native(self.velocityMinor),
+            "speed": try CheckAPI.native(self.speed),
             "time": try CheckAPI.native(self.time),
             "velocity_major_ms": try CheckAPI.native(self.velocityMajorMs),
             "velocity_minor_ms": try CheckAPI.native(self.velocityMinorMs),
@@ -891,6 +899,8 @@ extension CurrentPoint: APINativeValue {
 extension CurrentEvent: APINativeValue {
     fileprivate func apiValue() throws -> JSONValue {
         .object([
+            "units": try CheckAPI.native(self.units),
+            "velocity": try CheckAPI.native(self.velocity),
             "time": try CheckAPI.native(self.time),
             "type": try CheckAPI.native(self.type),
             "velocity_ms": try CheckAPI.native(self.velocityMs),
@@ -903,6 +913,7 @@ extension CurrentEvent: APINativeValue {
 extension HeightSeries: APINativeValue {
     fileprivate func apiValue() throws -> JSONValue {
         .object([
+            "units": try CheckAPI.native(self.units),
             "items": try CheckAPI.native(self.items),
             "station_id": try CheckAPI.native(self.stationId),
             "timezone": try CheckAPI.native(self.timezone),
@@ -936,6 +947,7 @@ extension HeightSeries: APINativeValue {
 extension ExtremeList: APINativeValue {
     fileprivate func apiValue() throws -> JSONValue {
         .object([
+            "units": try CheckAPI.native(self.units),
             "items": try CheckAPI.native(self.items),
             "station_id": try CheckAPI.native(self.stationId),
             "timezone": try CheckAPI.native(self.timezone),
@@ -969,6 +981,7 @@ extension ExtremeList: APINativeValue {
 extension CurrentSeries: APINativeValue {
     fileprivate func apiValue() throws -> JSONValue {
         .object([
+            "units": try CheckAPI.native(self.units),
             "items": try CheckAPI.native(self.items),
             "station_id": try CheckAPI.native(self.stationId),
             "timezone": try CheckAPI.native(self.timezone),
@@ -993,6 +1006,7 @@ extension CurrentSeries: APINativeValue {
 extension CurrentEventList: APINativeValue {
     fileprivate func apiValue() throws -> JSONValue {
         .object([
+            "units": try CheckAPI.native(self.units),
             "items": try CheckAPI.native(self.items),
             "station_id": try CheckAPI.native(self.stationId),
             "timezone": try CheckAPI.native(self.timezone),
