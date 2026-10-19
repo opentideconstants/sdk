@@ -91,7 +91,9 @@ jobs:
   # The C SDK is paused, and its own workflow (c.yml) builds and tests it. The
   # cross-SDK cases here run Python, Ruby and TypeScript without building C.
   cross:
-    name: ${{ matrix.os }}
+    env:
+      RUBY_YJIT_ENABLE: "1"
+    name: ${{ matrix.os }}${{ matrix.os == 'windows-2022' && ' / Ruby 3.3 non-YJIT compatibility' || '' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     strategy:
@@ -105,6 +107,15 @@ jobs:
         with: { python-version: "3.12" }
       - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with: { ruby-version: "3.3" }
+      - name: Report selected Ruby and actual YJIT state
+        run: |
+          ruby -rjson -e 'puts JSON.generate({ruby: RUBY_DESCRIPTION, yjit: !!(defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?), requested: ENV["RUBY_YJIT_ENABLE"]})'
+      - name: Require YJIT on Linux and macOS
+        if: runner.os != 'Windows'
+        run: ruby -e 'abort "YJIT must run in this qualification child" unless defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?'
+      - name: Report Windows non-YJIT compatibility
+        if: runner.os == 'Windows'
+        run: ruby -e 'puts "YJIT unsupported on Windows; running Ruby 3.3 non-YJIT compatibility qualification."'
       # The Ruby runner claims localtime only when tzinfo can load zone data; Windows has no
       # system zone files, so it also needs tzinfo-data there.
       - name: Zone data for the Ruby runner
@@ -147,6 +158,8 @@ jobs:
   # The accepted Swift source requires Apple Security and SwiftPM 6.4.
   # This separate hosted gate qualifies macOS 26; it does not claim Linux/iOS support.
   swift-cross:
+    env:
+      RUBY_YJIT_ENABLE: "1"
     name: macOS 26 / Swift 6.4.0 / four SDKs
     runs-on: macos-26
     timeout-minutes: 90
@@ -157,6 +170,12 @@ jobs:
         with: { python-version: "3.12" }
       - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
         with: { ruby-version: "3.3" }
+      - name: Report selected Ruby and actual YJIT state
+        run: |
+          ruby -rjson -e 'puts JSON.generate({ruby: RUBY_DESCRIPTION, yjit: !!(defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?), requested: ENV["RUBY_YJIT_ENABLE"]})'
+      - name: Require YJIT on Linux and macOS
+        if: runner.os != 'Windows'
+        run: ruby -e 'abort "YJIT must run in this qualification child" unless defined?(RubyVM::YJIT) && RubyVM::YJIT.enabled?'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "24"
