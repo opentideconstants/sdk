@@ -75,7 +75,13 @@ internal enum Predict {
             context.datumName = requested
             return 0.0
         }
-        guard let msl = raw["msl_offset_m"].number else { throw unavailable("msl_offset_m") }
+        let msl: Double
+        if raw["zero"].string == "harmonic_mean" && !published {
+            msl = 0.0
+        } else {
+            guard let offset = raw["msl_offset_m"].number else { throw unavailable("msl_offset_m") }
+            msl = offset
+        }
         if requested == "zero" && !published {
             context.datumName = raw["zero_name"].string ?? raw["zero"].string ?? "unknown"
             return msl
