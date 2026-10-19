@@ -93,6 +93,46 @@ class DatumFallbackTest(unittest.TestCase):
             ]
             self.assertIsNone(otc.DatumLevel(*legacy).fallback)
 
+    def test_harmonic_mean_is_explicit_and_keeps_missing_datum_errors(self):
+        original = json.loads(PREDICT.read_text(encoding="utf-8"))
+        times = [dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)]
+        for mode in ("eager", "stream"):
+            for frame in ("harmonic_mean", "gauge_zero", None):
+                document = copy.deepcopy(original)
+                constants = document["stations"][0]["constant_sets"][0]
+                constants["datum"] = {
+                    "named": {"lat": -0.4},
+                    "basis": {"lat": {"kind": "computed"}},
+                }
+                if frame is not None:
+                    constants["datum"]["zero"] = frame
+                with self.subTest(mode=mode, frame=frame), tempfile.TemporaryDirectory() as directory:
+                    with otc.OpenTideConstants(file=write_release(directory, document, mode), mode=mode) as client:
+                        sid = document["stations"][0]["station_id"]
+                        mean = client.heights_at(sid, times, datum="mean_level")
+                        if frame != "harmonic_mean":
+                            for request in ("lat", "zero", "msl", "chart"):
+                                with self.assertRaises(otc.DatumUnavailableError) as caught:
+                                    client.heights_at(sid, times, datum=request)
+                                self.assertEqual(caught.exception.missing, "msl_offset_m")
+                            continue
+                        named = client.heights_at(sid, times, datum="lat")
+                        self.assertAlmostEqual(named.items[0].height_m - mean.items[0].height_m, 0.4)
+                        self.assertIsNone(named.datum_uncertainty_m)
+                        zero = client.heights_at(sid, times, datum="zero")
+                        self.assertEqual(zero.items, mean.items)
+                        self.assertEqual(zero.datum_name, "harmonic_mean")
+                        for request, missing in (("msl", "msl"), ("hat", "hat"), ("chart", "chart_datum")):
+                            with self.assertRaises(otc.DatumUnavailableError) as caught:
+                                client.heights_at(sid, times, datum=request)
+                            self.assertEqual(caught.exception.missing, missing)
+                        with self.assertRaises(otc.DatumUnavailableError) as caught:
+                            client.extremes(
+                                "OTC-P-0035", start=times[0],
+                                stop=times[0] + dt.timedelta(days=1),
+                            )
+                        self.assertEqual(caught.exception.missing, "msl_offset_m")
+
 
 class NativeDatumFallbackProof(unittest.TestCase):
     @unittest.skipUnless(
@@ -228,3 +268,62 @@ class NativeDatumFallbackProof(unittest.TestCase):
             Path(os.environ["OTC_DATUM_FALLBACK_WITNESS"]).write_text(
                 json.dumps(witnesses, indent=2) + "\n"
             )
+
+
+class NativeHarmonicMeanProof(unittest.TestCase):
+    @unittest.skipUnless(
+        os.environ.get("OTC_HARMONIC_MEAN_CONTRACT"), "native harmonic mean contract required"
+    )
+    def test_three_actual_named_datums(self):
+        contract = json.loads(Path(os.environ["OTC_HARMONIC_MEAN_CONTRACT"]).read_text())
+        self.assertEqual(len(contract["cases"]), 3)
+        baseline_path = os.environ.get("OTC_HARMONIC_MEAN_BASELINE")
+        baseline = json.loads(Path(baseline_path).read_text()) if baseline_path else []
+        witnesses, failures = [], []
+        times = [dt.datetime(2026, 10, 11, hour, tzinfo=dt.timezone.utc) for hour in (0, 6, 12)]
+        for mode in ("eager", "stream"):
+            with tempfile.TemporaryDirectory() as directory:
+                path = write_release(directory, contract["release_fixture"], mode, "OTC_20261011")
+                with otc.OpenTideConstants(file=path, mode=mode) as client:
+                    for case in contract["cases"]:
+                        sid, set_id = case["station_id"], case["set_id"]
+                        mean = client.heights_at(sid, times, set_id=set_id, datum="mean_level")
+                        witness = {"mode": mode, "station_id": sid, "set_id": mean.set_id,
+                                   "mean_level_m": [p.height_m for p in mean.items], "named": {}}
+                        if baseline:
+                            old = next(row for row in baseline if row["mode"] == mode and row["station_id"] == sid)
+                            self.assertEqual(witness["mean_level_m"], old["mean_level_m"])
+                        info = client.datums(sid, set_id=set_id)
+                        for key in ("lat", "hat"):
+                            try:
+                                result = client.heights_at(sid, times, set_id=set_id, datum=key)
+                            except otc.DatumUnavailableError as error:
+                                witness["named"][key] = {"error": str(error), "missing": error.missing}
+                                failures.append((mode, sid, key, str(error)))
+                                continue
+                            level = next(level for level in info.levels if level.key == key)
+                            shifts = [p.height_m - m.height_m for p, m in zip(result.items, mean.items)]
+                            for shift in shifts:
+                                self.assertAlmostEqual(shift, -level.value_m, places=10)
+                            self.assertEqual(result.datum_name, key)
+                            self.assertEqual(result.datum_kind, "computed")
+                            self.assertIsNone(result.datum_uncertainty_m)
+                            self.assertEqual(level.fallback["reason"], "datum_gate_failed")
+                            events = client.extremes(sid, start=times[0], stop=times[0] + dt.timedelta(days=1), set_id=set_id, datum=key)
+                            mean_events = client.extremes(sid, start=times[0], stop=times[0] + dt.timedelta(days=1), set_id=set_id, datum="mean_level")
+                            self.assertEqual([(p.time, p.type) for p in events.items], [(p.time, p.type) for p in mean_events.items])
+                            for point, control in zip(events.items, mean_events.items):
+                                self.assertAlmostEqual(point.height_m - control.height_m, -level.value_m, places=10)
+                            witness["named"][key] = {"height_m": [p.height_m for p in result.items], "shift_m": shifts, "event_count": len(events.items)}
+                        if not any("error" in value for value in witness["named"].values()):
+                            zero = client.heights_at(sid, times, set_id=set_id, datum="zero")
+                            self.assertEqual(zero.items, mean.items)
+                            self.assertEqual(zero.datum_name, "harmonic_mean")
+                            self.assertEqual(info.zero, "harmonic_mean")
+                            self.assertIsNone(info.msl_offset_m)
+                            self.assertIsNone(info.zero_name)
+                        witnesses.append(witness)
+                        print(json.dumps(witness, sort_keys=True), flush=True)
+        if os.environ.get("OTC_HARMONIC_MEAN_WITNESS"):
+            Path(os.environ["OTC_HARMONIC_MEAN_WITNESS"]).write_text(json.dumps(witnesses, indent=2) + "\n")
+        self.assertEqual(failures, [], "actual retained TICON named datums unavailable")
