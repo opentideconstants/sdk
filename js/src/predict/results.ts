@@ -1,6 +1,16 @@
 import {deepFreeze,type JsonObject} from '../json.js';
 import type {ExtremeType,CurrentEventType,PredictionMethod} from '../types.js';
 import {localize} from './local.js';
+import {InvalidArgumentError} from '../errors.js';
+
+function heightUnits(units: 'meters' | 'feet' = 'meters'): 'meters' | 'feet' {
+    if(units!=='meters'&&units!=='feet')throw new InvalidArgumentError('height units must be meters or feet');
+    return units;
+}
+function currentUnits(units: 'm/s' | 'knots' = 'm/s'): 'm/s' | 'knots' {
+    if(units!=='m/s'&&units!=='knots')throw new InvalidArgumentError('current units must be m/s or knots');
+    return units;
+}
 
 /** @internal Native Date value with mutators disabled, retaining Date access/serialization. */
 function immutableDate(value: Date): Date {
@@ -10,26 +20,31 @@ function immutableDate(value: Date): Date {
 }
 
 export class HeightPoint {
+    readonly units: 'meters' | 'feet';
     readonly time: Date;
     readonly height_m: number;
     readonly local_time: string | null;
     readonly utc_offset_s: number | null;
-    constructor(fields: HeightPoint) {
+    constructor(fields: Omit<HeightPoint, 'height' | 'units'> & {units?: 'meters' | 'feet'}) {
+        this.units = heightUnits(fields.units);
         this.time = immutableDate(fields.time);
         this.height_m = fields.height_m;
         this.local_time = fields.local_time;
         this.utc_offset_s = fields.utc_offset_s;
         Object.freeze(this);
     }
+    get height(): number { return this.height_m/(this.units==='feet'?0.3048:1); }
 }
 
 export class Extreme {
+    readonly units: 'meters' | 'feet';
     readonly time: Date;
     readonly type: ExtremeType;
     readonly height_m: number;
     readonly local_time: string | null;
     readonly utc_offset_s: number | null;
-    constructor(fields: Extreme) {
+    constructor(fields: Omit<Extreme, 'height' | 'units'> & {units?: 'meters' | 'feet'}) {
+        this.units = heightUnits(fields.units);
         this.time = immutableDate(fields.time);
         this.type = fields.type;
         this.height_m = fields.height_m;
@@ -37,9 +52,11 @@ export class Extreme {
         this.utc_offset_s = fields.utc_offset_s;
         Object.freeze(this);
     }
+    get height(): number { return this.height_m/(this.units==='feet'?0.3048:1); }
 }
 
 export class CurrentPoint {
+    readonly units: 'm/s' | 'knots';
     readonly time: Date;
     readonly velocity_major_ms: number;
     readonly velocity_minor_ms: number;
@@ -47,7 +64,8 @@ export class CurrentPoint {
     readonly direction_deg: number | null;
     readonly local_time: string | null;
     readonly utc_offset_s: number | null;
-    constructor(fields: CurrentPoint) {
+    constructor(fields: Omit<CurrentPoint, 'velocity_major' | 'velocity_minor' | 'speed' | 'units'> & {units?: 'm/s' | 'knots'}) {
+        this.units = currentUnits(fields.units);
         this.time = immutableDate(fields.time);
         this.velocity_major_ms = fields.velocity_major_ms;
         this.velocity_minor_ms = fields.velocity_minor_ms;
@@ -57,16 +75,21 @@ export class CurrentPoint {
         this.utc_offset_s = fields.utc_offset_s;
         Object.freeze(this);
     }
+    get velocity_major(): number { return this.velocity_major_ms/(this.units==='knots'?1852/3600:1); }
+    get velocity_minor(): number { return this.velocity_minor_ms/(this.units==='knots'?1852/3600:1); }
+    get speed(): number { return this.speed_ms/(this.units==='knots'?1852/3600:1); }
 }
 
 export class CurrentEvent {
+    readonly units: 'm/s' | 'knots';
     readonly time: Date;
     readonly type: CurrentEventType;
     readonly velocity_ms: number;
     readonly direction_deg: number | null;
     readonly local_time: string | null;
     readonly utc_offset_s: number | null;
-    constructor(fields: CurrentEvent) {
+    constructor(fields: Omit<CurrentEvent, 'velocity' | 'units'> & {units?: 'm/s' | 'knots'}) {
+        this.units = currentUnits(fields.units);
         this.time = immutableDate(fields.time);
         this.type = fields.type;
         this.velocity_ms = fields.velocity_ms;
@@ -75,9 +98,11 @@ export class CurrentEvent {
         this.utc_offset_s = fields.utc_offset_s;
         Object.freeze(this);
     }
+    get velocity(): number { return this.velocity_ms/(this.units==='knots'?1852/3600:1); }
 }
 
 export class HeightSeries {
+    readonly units: 'meters' | 'feet';
     readonly items: readonly HeightPoint[];
     readonly station_id: string;
     readonly timezone: string | null;
@@ -105,8 +130,9 @@ export class HeightSeries {
     readonly reference_source_version: string | null;
     readonly reference_2020_equivalence: string | null;
     readonly source_note: string | null;
-    constructor(fields: Omit<HeightSeries, 'toLocal'>) {
-        this.items = deepFreeze(fields.items);
+    constructor(fields: Omit<HeightSeries, 'toLocal' | 'units' | 'items'> & {items: readonly ConstructorParameters<typeof HeightPoint>[0][];units?: 'meters' | 'feet'}) {
+        this.units = heightUnits(fields.units);
+        this.items = deepFreeze(fields.items.map(item=>item instanceof HeightPoint&&item.units===this.units?item:new HeightPoint({...item,units:this.units})));
         this.station_id = fields.station_id;
         this.timezone = fields.timezone;
         this.method = fields.method;
@@ -139,6 +165,7 @@ export class HeightSeries {
 }
 
 export class ExtremeList {
+    readonly units: 'meters' | 'feet';
     readonly items: readonly Extreme[];
     readonly station_id: string;
     readonly timezone: string | null;
@@ -166,8 +193,9 @@ export class ExtremeList {
     readonly reference_source_version: string | null;
     readonly reference_2020_equivalence: string | null;
     readonly source_note: string | null;
-    constructor(fields: Omit<ExtremeList, 'toLocal'>) {
-        this.items = deepFreeze(fields.items);
+    constructor(fields: Omit<ExtremeList, 'toLocal' | 'units' | 'items'> & {items: readonly ConstructorParameters<typeof Extreme>[0][];units?: 'meters' | 'feet'}) {
+        this.units = heightUnits(fields.units);
+        this.items = deepFreeze(fields.items.map(item=>item instanceof Extreme&&item.units===this.units?item:new Extreme({...item,units:this.units})));
         this.station_id = fields.station_id;
         this.timezone = fields.timezone;
         this.method = fields.method;
@@ -200,6 +228,7 @@ export class ExtremeList {
 }
 
 export class CurrentSeries {
+    readonly units: 'm/s' | 'knots';
     readonly items: readonly CurrentPoint[];
     readonly station_id: string;
     readonly timezone: string | null;
@@ -218,8 +247,9 @@ export class CurrentSeries {
     readonly tz_version: string | null;
     readonly release: string;
     readonly algorithm: string;
-    constructor(fields: Omit<CurrentSeries, 'toLocal'>) {
-        this.items = deepFreeze(fields.items);
+    constructor(fields: Omit<CurrentSeries, 'toLocal' | 'units' | 'items'> & {items: readonly ConstructorParameters<typeof CurrentPoint>[0][];units?: 'm/s' | 'knots'}) {
+        this.units = currentUnits(fields.units);
+        this.items = deepFreeze(fields.items.map(item=>item instanceof CurrentPoint&&item.units===this.units?item:new CurrentPoint({...item,units:this.units})));
         this.station_id = fields.station_id;
         this.timezone = fields.timezone;
         this.method = fields.method;
@@ -243,6 +273,7 @@ export class CurrentSeries {
 }
 
 export class CurrentEventList {
+    readonly units: 'm/s' | 'knots';
     readonly items: readonly CurrentEvent[];
     readonly station_id: string;
     readonly timezone: string | null;
@@ -262,8 +293,9 @@ export class CurrentEventList {
     readonly tz_version: string | null;
     readonly release: string;
     readonly algorithm: string;
-    constructor(fields: Omit<CurrentEventList, 'toLocal'>) {
-        this.items = deepFreeze(fields.items);
+    constructor(fields: Omit<CurrentEventList, 'toLocal' | 'units' | 'items'> & {items: readonly ConstructorParameters<typeof CurrentEvent>[0][];units?: 'm/s' | 'knots'}) {
+        this.units = currentUnits(fields.units);
+        this.items = deepFreeze(fields.items.map(item=>item instanceof CurrentEvent&&item.units===this.units?item:new CurrentEvent({...item,units:this.units})));
         this.station_id = fields.station_id;
         this.timezone = fields.timezone;
         this.method = fields.method;

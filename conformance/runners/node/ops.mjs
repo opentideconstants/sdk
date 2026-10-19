@@ -196,7 +196,7 @@ function finite(v) {
 const ERROR_FIELDS = ["url", "status", "file", "expected", "actual", "path", "removed", "constituent", "first_year", "last_year", "missing", "zone", "reference_station_id"];
 
 export function makeRunner(sdk) {
-    const state = { client: null, held: {}, prediction: null };
+    const state = { client: null, held: {}, prediction: null, predictionUnits: false };
 
     const client = () => {
         if (!state.client) throw new Error("no client is open");
@@ -215,7 +215,15 @@ function encPrediction(result) {
     if(result===null)return null;
     const names=['station_id','timezone','method','set_id','convention_id','astro_table_id','reference_station_id','reference_bin','datum','datum_name','datum_kind','datum_uncertainty_m','bin_number','omitted_event_types','tz','tz_version','release','algorithm'];
     const out=Object.fromEntries(names.map(k=>[k,result[k]===undefined?null:result[k]]));
-    out.items=result.items.map(item=>Object.fromEntries(Object.entries(item).map(([k,v])=>[k,k==='time'?iso(v):v])));
+    if(state.predictionUnits)out.units=need(result,'units');
+    out.items=result.items.map(item=>{
+        const encoded=Object.fromEntries(Object.entries(item).filter(([k])=>k!=='units').map(([k,v])=>[k,k==='time'?iso(v):v]));
+        if(state.predictionUnits){
+            const selected='height_m' in item?['height']:'velocity_ms' in item?['velocity']:['velocity_major','velocity_minor','speed'];
+            Object.assign(encoded,pick(item,['units',...selected]));
+        }
+        return encoded;
+    });
     return out;
 }
 function encDatum(info) {
@@ -226,10 +234,10 @@ function encDatum(info) {
 async function prediction(op,a,msg) {
     const t=target(msg),station=t.station(a.station_id);
     if(!station)return {prediction:null};
-    const options=opts(a,['start','stop','step_s','datum','set_id','offset_id','bin_number']);
+    const options=opts(a,['start','stop','step_s','datum','set_id','offset_id','bin_number','units']);
     for(const name of ['start','stop'])if(name in options)options[name]=new Date(options[name]);
     const result=await (op==='heights_at'?t.heightsAt(station,a.times.map(v=>new Date(v)),options):t[camel(op)](station,options));
-    state.prediction=result;return {prediction:encPrediction(result)};
+    state.prediction=result;state.predictionUnits=Object.hasOwn(a,'units');return {prediction:encPrediction(result)};
 }
 const ops = {
     heights: (a,msg)=>prediction('heights',a,msg),
