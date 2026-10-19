@@ -1,24 +1,47 @@
-import {test} from 'node:test';
+import {test,before,after} from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import * as sdk from '../dist/index.js';
 import {makeRunner} from '../../conformance/runners/node/ops.mjs';
 import {materialize_typed_model} from '../dist/canonical.js';
 
 const start=new Date(1798761600*1000),stop=new Date(1798848000*1000);
 const times=[1798761600,1798783200,1798804800].map(t=>new Date(t*1000));
-const cases=[
+// CI uses the committed native vector release. The accepted full-population
+// proof remains available locally with OTC_UNITS_NATIVE_JSON (JSONL + metadata).
+const actualRelease=process.env.OTC_UNITS_NATIVE_JSON;
+let file=actualRelease,directory;
+before(()=>{
+    if(actualRelease)return;
+    directory=fs.mkdtempSync(path.join(os.tmpdir(),'otc-units-'));
+    const {stations,...metadata}=JSON.parse(fs.readFileSync(new URL('../../conformance/vectors/1.0/vectors-release.json',import.meta.url),'utf8'));
+    const stem=`OTC_${metadata.release.datestamp}`;
+    file=path.join(directory,`${stem}.jsonl`);
+    fs.writeFileSync(file,stations.map(station=>JSON.stringify(station)+'\n').join(''));
+    fs.writeFileSync(path.join(directory,`${stem}.meta.json`),JSON.stringify(metadata));
+});
+after(()=>{if(directory)fs.rmSync(directory,{recursive:true,force:true});});
+
+const cases=actualRelease?[
     ['heights','OTC-e813b80c',{start,stop,stepS:600,datum:'zero'},'feet',{height:'height_m'}],
     ['heightsAt','OTC-e813b80c',{datum:'zero'},'feet',{height:'height_m'}],
     ['extremes','OTC-e813b80c',{start,stop,datum:'zero'},'feet',{height:'height_m'}],
     ['extremes','OTC-0031a9c4',{start,stop},'feet',{height:'height_m'}],
     ['currents','OTC-00bdf4b5',{start,stop,stepS:600,binNumber:14},'knots',{velocity_major:'velocity_major_ms',velocity_minor:'velocity_minor_ms',speed:'speed_ms'}],
     ['currentEvents','OTC-00bdf4b5',{start,stop,binNumber:14},'knots',{velocity:'velocity_ms'}],
+]:[
+    ['heights','OTC-V-NOAA-1820000',{start,stop,stepS:600,datum:'zero'},'feet',{height:'height_m'}],
+    ['heightsAt','OTC-V-NOAA-1820000',{datum:'zero'},'feet',{height:'height_m'}],
+    ['extremes','OTC-V-NOAA-1820000',{start,stop,datum:'zero'},'feet',{height:'height_m'}],
+    ['currents','OTC-V-NOAA-ACT1616',{start,stop,stepS:600,binNumber:1},'knots',{velocity_major:'velocity_major_ms',velocity_minor:'velocity_minor_ms',speed:'speed_ms'}],
+    ['currentEvents','OTC-V-NOAA-ACT1591',{start,stop,binNumber:1},'knots',{velocity:'velocity_ms'}],
 ];
 const predict=(target,method,station,options)=>method==='heightsAt'?target.heightsAt(station,times,options):target[method](station,options);
 
 for(const mode of ['eager','stream'])test(`actual units, defaults, forwarding and localization (${mode})`,async()=>{
-    assert.ok(process.env.OTC_UNITS_NATIVE_JSON,'OTC_UNITS_NATIVE_JSON must name the accepted actual release');
-    const client=await sdk.OpenTideConstants.open({file:process.env.OTC_UNITS_NATIVE_JSON,mode});
+    const client=await sdk.OpenTideConstants.open({file,mode});
     try {
         for(const [method,station,options,units,mapping] of cases){
             const defaultUnits=units==='feet'?'meters':'m/s',divisor=units==='feet'?0.3048:1852/3600;
@@ -70,10 +93,10 @@ for(const mode of ['eager','stream'])test(`actual units, defaults, forwarding an
 
 test('runner exposes selected fields only for explicit units and retains them through to_local',async()=>{
     const runner=makeRunner(sdk);
-    const opened=await runner.handle({op:'open',args:{file:process.env.OTC_UNITS_NATIVE_JSON}});
+    const opened=await runner.handle({op:'open',args:{file}});
     assert.equal(opened.ok,true);
     try {
-        const args={station_id:'OTC-e813b80c',start:start.toISOString(),stop:stop.toISOString(),datum:'zero'};
+        const args={station_id:cases[0][1],start:start.toISOString(),stop:stop.toISOString(),datum:'zero'};
         for(const explicit of [true,false]){
             const reply=await runner.handle({op:'heights',args:explicit?{...args,units:'feet'}:args});
             assert.equal(reply.ok,true);
