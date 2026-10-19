@@ -2108,7 +2108,7 @@
      ],
      "c": "otc_datums",
      "forwarded_to_client": true,
-     "note": "datums spec 7.1: the chosen set's levels with their basis, plus the set's zero, zero_name, chart_datum and msl_offset_m; for a subordinate station predicted by offsets, subordinate_offsets.datum; all_sets true: one group per set; C: otc_datums(rel, st, set_id, &info, out, cap, &count) fills otc_datum_level items in key order",
+     "note": "datums spec 7.1: the chosen set's levels with their basis, plus the set's zero, zero_name, chart_datum and msl_offset_m; explicit harmonic_mean is the same-set computational origin, with no MSL offset or publisher zero_name: named prediction subtracts named[key] from the harmonic sum, while ordinary absolute frames still need their MSL offset. A labelled computed datum_gate_failed fallback may omit unknown uncertainty and its basis together; its finding states uncertainty unestablished and normal acceptance false. This is the existing B40 select_prediction_model datum-reference phase; mean_level remains unchanged. For a subordinate station predicted by offsets, subordinate_offsets.datum; all_sets true: one group per set; C: otc_datums(rel, st, set_id, &info, out, cap, &count) fills otc_datum_level items in key order",
      "swift": "datums",
      "swift_returns": "DatumsResult",
      "swift_async": false,
