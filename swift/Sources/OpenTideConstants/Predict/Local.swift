@@ -32,35 +32,35 @@ internal func localize(_ result: HeightSeries, tz: String) throws -> HeightSerie
     let (name, zone, version) = try localZone(result.timezone, tz)
     let items = result.items.map { item in
         let (stamp, offset) = localFields(item.time, zone)
-        return HeightPoint(time: item.time, heightM: item.heightM, localTime: stamp, utcOffsetS: offset)
+        return HeightPoint(time: item.time, heightM: item.heightM, localTime: stamp, utcOffsetS: offset, units: item.units)
     }
-    return HeightSeries(items: items, stationId: result.stationId, timezone: result.timezone, method: result.method, setId: result.setId, conventionId: result.conventionId, astroTableId: result.astroTableId, referenceStationId: result.referenceStationId, referenceBin: result.referenceBin, datum: result.datum, datumName: result.datumName, datumKind: result.datumKind, datumUncertaintyM: result.datumUncertaintyM, tz: name, tzVersion: version, release: result.release, algorithm: result.algorithm, offsetId: result.offsetId, offsetSource: result.offsetSource, offsetSourceVersion: result.offsetSourceVersion, historicalOffsets: result.historicalOffsets, currentValidity: result.currentValidity, currentAccuracy: result.currentAccuracy, referenceSetId: result.referenceSetId, referenceSourceVersion: result.referenceSourceVersion, reference2020Equivalence: result.reference2020Equivalence, sourceNote: result.sourceNote)
+    return HeightSeries(items: items, stationId: result.stationId, timezone: result.timezone, method: result.method, setId: result.setId, conventionId: result.conventionId, astroTableId: result.astroTableId, referenceStationId: result.referenceStationId, referenceBin: result.referenceBin, datum: result.datum, datumName: result.datumName, datumKind: result.datumKind, datumUncertaintyM: result.datumUncertaintyM, tz: name, tzVersion: version, release: result.release, algorithm: result.algorithm, offsetId: result.offsetId, offsetSource: result.offsetSource, offsetSourceVersion: result.offsetSourceVersion, historicalOffsets: result.historicalOffsets, currentValidity: result.currentValidity, currentAccuracy: result.currentAccuracy, referenceSetId: result.referenceSetId, referenceSourceVersion: result.referenceSourceVersion, reference2020Equivalence: result.reference2020Equivalence, sourceNote: result.sourceNote, units: result.units)
 }
 
 internal func localize(_ result: ExtremeList, tz: String) throws -> ExtremeList {
     let (name, zone, version) = try localZone(result.timezone, tz)
     let items = result.items.map { item in
         let (stamp, offset) = localFields(item.time, zone)
-        return Extreme(time: item.time, type: item.type, heightM: item.heightM, localTime: stamp, utcOffsetS: offset)
+        return Extreme(time: item.time, type: item.type, heightM: item.heightM, localTime: stamp, utcOffsetS: offset, units: item.units)
     }
-    return ExtremeList(items: items, stationId: result.stationId, timezone: result.timezone, method: result.method, setId: result.setId, conventionId: result.conventionId, astroTableId: result.astroTableId, referenceStationId: result.referenceStationId, referenceBin: result.referenceBin, datum: result.datum, datumName: result.datumName, datumKind: result.datumKind, datumUncertaintyM: result.datumUncertaintyM, tz: name, tzVersion: version, release: result.release, algorithm: result.algorithm, offsetId: result.offsetId, offsetSource: result.offsetSource, offsetSourceVersion: result.offsetSourceVersion, historicalOffsets: result.historicalOffsets, currentValidity: result.currentValidity, currentAccuracy: result.currentAccuracy, referenceSetId: result.referenceSetId, referenceSourceVersion: result.referenceSourceVersion, reference2020Equivalence: result.reference2020Equivalence, sourceNote: result.sourceNote)
+    return ExtremeList(items: items, stationId: result.stationId, timezone: result.timezone, method: result.method, setId: result.setId, conventionId: result.conventionId, astroTableId: result.astroTableId, referenceStationId: result.referenceStationId, referenceBin: result.referenceBin, datum: result.datum, datumName: result.datumName, datumKind: result.datumKind, datumUncertaintyM: result.datumUncertaintyM, tz: name, tzVersion: version, release: result.release, algorithm: result.algorithm, offsetId: result.offsetId, offsetSource: result.offsetSource, offsetSourceVersion: result.offsetSourceVersion, historicalOffsets: result.historicalOffsets, currentValidity: result.currentValidity, currentAccuracy: result.currentAccuracy, referenceSetId: result.referenceSetId, referenceSourceVersion: result.referenceSourceVersion, reference2020Equivalence: result.reference2020Equivalence, sourceNote: result.sourceNote, units: result.units)
 }
 
 internal func localize(_ result: CurrentSeries, tz: String) throws -> CurrentSeries {
     let (name, zone, version) = try localZone(result.timezone, tz)
     let items = result.items.map { item in
         let (stamp, offset) = localFields(item.time, zone)
-        return CurrentPoint(time: item.time, velocityMajorMs: item.velocityMajorMs, velocityMinorMs: item.velocityMinorMs, speedMs: item.speedMs, directionDeg: item.directionDeg, localTime: stamp, utcOffsetS: offset)
+        return CurrentPoint(time: item.time, velocityMajorMs: item.velocityMajorMs, velocityMinorMs: item.velocityMinorMs, speedMs: item.speedMs, directionDeg: item.directionDeg, localTime: stamp, utcOffsetS: offset, units: item.units)
     }
-    return CurrentSeries(items: items, stationId: result.stationId, timezone: result.timezone, method: result.method, setId: result.setId, conventionId: result.conventionId, astroTableId: result.astroTableId, referenceStationId: result.referenceStationId, referenceBin: result.referenceBin, datum: result.datum, datumName: result.datumName, datumKind: result.datumKind, datumUncertaintyM: result.datumUncertaintyM, tz: name, tzVersion: version, release: result.release, algorithm: result.algorithm, binNumber: result.binNumber)
+    return CurrentSeries(items: items, stationId: result.stationId, timezone: result.timezone, method: result.method, setId: result.setId, conventionId: result.conventionId, astroTableId: result.astroTableId, referenceStationId: result.referenceStationId, referenceBin: result.referenceBin, datum: result.datum, datumName: result.datumName, datumKind: result.datumKind, datumUncertaintyM: result.datumUncertaintyM, tz: name, tzVersion: version, release: result.release, algorithm: result.algorithm, binNumber: result.binNumber, units: result.units)
 }
 
 internal func localize(_ result: CurrentEventList, tz: String) throws -> CurrentEventList {
     let (name, zone, version) = try localZone(result.timezone, tz)
     let items = result.items.map { item in
         let (stamp, offset) = localFields(item.time, zone)
-        return CurrentEvent(time: item.time, type: item.type, velocityMs: item.velocityMs, directionDeg: item.directionDeg, localTime: stamp, utcOffsetS: offset)
+        return CurrentEvent(time: item.time, type: item.type, velocityMs: item.velocityMs, directionDeg: item.directionDeg, localTime: stamp, utcOffsetS: offset, units: item.units)
     }
-    return CurrentEventList(items: items, stationId: result.stationId, timezone: result.timezone, method: result.method, setId: result.setId, conventionId: result.conventionId, astroTableId: result.astroTableId, referenceStationId: result.referenceStationId, referenceBin: result.referenceBin, datum: result.datum, datumName: result.datumName, datumKind: result.datumKind, datumUncertaintyM: result.datumUncertaintyM, tz: name, tzVersion: version, release: result.release, algorithm: result.algorithm, binNumber: result.binNumber, omittedEventTypes: result.omittedEventTypes)
+    return CurrentEventList(items: items, stationId: result.stationId, timezone: result.timezone, method: result.method, setId: result.setId, conventionId: result.conventionId, astroTableId: result.astroTableId, referenceStationId: result.referenceStationId, referenceBin: result.referenceBin, datum: result.datum, datumName: result.datumName, datumKind: result.datumKind, datumUncertaintyM: result.datumUncertaintyM, tz: name, tzVersion: version, release: result.release, algorithm: result.algorithm, binNumber: result.binNumber, omittedEventTypes: result.omittedEventTypes, units: result.units)
 }
 

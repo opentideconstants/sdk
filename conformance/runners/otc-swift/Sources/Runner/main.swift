@@ -3,12 +3,12 @@ import OpenTideConstants
 
 private enum HeldPrediction {
     case heights(HeightSeries), extremes(ExtremeList), currents(CurrentSeries), events(CurrentEventList)
-    func encoded() -> JSONValue {
+    func encoded(includeUnits: Bool) -> JSONValue {
         switch self {
-        case .heights(let value): return Runner.prediction(value)
-        case .extremes(let value): return Runner.prediction(value)
-        case .currents(let value): return Runner.prediction(value)
-        case .events(let value): return Runner.prediction(value)
+        case .heights(let value): return Runner.prediction(value, includeUnits: includeUnits)
+        case .extremes(let value): return Runner.prediction(value, includeUnits: includeUnits)
+        case .currents(let value): return Runner.prediction(value, includeUnits: includeUnits)
+        case .events(let value): return Runner.prediction(value, includeUnits: includeUnits)
         }
     }
     func toLocal(_ tz: String) throws -> HeldPrediction {
@@ -61,10 +61,32 @@ private enum HeldPrediction {
         }
         return .object(result)
     }
-    static func prediction(_ value: Any) -> JSONValue {
+    static func prediction(_ value: Any, includeUnits: Bool) -> JSONValue {
         let raw = plain(value)
         var result = Dictionary(uniqueKeysWithValues: predictionFields.map { ($0, raw[$0]) })
-        result["items"] = raw["items"]
+        if includeUnits {
+            result["units"] = raw["units"]
+            func item(_ value: Any, selected: [String: JSONValue]) -> JSONValue {
+                .object(plain(value).object.merging(selected) { _, new in new })
+            }
+            switch value {
+            case let series as HeightSeries:
+                result["items"] = .array(series.items.map { item($0, selected: ["height": .number($0.height)]) })
+            case let events as ExtremeList:
+                result["items"] = .array(events.items.map { item($0, selected: ["height": .number($0.height)]) })
+            case let series as CurrentSeries:
+                result["items"] = .array(series.items.map { item($0, selected: ["velocity_major": .number($0.velocityMajor), "velocity_minor": .number($0.velocityMinor), "speed": .number($0.speed)]) })
+            case let events as CurrentEventList:
+                result["items"] = .array(events.items.map { item($0, selected: ["velocity": .number($0.velocity)]) })
+            default: break
+            }
+        } else {
+            result["items"] = .array(raw["items"].array.map { value in
+                var fields = value.object
+                fields.removeValue(forKey: "units")
+                return .object(fields)
+            })
+        }
         return .object(result)
     }
     static func instant(_ value: JSONValue) throws -> Date {
@@ -172,10 +194,11 @@ private enum HeldPrediction {
         .object(["reference_station_id": plain(value.referenceStationId), "time_offset_high_min": plain(value.timeOffsetHighMin), "time_offset_low_min": plain(value.timeOffsetLowMin), "height_offset_high": plain(value.heightOffsetHigh), "height_offset_low": plain(value.heightOffsetLow), "height_adjusted_type": plain(value.heightAdjustedType), "licence_id": plain(value.licenceId)])
     }
     static func main() async {
-        emit(.object(["hello": .object(["runner": .string("swift"), "version": .string("0.1.0"), "features": .array(["fs", "fetch", "json", "eager", "stream", "predict", "localtime_module", "localtime"].map(JSONValue.string))])]))
+        emit(.object(["hello": .object(["runner": .string("swift"), "version": .string("0.1.0"), "features": .array(["fs", "fetch", "json", "eager", "stream", "predict", "prediction_units", "localtime_module", "localtime"].map(JSONValue.string))])]))
         var client: OpenTideConstants?
         var held: [String: Release] = [:]
         var prediction: HeldPrediction?
+        var includeUnits = false
         while let line = readLine() {
             do {
                 let q = try JSONDecoder().decode(JSONValue.self, from: Data(line.utf8))
@@ -279,23 +302,25 @@ private enum HeldPrediction {
                             result = .object(["station_id": value.map { .string($0.station.stationId) } ?? .null, "distance_km": value.map { .number($0.distanceKm) } ?? .null])
                         }
                     case "heights", "heights_at", "extremes", "currents", "current_events":
+                        let requestedUnits = try string(args, "units")
                         let datum = try string(args, "datum"), setId = try string(args, "set_id"), offsetId = try string(args, "offset_id")
                         let binNumber = try integer(args, "bin_number")
                         if op == "heights_at" {
                             guard case .array(let times) = args["times"] else { throw OpenTideConstantsError.invalidArgument("times must be an array of instants") }
-                            prediction = .heights(try r.heightsAt(stationId: id, times: times.map(instant), datum: datum, setId: setId, offsetId: offsetId))
+                            prediction = .heights(try r.heightsAt(stationId: id, times: times.map(instant), datum: datum, setId: setId, offsetId: offsetId, units: requestedUnits ?? "meters"))
                         } else {
                             let start = try instant(args["start"]), stop = try instant(args["stop"])
-                            if op == "heights" { prediction = .heights(try r.heights(stationId: id, start: start, stop: stop, stepS: integer(args, "step_s") ?? 600, datum: datum, setId: setId, offsetId: offsetId)) }
-                            else if op == "extremes" { prediction = .extremes(try r.extremes(stationId: id, start: start, stop: stop, datum: datum, setId: setId, offsetId: offsetId)) }
-                            else if op == "currents" { prediction = .currents(try r.currents(stationId: id, start: start, stop: stop, stepS: integer(args, "step_s") ?? 600, binNumber: binNumber, setId: setId)) }
-                            else { prediction = .events(try r.currentEvents(stationId: id, start: start, stop: stop, binNumber: binNumber, setId: setId)) }
+                            if op == "heights" { prediction = .heights(try r.heights(stationId: id, start: start, stop: stop, stepS: integer(args, "step_s") ?? 600, datum: datum, setId: setId, offsetId: offsetId, units: requestedUnits ?? "meters")) }
+                            else if op == "extremes" { prediction = .extremes(try r.extremes(stationId: id, start: start, stop: stop, datum: datum, setId: setId, offsetId: offsetId, units: requestedUnits ?? "meters")) }
+                            else if op == "currents" { prediction = .currents(try r.currents(stationId: id, start: start, stop: stop, stepS: integer(args, "step_s") ?? 600, binNumber: binNumber, setId: setId, units: requestedUnits ?? "m/s")) }
+                            else { prediction = .events(try r.currentEvents(stationId: id, start: start, stop: stop, binNumber: binNumber, setId: setId, units: requestedUnits ?? "m/s")) }
                         }
-                        result = .object(["prediction": prediction!.encoded()])
+                        includeUnits = requestedUnits != nil
+                        result = .object(["prediction": prediction!.encoded(includeUnits: includeUnits)])
                     case "to_local":
                         guard let previous = prediction else { throw OpenTideConstantsError.invalidArgument("no prediction result is held") }
                         prediction = try previous.toLocal(string(args, "tz") ?? "station")
-                        result = .object(["prediction": prediction!.encoded()])
+                        result = .object(["prediction": prediction!.encoded(includeUnits: includeUnits)])
                     case "astro_table", "valid_range", "equilibrium_argument", "node_factor", "equilibrium_for_year", "node_factor_for_year":
                         let table = try r.astroTable(id: string(args, "id"))
                         if op == "astro_table" { result = .object([op: table.map { .object(["first_year": .integer($0.validRange[0]), "last_year": .integer($0.validRange[1])]) } ?? .null]) }
