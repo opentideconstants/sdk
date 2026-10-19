@@ -64,10 +64,11 @@ class OpenTideConstants
             end
             d = raw || {}
             named, basis = d["named"] || {}, d["basis"] || {}
-            unavailable("msl_offset_m") if d["msl_offset_m"].nil?
+            mean = d["zero"] == "harmonic_mean" && !published ? 0.0 : d["msl_offset_m"]
+            unavailable("msl_offset_m") if mean.nil?
             if datum == "zero" && !published
                 context.datum_name = d["zero_name"] || d["zero"] || "unknown"
-                return d["msl_offset_m"]
+                return mean
             end
             key = datum == "chart" ? d["chart_datum"] : datum
             unavailable("chart_datum") if datum == "chart" && key.nil?
@@ -75,7 +76,7 @@ class OpenTideConstants
             b = basis[key] || {}
             unavailable("published chart datum") if published && b["kind"] != "published"
             context.datum_name, context.datum_kind, context.datum_uncertainty = key, b["kind"], b["uncertainty_m"]
-            d["msl_offset_m"] - named[key]
+            mean - named[key]
         end
         def subordinate_datum(offsets, datum, context)
             d = offsets["datum"] || {}

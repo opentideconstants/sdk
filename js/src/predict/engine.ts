@@ -42,7 +42,7 @@ function unavailable(missing:string):never {throw new X.DatumUnavailableError(`d
 /** @internal */
 export function datumTerm(raw:JsonObject|null,datum:string|null|undefined,context:Context,published=false):number {
     datum=datum??'mean_level';if(datum==='mean_level'&&!published){context.datumName=datum;return 0;}
-    const named=obj(raw,'named'),basis=obj(raw,'basis'),mean=num(raw,'msl_offset_m');if(mean===null)unavailable('msl_offset_m');
+    const named=obj(raw,'named'),basis=obj(raw,'basis'),mean=!published&&str(raw,'zero')==='harmonic_mean'?0:num(raw,'msl_offset_m');if(mean===null)unavailable('msl_offset_m');
     if(datum==='zero'&&!published){context.datumName=str(raw,'zero_name')??str(raw,'zero')??'unknown';return mean;}
     const key=datum==='chart'?str(raw,'chart_datum'):datum;if(key===null)unavailable('chart_datum');
     const value=num(named,key);if(value===null)unavailable(key);const b=obj(basis,key);

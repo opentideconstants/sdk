@@ -65,10 +65,10 @@ def validator(schema):
     return Draft202012Validator(schema, format_checker=FORMATS)
 
 # Format 1.0 with retained fallback annotations, and its unchanged index schema, pinned by commit and SHA-256.
-SCHEMA_COMMIT = "ed10d6cacdab460103ce9f67b9fc56b9456d1f15"
+SCHEMA_COMMIT = "e2a07d84214e26b50bce1c92ca9a080772940534"
 _RAW = f"https://raw.githubusercontent.com/opentideconstants/opentideconstants/{SCHEMA_COMMIT}/src/schema"
 SCHEMAS = {
-    "1.0": (f"{_RAW}/otc-1.0.schema.json", "d03e887cf122dfe5f693d0816e4261825f242923dc1d78039ea86bc840c62534"),
+    "1.0": (f"{_RAW}/otc-1.0.schema.json", "d6c21cf2a571713f12526dc7018814acbc03f3bd90c7ceb505e1dbf15242605b"),
     "index-1.0": (f"{_RAW}/otc-index-1.0.schema.json", "f657ea90f25ac63199fff693e164ab124027a7632f9e277e607d4dd2b3b2badb"),
 }
 SCHEMA_FILES = {"1.0": "otc-1.0.schema.json", "index-1.0": "otc-index-1.0.schema.json"}

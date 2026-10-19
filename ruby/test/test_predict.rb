@@ -13,12 +13,86 @@ class PredictNativeTest < Minitest::Test
             "extension" => { "diagnostics" => ["retained", { "accepted" => false }] }
         }
     end
-    def datum_fallback_client
+    def datum_fallback_client(mode: :eager)
         document = JSON.parse(File.read(fixture("predict", "OTC_20991231.7.json")))
         yield document
-        path = File.join(tmpdir, "OTC_20991231.7.json")
-        File.write(path, JSON.generate(document))
-        OpenTideConstants.new(file: path)
+        directory = tmpdir
+        if mode == :stream
+            stations = document.delete("stations")
+            path = File.join(directory, "OTC_20991231.7.jsonl")
+            File.write(File.join(directory, "OTC_20991231.7.meta.json"), JSON.generate(document))
+            File.write(path, stations.map { |station| JSON.generate(station) + "\n" }.join)
+        else
+            path = File.join(directory, "OTC_20991231.7.json")
+            File.write(path, JSON.generate(document))
+        end
+        OpenTideConstants.new(file: path, mode: mode)
+    end
+    def harmonic_mean_datum
+        basis = { "kind" => "computed", "method" => "harmonic_extremes",
+                  "epoch" => { "start" => "2020-01-01", "end" => "2038-12-31" }, "fallback" => datum_fallback }
+        { "zero" => "harmonic_mean", "named" => { "lat" => -0.4, "hat" => 0.6 },
+          "basis" => { "lat" => basis, "hat" => basis } }
+    end
+    def test_harmonic_mean_named_and_zero_preserve_heights_events_and_unknown_uncertainty
+        c = nil
+        %i[eager stream].each do |mode|
+            c = datum_fallback_client(mode: mode) do |document|
+                station_in(document, "OTC-P-0001")["constant_sets"].first["datum"] = harmonic_mean_datum
+            end
+            times = [Time.utc(2010, 3, 1), Time.utc(2010, 3, 1, 6), Time.utc(2010, 3, 1, 12)]
+            options = { set_id: "OTC-P-0001/noaa" }
+            mean = c.heights_at("OTC-P-0001", times, datum: "mean_level", **options)
+            zero = c.heights_at("OTC-P-0001", times, datum: "zero", **options)
+            assert_equal mean.items.map(&:height_m), zero.items.map(&:height_m)
+            assert_equal "harmonic_mean", zero.datum_name
+            window = { start: times.first, stop: times.first + 86_400, **options }
+            events = c.extremes("OTC-P-0001", datum: "mean_level", **window)
+            refute_empty events.items
+            harmonic_mean_datum.fetch("named").each do |key, level|
+                named = c.heights_at("OTC-P-0001", times, datum: key, **options)
+                assert_equal key, named.datum_name
+                assert_equal "computed", named.datum_kind
+                assert_nil named.datum_uncertainty_m
+                mean.items.zip(named.items).each { |left, right| assert_in_delta(-level, right.height_m - left.height_m, 1e-12) }
+                shifted = c.extremes("OTC-P-0001", datum: key, **window)
+                assert_equal events.items.map(&:time), shifted.items.map(&:time)
+                events.items.zip(shifted.items).each { |left, right| assert_in_delta(-level, right.height_m - left.height_m, 1e-12) }
+                metadata = c.datums("OTC-P-0001", **options).levels.find { |item| item.key == key }
+                assert_nil metadata.uncertainty_m
+                assert_nil metadata.uncertainty_basis
+                assert_equal datum_fallback, metadata.fallback
+            end
+            info = c.datums("OTC-P-0001", **options)
+            assert_equal "harmonic_mean", info.zero
+            assert_nil info.msl_offset_m
+            assert_nil info.zero_name
+            %w[chart msl absent].each { |key| assert_raises(OpenTideConstants::DatumUnavailableError) { c.heights_at("OTC-P-0001", times, datum: key, **options) } }
+            c.close
+        end
+    ensure
+        c&.close
+    end
+    def test_missing_absolute_frame_and_published_reference_still_require_msl_offset
+        [nil, "chart_datum"].each do |zero|
+            c = datum_fallback_client do |document|
+                datum = station_in(document, "OTC-P-0001")["constant_sets"].first["datum"]
+                datum.delete("msl_offset_m")
+                zero ? datum["zero"] = zero : datum.delete("zero")
+            end
+            %w[lat zero chart msl].each do |key|
+                error = assert_raises(OpenTideConstants::DatumUnavailableError) { c.heights_at("OTC-P-0001", [Time.utc(2010, 3, 1)], datum: key) }
+                assert_equal "datum is missing msl_offset_m", error.message
+            end
+            c.close
+        end
+        c = datum_fallback_client do |document|
+            station_in(document, "OTC-P-0060")["constant_sets"].first["datum"] = harmonic_mean_datum.merge("chart_datum" => "lat")
+        end
+        error = assert_raises(OpenTideConstants::DatumUnavailableError) { c.extremes("OTC-P-0061", start: Time.utc(2010, 3, 1), stop: Time.utc(2010, 3, 2)) }
+        assert_equal "datum is missing msl_offset_m", error.message
+    ensure
+        c&.close
     end
     def test_datums_preserves_complete_per_level_fallback_on_selected_default_and_all_sets
         c = datum_fallback_client do |document|

@@ -138,11 +138,13 @@ def _datum(raw, datum, context, *, published=False):
         return 0.0
     d = raw or {}
     named, basis = d.get('named') or {}, d.get('basis') or {}
-    if d.get('msl_offset_m') is None:
+    harmonic_mean = d.get('zero') == 'harmonic_mean' and not published
+    if d.get('msl_offset_m') is None and not harmonic_mean:
         _unavailable('msl_offset_m')
+    mean_term = 0.0 if harmonic_mean else d['msl_offset_m']
     if datum == 'zero' and not published:
         context.datum_name = d.get('zero_name') or d.get('zero') or 'unknown'
-        return d['msl_offset_m']
+        return mean_term
     key = d.get('chart_datum') if datum == 'chart' else datum
     if datum == 'chart' and key is None:
         _unavailable('chart_datum')
@@ -152,7 +154,7 @@ def _datum(raw, datum, context, *, published=False):
     if published and b.get('kind') != 'published':
         _unavailable('published chart datum')
     context.datum_name, context.datum_kind, context.datum_uncertainty = key, b.get('kind'), b.get('uncertainty_m')
-    return d['msl_offset_m'] - named[key]
+    return mean_term - named[key]
 
 
 def _subdatum(offsets, datum, context):
