@@ -188,6 +188,39 @@ def test_units_are_required_in_active_profiles_and_prediction_requests():
         assert "prediction_units" not in driver.step_needs({"op": op})
 
 
+def test_browser_units_cases_execute_the_same_assertions_without_filesystem():
+    originals = bc.units_cases(bc.prediction_cases())
+    unchanged = copy.deepcopy(originals)
+    cases = bc.units_browser_cases(originals)
+    assert originals == unchanged
+    assert len(cases) == len(originals) == 12
+    assert {c["id"].split("/", 1)[0] for c in cases} == {
+        "units-browser-feet", "units-browser-knots", "units-browser-defaults"}
+    for case, source in zip(cases, originals, strict=True):
+        matrix = source["matrix"]
+        assert case["id"] == source["id"].replace("units-", "units-browser-", 1)
+        assert "matrix" not in case
+        assert case["runners"] == ["typescript-browser"]
+        assert set(case["requires"]) <= set(driver.PROFILES["typescript-browser"])
+        assert {"fetch", "eager", "prediction_units"} <= set(case["requires"])
+        assert case["steps"][0] == {
+            "op": "open",
+            "args": {"release": matrix["release"], "base_url": f"${{server}}/{matrix['root']}/",
+                     "mode": "eager", **matrix.get("open_args", {})},
+            "expect": {"datestamp": matrix["release"]}}
+        assert case["steps"][1:] == source["steps"]
+        assert case["units_provenance"] == source["units_provenance"]
+        provenance = copy.deepcopy(case["prediction_provenance"])
+        opening = provenance["steps"].pop(0)
+        assert opening == {"authored_step": 0, "source": "authored_interface", "authored_controls": {}}
+        for row in provenance["steps"]:
+            row["authored_step"] -= 1
+        assert provenance == source["prediction_provenance"]
+        assert case["scientific_gate_ready"] is True
+    assert driver.expand(cases) == cases
+    assert driver.check_cases(cases) == []
+
+
 def test_units_manifest_preserves_si_and_excludes_c():
     api = json.loads((CONF / "api.json").read_text())
     for operation in api["objects"]["Release"]["members"]:

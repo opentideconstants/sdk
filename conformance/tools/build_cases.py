@@ -3745,6 +3745,30 @@ def units_cases(predictions):
     return out
 
 
+def units_browser_cases(units):
+    """Run the same units assertions over HTTP without the matrix's filesystem cache."""
+    out = []
+    for source in units:
+        ready = copy.deepcopy(source)
+        matrix = ready.pop("matrix")
+        ready["id"] = ready["id"].replace("units-", "units-browser-", 1)
+        ready["runners"] = ["typescript-browser"]
+        ready["requires"] = sorted(set(ready["requires"]) | {"fetch", "eager"})
+        ready["steps"].insert(0, {
+            "op": "open",
+            "args": {"release": matrix["release"], "base_url": f"${{server}}/{matrix['root']}/",
+                     "mode": "eager", **matrix.get("open_args", {})},
+            "expect": {"datestamp": matrix["release"]}})
+        # The transport open is an interface assertion; prediction records retain
+        # their accepted sources and hashes, shifted by the added setup step.
+        records = ready["prediction_provenance"]["steps"]
+        records.insert(0, {"authored_step": 0, "source": "authored_interface", "authored_controls": {}})
+        for i, record in enumerate(records):
+            record["authored_step"] = i
+        out.append(ready)
+    return out
+
+
 def build(outdir: Path, crossdir: Path):
     predictions = prediction_cases()
     units = units_cases(predictions)
@@ -3775,7 +3799,7 @@ def build(outdir: Path, crossdir: Path):
                "cases": cases}
         (outdir / f"{name}.json").write_bytes((json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
     prediction_groups = {}
-    for c in predictions + units:
+    for c in predictions + units + units_browser_cases(units):
         if c["id"] in seen:
             raise SystemExit(f"duplicate case id {c['id']}")
         seen.add(c["id"])
