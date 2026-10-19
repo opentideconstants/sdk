@@ -3706,8 +3706,48 @@ def prediction_cases():
     return out
 
 
+def units_cases(predictions):
+    """Derive presentation values from accepted SI items, without a science oracle run."""
+    sources = {c["id"]: c for c in predictions}
+    selected = {"height_m": "height", "velocity_major_ms": "velocity_major",
+                "velocity_minor_ms": "velocity_minor", "speed_ms": "speed", "velocity_ms": "velocity"}
+    height_sources = ["predict-heights/basic", "predict-datum/zero", "predict-extremes/basic",
+                      "predict-subordinate/event-datum", "predict-local/named-zone"]
+    current_sources = ["predict-currents/default-bin", "predict-current-events/basic"]
+    out = []
+    for group, units, names in (("units-feet", "feet", height_sources),
+                                ("units-knots", "knots", current_sources),
+                                ("units-defaults", "meters", height_sources[:3]),
+                                ("units-defaults", "m/s", current_sources)):
+        factor = {"meters": 1.0, "feet": 0.3048, "m/s": 1.0, "knots": 1852.0 / 3600.0}[units]
+        for name in names:
+            ready = copy.deepcopy(sources[name])
+            ready["id"] = f"{group}/{name.removeprefix('predict-')}"
+            ready["title"] = f"{units}: {ready['title']}"
+            ready["requires"] = sorted(set(ready["requires"]) | {"prediction_units"})
+            ready["runners"] = ["python", "ruby", "typescript", "swift", "typescript-browser",
+                                "python-no-tz", "ruby-no-tz"]
+            ready["units_provenance"] = {"source_case": name, "si_divisor": factor,
+                                         "note": "Selected values only; accepted SI items and science provenance unchanged."}
+            for st in ready["steps"]:
+                prediction = (st.get("expect") or {}).get("prediction")
+                if prediction is None:
+                    continue
+                if st["op"] != "to_local":
+                    st.setdefault("args", {})["units"] = units
+                prediction["units"] = units
+                for item in prediction["items"]:
+                    item["units"] = units
+                    for si, field in selected.items():
+                        if si in item:
+                            item[field] = item[si] / factor
+            out.append(ready)
+    return out
+
+
 def build(outdir: Path, crossdir: Path):
     predictions = prediction_cases()
+    units = units_cases(predictions)
     R2, R1 = Rel("good", "20991231.2"), Rel("good", "20991231")
     crossdir.mkdir(parents=True, exist_ok=True)
     cross = group_cross(R2)
@@ -3735,12 +3775,12 @@ def build(outdir: Path, crossdir: Path):
                "cases": cases}
         (outdir / f"{name}.json").write_bytes((json.dumps(doc, indent=1, ensure_ascii=False) + "\n").encode("utf-8"))
     prediction_groups = {}
-    for c in predictions:
+    for c in predictions + units:
         if c["id"] in seen:
             raise SystemExit(f"duplicate case id {c['id']}")
         seen.add(c["id"])
         name = c["id"].split("/", 1)[0]
-        name = name if name.startswith("predict-") else f"predict-{name}"
+        name = name if name.startswith(("predict-", "units-")) else f"predict-{name}"
         prediction_groups.setdefault(name, []).append(c)
     for name, cases in prediction_groups.items():
         doc = {"suite_version": SUITE_VERSION, "group": name,

@@ -1,0 +1,2518 @@
+{
+ "suite_version": "1.0",
+ "group": "units-feet",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "units-feet/heights/basic",
+   "title": "feet: heights at the basic station over one day, every 600 s (the default step)",
+   "spec": "4.4, 5.2",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "prediction_units"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2010-03-02T00:00:00Z",
+      "units": "feet"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T00:00:00Z",
+         "height_m": -0.9865769953158794,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -3.236801165734512
+        },
+        {
+         "time": "2010-03-01T00:10:00Z",
+         "height_m": -0.8953072099162291,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.9373596125860533
+        },
+        {
+         "time": "2010-03-01T00:20:00Z",
+         "height_m": -0.7998227454402296,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.624090372179231
+        },
+        {
+         "time": "2010-03-01T00:30:00Z",
+         "height_m": -0.7008238491460498,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.299290843655019
+        },
+        {
+         "time": "2010-03-01T00:40:00Z",
+         "height_m": -0.5990169170709603,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.965278599314174
+        },
+        {
+         "time": "2010-03-01T00:50:00Z",
+         "height_m": -0.4951068586729592,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.6243663342288688
+        },
+        {
+         "time": "2010-03-01T01:00:00Z",
+         "height_m": -0.38979001299934174,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.2788386253259243
+        },
+        {
+         "time": "2010-03-01T01:10:00Z",
+         "height_m": -0.28374772862640985,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.9309308681968826
+        },
+        {
+         "time": "2010-03-01T01:20:00Z",
+         "height_m": -0.17764069788365913,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.5828106885946822
+        },
+        {
+         "time": "2010-03-01T01:30:00Z",
+         "height_m": -0.07210411223426713,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.23656204801268743
+        },
+        {
+         "time": "2010-03-01T01:40:00Z",
+         "height_m": 0.03225631918496016,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.10582781884829447
+        },
+        {
+         "time": "2010-03-01T01:50:00Z",
+         "height_m": 0.134867471232598,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.4424785801594423
+        },
+        {
+         "time": "2010-03-01T02:00:00Z",
+         "height_m": 0.235191033165548,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.7716241245588845
+        },
+        {
+         "time": "2010-03-01T02:10:00Z",
+         "height_m": 0.3327249005187764,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.0916171276862743
+        },
+        {
+         "time": "2010-03-01T02:20:00Z",
+         "height_m": 0.42700378381178616,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.4009310492512668
+        },
+        {
+         "time": "2010-03-01T02:30:00Z",
+         "height_m": 0.5175991097880009,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.698159809015751
+        },
+        {
+         "time": "2010-03-01T02:40:00Z",
+         "height_m": 0.6041183084308092,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.9820154476076415
+        },
+        {
+         "time": "2010-03-01T02:50:00Z",
+         "height_m": 0.6862035932603251,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.251324124869833
+        },
+        {
+         "time": "2010-03-01T03:00:00Z",
+         "height_m": 0.7635303529858263,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.5050208431293512
+        },
+        {
+         "time": "2010-03-01T03:10:00Z",
+         "height_m": 0.8358052792286338,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.742143304555885
+        },
+        {
+         "time": "2010-03-01T03:20:00Z",
+         "height_m": 0.9027643575623108,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.961825320086321
+        },
+        {
+         "time": "2010-03-01T03:30:00Z",
+         "height_m": 0.9641708475160347,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.163290182139221
+        },
+        {
+         "time": "2010-03-01T03:40:00Z",
+         "height_m": 1.019813371531258,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.345844394787592
+        },
+        {
+         "time": "2010-03-01T03:50:00Z",
+         "height_m": 1.0695042233651324,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.508872123901353
+        },
+        {
+         "time": "2010-03-01T04:00:00Z",
+         "height_m": 1.1130779934017732,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.651830687013691
+        },
+        {
+         "time": "2010-03-01T04:10:00Z",
+         "height_m": 1.1503905921890618,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.774247349701646
+        },
+        {
+         "time": "2010-03-01T04:20:00Z",
+         "height_m": 1.1813187347783953,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.875717633787386
+        },
+        {
+         "time": "2010-03-01T04:30:00Z",
+         "height_m": 1.205759927682346,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.955905274548379
+        },
+        {
+         "time": "2010-03-01T04:40:00Z",
+         "height_m": 1.2236329781364117,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.01454389152366
+        },
+        {
+         "time": "2010-03-01T04:50:00Z",
+         "height_m": 1.2348790225359063,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.051440362650611
+        },
+        {
+         "time": "2010-03-01T05:00:00Z",
+         "height_m": 1.2394630481211348,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.066479816670389
+        },
+        {
+         "time": "2010-03-01T05:10:00Z",
+         "height_m": 1.2373758599130384,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.059632086328866
+        },
+        {
+         "time": "2010-03-01T05:20:00Z",
+         "height_m": 1.2286364242394436,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.030959397111036
+        },
+        {
+         "time": "2010-03-01T05:30:00Z",
+         "height_m": 1.2132945015821024,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.9806250051906242
+        },
+        {
+         "time": "2010-03-01T05:40:00Z",
+         "height_m": 1.1914334655074963,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.9089024458907358
+        },
+        {
+         "time": "2010-03-01T05:50:00Z",
+         "height_m": 1.163173191619819,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.8161850118760463
+        },
+        {
+         "time": "2010-03-01T06:00:00Z",
+         "height_m": 1.1286728912234456,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.7029950499456876
+        },
+        {
+         "time": "2010-03-01T06:10:00Z",
+         "height_m": 1.0881337590056115,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.5699926476562056
+        },
+        {
+         "time": "2010-03-01T06:20:00Z",
+         "height_m": 1.041801302762669,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.4179832767804097
+        },
+        {
+         "time": "2010-03-01T06:30:00Z",
+         "height_m": 0.9899672260722614,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.247923970053351
+        },
+        {
+         "time": "2010-03-01T06:40:00Z",
+         "height_m": 0.9329707418216373,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.060927630648416
+        },
+        {
+         "time": "2010-03-01T06:50:00Z",
+         "height_m": 0.8711992054862576,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.8582651098630496
+        },
+        {
+         "time": "2010-03-01T07:00:00Z",
+         "height_m": 0.8050879717306383,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.641364736649076
+        },
+        {
+         "time": "2010-03-01T07:10:00Z",
+         "height_m": 0.7351193958997652,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.411809041665896
+        },
+        {
+         "time": "2010-03-01T07:20:00Z",
+         "height_m": 0.6618209227968702,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.171328486866372
+        },
+        {
+         "time": "2010-03-01T07:30:00Z",
+         "height_m": 0.5857622282348025,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.9217920873845227
+        },
+        {
+         "time": "2010-03-01T07:40:00Z",
+         "height_m": 0.5075514035796356,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.6651948936339749
+        },
+        {
+         "time": "2010-03-01T07:50:00Z",
+         "height_m": 0.4278301991670038,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.4036423857185163
+        },
+        {
+         "time": "2010-03-01T08:00:00Z",
+         "height_m": 0.3472683683766757,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.1393319172463112
+        },
+        {
+         "time": "2010-03-01T08:10:00Z",
+         "height_m": 0.26655717953877617,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.8745314289329926
+        },
+        {
+         "time": "2010-03-01T08:20:00Z",
+         "height_m": 0.1864021870199298,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.6115557316926831
+        },
+        {
+         "time": "2010-03-01T08:30:00Z",
+         "height_m": 0.10751537509204684,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.3527407319292875
+        },
+        {
+         "time": "2010-03-01T08:40:00Z",
+         "height_m": 0.03060680789260464,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.10041603639305983
+        },
+        {
+         "time": "2010-03-01T08:50:00Z",
+         "height_m": -0.043624064641535315,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.14312357165858042
+        },
+        {
+         "time": "2010-03-01T09:00:00Z",
+         "height_m": -0.11449728202965999,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.37564725075347766
+        },
+        {
+         "time": "2010-03-01T09:10:00Z",
+         "height_m": -0.18136125790048135,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.5950172503296632
+        },
+        {
+         "time": "2010-03-01T09:20:00Z",
+         "height_m": -0.24360149760443828,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.7992175118255849
+        },
+        {
+         "time": "2010-03-01T09:30:00Z",
+         "height_m": -0.3006489721372708,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.986381142182647
+        },
+        {
+         "time": "2010-03-01T09:40:00Z",
+         "height_m": -0.35198797603111104,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.1548161943277921
+        },
+        {
+         "time": "2010-03-01T09:50:00Z",
+         "height_m": -0.3971633055834993,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.303029217793633
+        },
+        {
+         "time": "2010-03-01T10:00:00Z",
+         "height_m": -0.4357866067222301,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.4297460850466865
+        },
+        {
+         "time": "2010-03-01T10:10:00Z",
+         "height_m": -0.4675417586289582,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.5339296542944822
+        },
+        {
+         "time": "2010-03-01T10:20:00Z",
+         "height_m": -0.4921891795322573,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.6147938961032064
+        },
+        {
+         "time": "2010-03-01T10:30:00Z",
+         "height_m": -0.5095689643133072,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.6718141873796168
+        },
+        {
+         "time": "2010-03-01T10:40:00Z",
+         "height_m": -0.5196027891359069,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.7047335601571747
+        },
+        {
+         "time": "2010-03-01T10:50:00Z",
+         "height_m": -0.5222945455516466,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.713564781993591
+        },
+        {
+         "time": "2010-03-01T11:00:00Z",
+         "height_m": -0.5177296947200355,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.6985882372704575
+        },
+        {
+         "time": "2010-03-01T11:10:00Z",
+         "height_m": -0.5060733607839452,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.6603456718633371
+        },
+        {
+         "time": "2010-03-01T11:20:00Z",
+         "height_m": -0.48756721030445543,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.599629955067111
+        },
+        {
+         "time": "2010-03-01T11:30:00Z",
+         "height_m": -0.4625251912527478,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.5174710999105898
+        },
+        {
+         "time": "2010-03-01T11:40:00Z",
+         "height_m": -0.43132822968311957,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.4151188637897623
+        },
+        {
+         "time": "2010-03-01T11:50:00Z",
+         "height_m": -0.3944180042317137,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.2940223235948611
+        },
+        {
+         "time": "2010-03-01T12:00:00Z",
+         "height_m": -0.3522899374243841,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.155806881313596
+        },
+        {
+         "time": "2010-03-01T12:10:00Z",
+         "height_m": -0.3054855579619375,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.0022492059118684
+        },
+        {
+         "time": "2010-03-01T12:20:00Z",
+         "height_m": -0.25458439929501686,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.8352506538550422
+        },
+        {
+         "time": "2010-03-01T12:30:00Z",
+         "height_m": -0.2001956066389464,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.6568097330674094
+        },
+        {
+         "time": "2010-03-01T12:40:00Z",
+         "height_m": -0.14294942697078378,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.4689941829750124
+        },
+        {
+         "time": "2010-03-01T12:50:00Z",
+         "height_m": -0.0834887544542547,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.2739132363984734
+        },
+        {
+         "time": "2010-03-01T13:00:00Z",
+         "height_m": -0.022460897275798315,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.07369060786023068
+        },
+        {
+         "time": "2010-03-01T13:10:00Z",
+         "height_m": 0.03949027875847588,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.12956128201599698
+        },
+        {
+         "time": "2010-03-01T13:20:00Z",
+         "height_m": 0.10173168896526874,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.33376538374432
+        },
+        {
+         "time": "2010-03-01T13:30:00Z",
+         "height_m": 0.16364772781368472,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.5369019941393856
+        },
+        {
+         "time": "2010-03-01T13:40:00Z",
+         "height_m": 0.22464622388811886,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.7370282935961905
+        },
+        {
+         "time": "2010-03-01T13:50:00Z",
+         "height_m": 0.2841635723895397,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.9322951850050515
+        },
+        {
+         "time": "2010-03-01T14:00:00Z",
+         "height_m": 0.34166899032721243,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.1209612543543714
+        },
+        {
+         "time": "2010-03-01T14:10:00Z",
+         "height_m": 0.3966678649775179,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.3014037564879195
+        },
+        {
+         "time": "2010-03-01T14:20:00Z",
+         "height_m": 0.4487041917830129,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.4721266134613284
+        },
+        {
+         "time": "2010-03-01T14:30:00Z",
+         "height_m": 0.49736212287980514,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.631765495012484
+        },
+        {
+         "time": "2010-03-01T14:40:00Z",
+         "height_m": 0.5422666712000013,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.779090128608928
+        },
+        {
+         "time": "2010-03-01T14:50:00Z",
+         "height_m": 0.5830836369150917,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.9130040581203795
+        },
+        {
+         "time": "2010-03-01T15:00:00Z",
+         "height_m": 0.61951884226917,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.0325421334290352
+        },
+        {
+         "time": "2010-03-01T15:10:00Z",
+         "height_m": 0.651316777077325,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.136866066526657
+        },
+        {
+         "time": "2010-03-01T15:20:00Z",
+         "height_m": 0.6782587698855491,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.2252584313830353
+        },
+        {
+         "time": "2010-03-01T15:30:00Z",
+         "height_m": 0.7001608086884489,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.297115514069714
+        },
+        {
+         "time": "2010-03-01T15:40:00Z",
+         "height_m": 0.7168711399439721,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.3519394355117194
+        },
+        {
+         "time": "2010-03-01T15:50:00Z",
+         "height_m": 0.7282677753293529,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.389329971552995
+        },
+        {
+         "time": "2010-03-01T16:00:00Z",
+         "height_m": 0.7342560322492709,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.4089764837574505
+        },
+        {
+         "time": "2010-03-01T16:10:00Z",
+         "height_m": 0.7347662266984905,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.410650350060664
+        },
+        {
+         "time": "2010-03-01T16:20:00Z",
+         "height_m": 0.7297516259371164,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.394198247825185
+        },
+        {
+         "time": "2010-03-01T16:30:00Z",
+         "height_m": 0.7191867539338208,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.3595365942710655
+        },
+        {
+         "time": "2010-03-01T16:40:00Z",
+         "height_m": 0.7030661251315697,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.3066473921639425
+        },
+        {
+         "time": "2010-03-01T16:50:00Z",
+         "height_m": 0.6814034623361607,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.235575663832548
+        },
+        {
+         "time": "2010-03-01T17:00:00Z",
+         "height_m": 0.654231433041839,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.146428586095272
+        },
+        {
+         "time": "2010-03-01T17:10:00Z",
+         "height_m": 0.6216019159521166,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.0393763646722984
+        },
+        {
+         "time": "2010-03-01T17:20:00Z",
+         "height_m": 0.5835867865262859,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.9146548114379458
+        },
+        {
+         "time": "2010-03-01T17:30:00Z",
+         "height_m": 0.5402791877923263,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.7725695137543513
+        },
+        {
+         "time": "2010-03-01T17:40:00Z",
+         "height_m": 0.4917952311119501,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.6135014144092852
+        },
+        {
+         "time": "2010-03-01T17:50:00Z",
+         "height_m": 0.43827605173052286,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.4379135555463347
+        },
+        {
+         "time": "2010-03-01T18:00:00Z",
+         "height_m": 0.3798901264169504,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.2463586824703097
+        },
+        {
+         "time": "2010-03-01T18:10:00Z",
+         "height_m": 0.316835745842684,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 1.039487355126916
+        },
+        {
+         "time": "2010-03-01T18:20:00Z",
+         "height_m": 0.24934352303808843,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.8180561779464843
+        },
+        {
+         "time": "2010-03-01T18:30:00Z",
+         "height_m": 0.1776788116649809,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.5829357338089924
+        },
+        {
+         "time": "2010-03-01T18:40:00Z",
+         "height_m": 0.10214390422723568,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.3351177960211144
+        },
+        {
+         "time": "2010-03-01T18:50:00Z",
+         "height_m": 0.023079880845043924,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 0.0757213938485693
+        },
+        {
+         "time": "2010-03-01T19:00:00Z",
+         "height_m": -0.05913201612251542,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.1940026775673078
+        },
+        {
+         "time": "2010-03-01T19:10:00Z",
+         "height_m": -0.14406959759924615,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.47266928346209364
+        },
+        {
+         "time": "2010-03-01T19:20:00Z",
+         "height_m": -0.231269636891523,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.7587586512189074
+        },
+        {
+         "time": "2010-03-01T19:30:00Z",
+         "height_m": -0.3202285597065405,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.05061863420781
+        },
+        {
+         "time": "2010-03-01T19:40:00Z",
+         "height_m": -0.4104039832558576,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.3464697613381154
+        },
+        {
+         "time": "2010-03-01T19:50:00Z",
+         "height_m": -0.5012171508659369,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.644413224625777
+        },
+        {
+         "time": "2010-03-01T20:00:00Z",
+         "height_m": -0.5920562847989723,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.9424418792617202
+        },
+        {
+         "time": "2010-03-01T20:10:00Z",
+         "height_m": -0.6822808549676208,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.238454248581433
+        },
+        {
+         "time": "2010-03-01T20:20:00Z",
+         "height_m": -0.7712267355950011,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.5302714422408172
+        },
+        {
+         "time": "2010-03-01T20:30:00Z",
+         "height_m": -0.8582121963628438,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.8156568122140544
+        },
+        {
+         "time": "2010-03-01T20:40:00Z",
+         "height_m": -0.9425446499168121,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -3.092338090278255
+        },
+        {
+         "time": "2010-03-01T20:50:00Z",
+         "height_m": -1.023528054490218,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -3.358031674836673
+        },
+        {
+         "time": "2010-03-01T21:00:00Z",
+         "height_m": -1.1004708495000448,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -3.6104686663387295
+        },
+        {
+         "time": "2010-03-01T21:10:00Z",
+         "height_m": -1.1726942839044332,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -3.84742219128751
+        },
+        {
+         "time": "2010-03-01T21:20:00Z",
+         "height_m": -1.2395409824021457,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.066735506568719
+        },
+        {
+         "time": "2010-03-01T21:30:00Z",
+         "height_m": -1.300383583648022,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.266350340052566
+        },
+        {
+         "time": "2010-03-01T21:40:00Z",
+         "height_m": -1.3546332779043337,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.444334901260937
+        },
+        {
+         "time": "2010-03-01T21:50:00Z",
+         "height_m": -1.4017480691557695,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.598910988043863
+        },
+        {
+         "time": "2010-03-01T22:00:00Z",
+         "height_m": -1.4412405888070323,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.728479622070315
+        },
+        {
+         "time": "2010-03-01T22:10:00Z",
+         "height_m": -1.4726852946246285,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.831644667403636
+        },
+        {
+         "time": "2010-03-01T22:20:00Z",
+         "height_m": -1.495724899450779,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.907233922082608
+        },
+        {
+         "time": "2010-03-01T22:30:00Z",
+         "height_m": -1.5100758891373625,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.954317221579273
+        },
+        {
+         "time": "2010-03-01T22:40:00Z",
+         "height_m": -1.5155330077499436,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.972221154035248
+        },
+        {
+         "time": "2010-03-01T22:50:00Z",
+         "height_m": -1.5119726099083526,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.960540058754438
+        },
+        {
+         "time": "2010-03-01T23:00:00Z",
+         "height_m": -1.4993548045835439,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.919143059657296
+        },
+        {
+         "time": "2010-03-01T23:10:00Z",
+         "height_m": -1.4777243411349967,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.848176972227679
+        },
+        {
+         "time": "2010-03-01T23:20:00Z",
+         "height_m": -1.4472102161464802,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.748065013603937
+        },
+        {
+         "time": "2010-03-01T23:30:00Z",
+         "height_m": -1.4080240079727053,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.619501338493127
+        },
+        {
+         "time": "2010-03-01T23:40:00Z",
+         "height_m": -1.3604569740996326,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.46344151607491
+        },
+        {
+         "time": "2010-03-01T23:50:00Z",
+         "height_m": -1.3048759737012798,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.281089152563254
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "heights"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "times": [
+          "2010-03-01T00:00:00Z",
+          "2010-03-01T00:10:00Z",
+          "2010-03-01T00:20:00Z",
+          "2010-03-01T00:30:00Z",
+          "2010-03-01T00:40:00Z",
+          "2010-03-01T00:50:00Z",
+          "2010-03-01T01:00:00Z",
+          "2010-03-01T01:10:00Z",
+          "2010-03-01T01:20:00Z",
+          "2010-03-01T01:30:00Z",
+          "2010-03-01T01:40:00Z",
+          "2010-03-01T01:50:00Z",
+          "2010-03-01T02:00:00Z",
+          "2010-03-01T02:10:00Z",
+          "2010-03-01T02:20:00Z",
+          "2010-03-01T02:30:00Z",
+          "2010-03-01T02:40:00Z",
+          "2010-03-01T02:50:00Z",
+          "2010-03-01T03:00:00Z",
+          "2010-03-01T03:10:00Z",
+          "2010-03-01T03:20:00Z",
+          "2010-03-01T03:30:00Z",
+          "2010-03-01T03:40:00Z",
+          "2010-03-01T03:50:00Z",
+          "2010-03-01T04:00:00Z",
+          "2010-03-01T04:10:00Z",
+          "2010-03-01T04:20:00Z",
+          "2010-03-01T04:30:00Z",
+          "2010-03-01T04:40:00Z",
+          "2010-03-01T04:50:00Z",
+          "2010-03-01T05:00:00Z",
+          "2010-03-01T05:10:00Z",
+          "2010-03-01T05:20:00Z",
+          "2010-03-01T05:30:00Z",
+          "2010-03-01T05:40:00Z",
+          "2010-03-01T05:50:00Z",
+          "2010-03-01T06:00:00Z",
+          "2010-03-01T06:10:00Z",
+          "2010-03-01T06:20:00Z",
+          "2010-03-01T06:30:00Z",
+          "2010-03-01T06:40:00Z",
+          "2010-03-01T06:50:00Z",
+          "2010-03-01T07:00:00Z",
+          "2010-03-01T07:10:00Z",
+          "2010-03-01T07:20:00Z",
+          "2010-03-01T07:30:00Z",
+          "2010-03-01T07:40:00Z",
+          "2010-03-01T07:50:00Z",
+          "2010-03-01T08:00:00Z",
+          "2010-03-01T08:10:00Z",
+          "2010-03-01T08:20:00Z",
+          "2010-03-01T08:30:00Z",
+          "2010-03-01T08:40:00Z",
+          "2010-03-01T08:50:00Z",
+          "2010-03-01T09:00:00Z",
+          "2010-03-01T09:10:00Z",
+          "2010-03-01T09:20:00Z",
+          "2010-03-01T09:30:00Z",
+          "2010-03-01T09:40:00Z",
+          "2010-03-01T09:50:00Z",
+          "2010-03-01T10:00:00Z",
+          "2010-03-01T10:10:00Z",
+          "2010-03-01T10:20:00Z",
+          "2010-03-01T10:30:00Z",
+          "2010-03-01T10:40:00Z",
+          "2010-03-01T10:50:00Z",
+          "2010-03-01T11:00:00Z",
+          "2010-03-01T11:10:00Z",
+          "2010-03-01T11:20:00Z",
+          "2010-03-01T11:30:00Z",
+          "2010-03-01T11:40:00Z",
+          "2010-03-01T11:50:00Z",
+          "2010-03-01T12:00:00Z",
+          "2010-03-01T12:10:00Z",
+          "2010-03-01T12:20:00Z",
+          "2010-03-01T12:30:00Z",
+          "2010-03-01T12:40:00Z",
+          "2010-03-01T12:50:00Z",
+          "2010-03-01T13:00:00Z",
+          "2010-03-01T13:10:00Z",
+          "2010-03-01T13:20:00Z",
+          "2010-03-01T13:30:00Z",
+          "2010-03-01T13:40:00Z",
+          "2010-03-01T13:50:00Z",
+          "2010-03-01T14:00:00Z",
+          "2010-03-01T14:10:00Z",
+          "2010-03-01T14:20:00Z",
+          "2010-03-01T14:30:00Z",
+          "2010-03-01T14:40:00Z",
+          "2010-03-01T14:50:00Z",
+          "2010-03-01T15:00:00Z",
+          "2010-03-01T15:10:00Z",
+          "2010-03-01T15:20:00Z",
+          "2010-03-01T15:30:00Z",
+          "2010-03-01T15:40:00Z",
+          "2010-03-01T15:50:00Z",
+          "2010-03-01T16:00:00Z",
+          "2010-03-01T16:10:00Z",
+          "2010-03-01T16:20:00Z",
+          "2010-03-01T16:30:00Z",
+          "2010-03-01T16:40:00Z",
+          "2010-03-01T16:50:00Z",
+          "2010-03-01T17:00:00Z",
+          "2010-03-01T17:10:00Z",
+          "2010-03-01T17:20:00Z",
+          "2010-03-01T17:30:00Z",
+          "2010-03-01T17:40:00Z",
+          "2010-03-01T17:50:00Z",
+          "2010-03-01T18:00:00Z",
+          "2010-03-01T18:10:00Z",
+          "2010-03-01T18:20:00Z",
+          "2010-03-01T18:30:00Z",
+          "2010-03-01T18:40:00Z",
+          "2010-03-01T18:50:00Z",
+          "2010-03-01T19:00:00Z",
+          "2010-03-01T19:10:00Z",
+          "2010-03-01T19:20:00Z",
+          "2010-03-01T19:30:00Z",
+          "2010-03-01T19:40:00Z",
+          "2010-03-01T19:50:00Z",
+          "2010-03-01T20:00:00Z",
+          "2010-03-01T20:10:00Z",
+          "2010-03-01T20:20:00Z",
+          "2010-03-01T20:30:00Z",
+          "2010-03-01T20:40:00Z",
+          "2010-03-01T20:50:00Z",
+          "2010-03-01T21:00:00Z",
+          "2010-03-01T21:10:00Z",
+          "2010-03-01T21:20:00Z",
+          "2010-03-01T21:30:00Z",
+          "2010-03-01T21:40:00Z",
+          "2010-03-01T21:50:00Z",
+          "2010-03-01T22:00:00Z",
+          "2010-03-01T22:10:00Z",
+          "2010-03-01T22:20:00Z",
+          "2010-03-01T22:30:00Z",
+          "2010-03-01T22:40:00Z",
+          "2010-03-01T22:50:00Z",
+          "2010-03-01T23:00:00Z",
+          "2010-03-01T23:10:00Z",
+          "2010-03-01T23:20:00Z",
+          "2010-03-01T23:30:00Z",
+          "2010-03-01T23:40:00Z",
+          "2010-03-01T23:50:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     }
+    ]
+   },
+   "runners": [
+    "python",
+    "ruby",
+    "typescript",
+    "swift",
+    "typescript-browser",
+    "python-no-tz",
+    "ruby-no-tz"
+   ],
+   "units_provenance": {
+    "source_case": "predict-heights/basic",
+    "si_divisor": 0.3048,
+    "note": "Selected values only; accepted SI items and science provenance unchanged."
+   }
+  },
+  {
+   "id": "units-feet/datum/zero",
+   "title": "feet: datum zero: msl_offset_m + h; datum_name is zero_name",
+   "spec": "4.5",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "prediction_units"
+   ],
+   "steps": [
+    {
+     "args": {
+      "datum": "zero",
+      "station_id": "OTC-P-0001",
+      "times": [
+       "2010-03-01T03:00:00Z"
+      ],
+      "units": "feet"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "zero",
+       "datum_kind": null,
+       "datum_name": "MLLW",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T03:00:00Z",
+         "height_m": 1.8835303529858263,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 6.179561525544049
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "heights_at"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 1.12,
+         "times": [
+          "2010-03-01T03:00:00Z"
+         ]
+        },
+        "entry": "predict_strict"
+       }
+      }
+     }
+    ]
+   },
+   "runners": [
+    "python",
+    "ruby",
+    "typescript",
+    "swift",
+    "typescript-browser",
+    "python-no-tz",
+    "ruby-no-tz"
+   ],
+   "units_provenance": {
+    "source_case": "predict-datum/zero",
+    "si_divisor": 0.3048,
+    "note": "Selected values only; accepted SI items and science provenance unchanged."
+   }
+  },
+  {
+   "id": "units-feet/extremes/basic",
+   "title": "feet: extremes at the basic station over 3 days (cross-checked by a 5 s scan)",
+   "spec": "4.6",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "prediction_units"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2010-03-04T00:00:00Z",
+      "units": "feet"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T05:01:52Z",
+         "type": "high",
+         "height_m": 1.2395796880502647,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.066862493603231
+        },
+        {
+         "time": "2010-03-01T10:48:41Z",
+         "type": "low",
+         "height_m": -0.5223576129277567,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.7137716959572071
+        },
+        {
+         "time": "2010-03-01T16:05:56Z",
+         "type": "high",
+         "height_m": 0.7352231357105382,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.4121493953757813
+        },
+        {
+         "time": "2010-03-01T22:41:04Z",
+         "type": "low",
+         "height_m": -1.515584269721586,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.972389336356909
+        },
+        {
+         "time": "2010-03-02T05:33:16Z",
+         "type": "high",
+         "height_m": 1.177168277514561,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.8621006480136515
+        },
+        {
+         "time": "2010-03-02T11:23:24Z",
+         "type": "low",
+         "height_m": -0.49292610765165945,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.6172116392770979
+        },
+        {
+         "time": "2010-03-02T16:35:11Z",
+         "type": "high",
+         "height_m": 0.725294759798376,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.379575983590472
+        },
+        {
+         "time": "2010-03-02T23:16:37Z",
+         "type": "low",
+         "height_m": -1.4413633605127465,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.728882416380402
+        },
+        {
+         "time": "2010-03-03T06:02:55Z",
+         "type": "high",
+         "height_m": 1.0928614159401902,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.5855033331371065
+        },
+        {
+         "time": "2010-03-03T11:58:37Z",
+         "type": "low",
+         "height_m": -0.4763772900823514,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -1.5629176183804179
+        },
+        {
+         "time": "2010-03-03T17:07:53Z",
+         "type": "high",
+         "height_m": 0.7049764075750508,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.3129147230152585
+        },
+        {
+         "time": "2010-03-03T23:53:31Z",
+         "type": "low",
+         "height_m": -1.3242510290071223,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -4.344655606978748
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-04T00:00:00Z"
+        },
+        "crosscheck": "scan_5s",
+        "entry": "extremes_strict"
+       }
+      }
+     }
+    ]
+   },
+   "runners": [
+    "python",
+    "ruby",
+    "typescript",
+    "swift",
+    "typescript-browser",
+    "python-no-tz",
+    "ruby-no-tz"
+   ],
+   "units_provenance": {
+    "source_case": "predict-extremes/basic",
+    "si_divisor": 0.3048,
+    "note": "Selected values only; accepted SI items and science provenance unchanged."
+   }
+  },
+  {
+   "id": "units-feet/subordinate/event-datum",
+   "title": "feet: the event path on a reference whose chart datum is 0.85 above its zero, with the subordinate's own datum: chart (the default), mhhw and msl",
+   "spec": "4.8 steps 2, 5",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "prediction_units"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z",
+      "units": "feet"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": "published",
+       "datum_name": "mllw",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T06:15:31Z",
+         "type": "high",
+         "height_m": 3.137474327399,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 10.293550942910105
+        },
+        {
+         "time": "2010-03-01T12:25:20Z",
+         "type": "low",
+         "height_m": 0.6937919952370448,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.2762204568144515
+        },
+        {
+         "time": "2010-03-01T17:54:24Z",
+         "type": "high",
+         "height_m": 2.710702991739742,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 8.893382518831174
+        },
+        {
+         "time": "2010-03-02T00:24:45Z",
+         "type": "low",
+         "height_m": -0.10418887549619128,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.3418270193444596
+        },
+        {
+         "time": "2010-03-02T06:53:20Z",
+         "type": "high",
+         "height_m": 3.1129284415089145,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 10.213019821223472
+        },
+        {
+         "time": "2010-03-02T13:03:26Z",
+         "type": "low",
+         "height_m": 0.7129241859231663,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.3389901112964773
+        },
+        {
+         "time": "2010-03-02T18:32:42Z",
+         "type": "high",
+         "height_m": 2.6753564470152957,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 8.777416164748345
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "datum": "mhhw",
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z",
+      "units": "feet"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "mhhw",
+       "datum_kind": "published",
+       "datum_name": "mhhw",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T06:15:31Z",
+         "type": "high",
+         "height_m": 1.537474327399,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 5.044207110889107
+        },
+        {
+         "time": "2010-03-01T12:25:20Z",
+         "type": "low",
+         "height_m": -0.9062080047629553,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.973123375206546
+        },
+        {
+         "time": "2010-03-01T17:54:24Z",
+         "type": "high",
+         "height_m": 1.1107029917397417,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.644038686810176
+        },
+        {
+         "time": "2010-03-02T00:24:45Z",
+         "type": "low",
+         "height_m": -1.7041888754961914,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -5.591170851365457
+        },
+        {
+         "time": "2010-03-02T06:53:20Z",
+         "type": "high",
+         "height_m": 1.5129284415089144,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.963675989202475
+        },
+        {
+         "time": "2010-03-02T13:03:26Z",
+         "type": "low",
+         "height_m": -0.8870758140768338,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.9103537207245203
+        },
+        {
+         "time": "2010-03-02T18:32:42Z",
+         "type": "high",
+         "height_m": 1.0753564470152956,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.5280723327273478
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "datum": "msl",
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0061",
+      "stop": "2010-03-03T00:00:00Z",
+      "units": "feet"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": "msl",
+       "datum_kind": "published",
+       "datum_name": "msl",
+       "datum_uncertainty_m": null,
+       "method": "offsets",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": "OTC-P-0060",
+       "release": "20991231.7",
+       "set_id": "OTC-P-0060/noaa",
+       "station_id": "OTC-P-0061",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T06:15:31Z",
+         "type": "high",
+         "height_m": 2.3374743273989997,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 7.668879026899605
+        },
+        {
+         "time": "2010-03-01T12:25:20Z",
+         "type": "low",
+         "height_m": -0.10620800476295522,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.3484514591960473
+        },
+        {
+         "time": "2010-03-01T17:54:24Z",
+         "type": "high",
+         "height_m": 1.9107029917397418,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 6.268710602820675
+        },
+        {
+         "time": "2010-03-02T00:24:45Z",
+         "type": "low",
+         "height_m": -0.9041888754961913,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.966498935354958
+        },
+        {
+         "time": "2010-03-02T06:53:20Z",
+         "type": "high",
+         "height_m": 2.312928441508914,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 7.588347905212973
+        },
+        {
+         "time": "2010-03-02T13:03:26Z",
+         "type": "low",
+         "height_m": -0.08707581407683374,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -0.28568180471402144
+        },
+        {
+         "time": "2010-03-02T18:32:42Z",
+         "type": "high",
+         "height_m": 1.8753564470152957,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 6.1527442487378465
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "extremes"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.5499999999999998,
+         "datum_shift": 0.0,
+         "offsets": {
+          "$offsets": "OTC-P-0061"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0060/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.5499999999999998,
+         "datum_shift": -1.6,
+         "offsets": {
+          "$offsets": "OTC-P-0061"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0060/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "chart_datum_term": 1.5499999999999998,
+         "datum_shift": -0.8,
+         "offsets": {
+          "$offsets": "OTC-P-0061"
+         },
+         "ref_constituents": {
+          "$set": "OTC-P-0060/noaa"
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "entry": "subordinate_extremes_strict"
+       }
+      }
+     }
+    ]
+   },
+   "runners": [
+    "python",
+    "ruby",
+    "typescript",
+    "swift",
+    "typescript-browser",
+    "python-no-tz",
+    "ruby-no-tz"
+   ],
+   "units_provenance": {
+    "source_case": "predict-subordinate/event-datum",
+    "si_divisor": 0.3048,
+    "note": "Selected values only; accepted SI items and science provenance unchanged."
+   }
+  },
+  {
+   "id": "units-feet/local/named-zone",
+   "title": "feet: to_local(Asia/Kolkata) and to_local(Pacific/Chatham) (+5:30; +13:45 and +12:45)",
+   "spec": "4.1",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "localtime",
+    "predict",
+    "prediction_units"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2024-01-10T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-01-11T00:00:00Z",
+      "units": "feet"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.245024937691701
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -3.554106171952378
+        },
+        {
+         "time": "2024-01-10T15:48:53Z",
+         "type": "high",
+         "height_m": 1.185691527657872,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 3.890064067119002
+        },
+        {
+         "time": "2024-01-10T22:03:13Z",
+         "type": "low",
+         "height_m": -1.6060589811406876,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -5.269222379070497
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "tz": "Asia/Kolkata"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "Asia/Kolkata",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2024-01-10T03:53:25Z",
+         "type": "high",
+         "height_m": 1.2938836010084305,
+         "local_time": "2024-01-10T09:23:25+05:30",
+         "utc_offset_s": 19800,
+         "units": "feet",
+         "height": 4.245024937691701
+        },
+        {
+         "time": "2024-01-10T09:45:19Z",
+         "type": "low",
+         "height_m": -1.083291561211085,
+         "local_time": "2024-01-10T15:15:19+05:30",
+         "utc_offset_s": 19800,
+         "units": "feet",
+         "height": -3.554106171952378
+        },
+        {
+         "time": "2024-01-10T15:48:53Z",
+         "type": "high",
+         "height_m": 1.185691527657872,
+         "local_time": "2024-01-10T21:18:53+05:30",
+         "utc_offset_s": 19800,
+         "units": "feet",
+         "height": 3.890064067119002
+        },
+        {
+         "time": "2024-01-10T22:03:13Z",
+         "type": "low",
+         "height_m": -1.6060589811406876,
+         "local_time": "2024-01-11T03:33:13+05:30",
+         "utc_offset_s": 19800,
+         "units": "feet",
+         "height": -5.269222379070497
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "to_local"
+    },
+    {
+     "args": {
+      "start": "2024-04-06T00:00:00Z",
+      "station_id": "OTC-P-0001",
+      "stop": "2024-04-07T12:00:00Z",
+      "units": "feet"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2024-04-06T03:10:39Z",
+         "type": "high",
+         "height_m": 1.4036864752627758,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.605270588132466
+        },
+        {
+         "time": "2024-04-06T09:01:40Z",
+         "type": "low",
+         "height_m": -0.6143644733197972,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.015631474146316
+        },
+        {
+         "time": "2024-04-06T14:35:32Z",
+         "type": "high",
+         "height_m": 0.6670939675652148,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 2.188628502510547
+        },
+        {
+         "time": "2024-04-06T20:45:55Z",
+         "type": "low",
+         "height_m": -1.548432461410194,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -5.080158994127933
+        },
+        {
+         "time": "2024-04-07T03:49:11Z",
+         "type": "high",
+         "height_m": 1.4205008431012651,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": 4.660435836946408
+        },
+        {
+         "time": "2024-04-07T09:40:54Z",
+         "type": "low",
+         "height_m": -0.6519747343982745,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "feet",
+         "height": -2.1390247191544436
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "extremes"
+    },
+    {
+     "args": {
+      "tz": "Pacific/Chatham"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": null,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": "mean_level",
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0001/noaa",
+       "station_id": "OTC-P-0001",
+       "timezone": "America/New_York",
+       "tz": "Pacific/Chatham",
+       "tz_version": {
+        "$any_of": [
+         {
+          "$regex": "^[0-9]{4}[a-z](?:-rearguard)?$(?![\\s\\S])"
+         },
+         null
+        ]
+       },
+       "items": [
+        {
+         "time": "2024-04-06T03:10:39Z",
+         "type": "high",
+         "height_m": 1.4036864752627758,
+         "local_time": "2024-04-06T16:55:39+13:45",
+         "utc_offset_s": 49500,
+         "units": "feet",
+         "height": 4.605270588132466
+        },
+        {
+         "time": "2024-04-06T09:01:40Z",
+         "type": "low",
+         "height_m": -0.6143644733197972,
+         "local_time": "2024-04-06T22:46:40+13:45",
+         "utc_offset_s": 49500,
+         "units": "feet",
+         "height": -2.015631474146316
+        },
+        {
+         "time": "2024-04-06T14:35:32Z",
+         "type": "high",
+         "height_m": 0.6670939675652148,
+         "local_time": "2024-04-07T03:20:32+12:45",
+         "utc_offset_s": 45900,
+         "units": "feet",
+         "height": 2.188628502510547
+        },
+        {
+         "time": "2024-04-06T20:45:55Z",
+         "type": "low",
+         "height_m": -1.548432461410194,
+         "local_time": "2024-04-07T09:30:55+12:45",
+         "utc_offset_s": 45900,
+         "units": "feet",
+         "height": -5.080158994127933
+        },
+        {
+         "time": "2024-04-07T03:49:11Z",
+         "type": "high",
+         "height_m": 1.4205008431012651,
+         "local_time": "2024-04-07T16:34:11+12:45",
+         "utc_offset_s": 45900,
+         "units": "feet",
+         "height": 4.660435836946408
+        },
+        {
+         "time": "2024-04-07T09:40:54Z",
+         "type": "low",
+         "height_m": -0.6519747343982745,
+         "local_time": "2024-04-07T22:25:54+12:45",
+         "utc_offset_s": 45900,
+         "units": "feet",
+         "height": -2.1390247191544436
+        }
+       ],
+       "units": "feet"
+      }
+     },
+     "op": "to_local"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-01-10T00:00:00Z",
+         "stop": "2024-01-11T00:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 0
+       },
+       "local": {
+        "zone": "Asia/Kolkata"
+       }
+      }
+     },
+     {
+      "authored_step": 2,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "constituents": {
+          "$set": "OTC-P-0001/noaa"
+         },
+         "datum_term": 0.0,
+         "start": "2024-04-06T00:00:00Z",
+         "stop": "2024-04-07T12:00:00Z"
+        },
+        "entry": "extremes_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 3,
+      "source": "strict_reuse",
+      "authored_controls": {
+       "strict": {
+        "same_as_step": 2
+       },
+       "local": {
+        "zone": "Pacific/Chatham"
+       }
+      }
+     }
+    ]
+   },
+   "runners": [
+    "python",
+    "ruby",
+    "typescript",
+    "swift",
+    "typescript-browser",
+    "python-no-tz",
+    "ruby-no-tz"
+   ],
+   "units_provenance": {
+    "source_case": "predict-local/named-zone",
+    "si_divisor": 0.3048,
+    "note": "Selected values only; accepted SI items and science provenance unchanged."
+   }
+  }
+ ]
+}
