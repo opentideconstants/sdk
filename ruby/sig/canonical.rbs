@@ -57,20 +57,34 @@ class OpenTideConstants
     class AstroTable
     end
     class HeightPoint
+        def height: () -> (Float | Integer | nil)
+        attr_reader units: String
     end
     class Extreme
+        def height: () -> (Float | Integer | nil)
+        attr_reader units: String
     end
     class CurrentPoint
+        def velocity_major: () -> (Float | Integer | nil)
+        def velocity_minor: () -> (Float | Integer | nil)
+        def speed: () -> (Float | Integer | nil)
+        attr_reader units: String
     end
     class CurrentEvent
+        def velocity: () -> (Float | Integer | nil)
+        attr_reader units: String
     end
     class HeightSeries
+        attr_reader units: String
     end
     class ExtremeList
+        attr_reader units: String
     end
     class CurrentSeries
+        attr_reader units: String
     end
     class CurrentEventList
+        attr_reader units: String
     end
     class DatumInfo
     end
@@ -539,7 +553,7 @@ class OpenTideConstants
             attr_reader stations: Array[::OpenTideConstants::Station] | nil | AbsentValue
         end
         class ArgsReleaseHeights
-            def self.new: (member_id: "Release.heights", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, step_s: Integer | AbsentValue, datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue) -> ArgsReleaseHeights
+            def self.new: (member_id: "Release.heights", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, step_s: Integer | AbsentValue, datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue, ?units: String | AbsentValue) -> ArgsReleaseHeights
             attr_reader member_id: "Release.heights"
             attr_reader station: ::OpenTideConstants::Station | String
             attr_reader start: Time | String | Float | Integer
@@ -548,18 +562,20 @@ class OpenTideConstants
             attr_reader datum: String | nil | AbsentValue
             attr_reader set_id: String | nil | AbsentValue
             attr_reader offset_id: String | nil | AbsentValue
+            attr_reader units: String | AbsentValue
         end
         class ArgsReleaseHeightsAt
-            def self.new: (member_id: "Release.heights_at", station: ::OpenTideConstants::Station | String, times: Array[Time | String | Float | Integer], datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue) -> ArgsReleaseHeightsAt
+            def self.new: (member_id: "Release.heights_at", station: ::OpenTideConstants::Station | String, times: Array[Time | String | Float | Integer], datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue, ?units: String | AbsentValue) -> ArgsReleaseHeightsAt
             attr_reader member_id: "Release.heights_at"
             attr_reader station: ::OpenTideConstants::Station | String
             attr_reader times: Array[Time | String | Float | Integer]
             attr_reader datum: String | nil | AbsentValue
             attr_reader set_id: String | nil | AbsentValue
             attr_reader offset_id: String | nil | AbsentValue
+            attr_reader units: String | AbsentValue
         end
         class ArgsReleaseExtremes
-            def self.new: (member_id: "Release.extremes", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue) -> ArgsReleaseExtremes
+            def self.new: (member_id: "Release.extremes", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, datum: String | nil | AbsentValue, set_id: String | nil | AbsentValue, offset_id: String | nil | AbsentValue, ?units: String | AbsentValue) -> ArgsReleaseExtremes
             attr_reader member_id: "Release.extremes"
             attr_reader station: ::OpenTideConstants::Station | String
             attr_reader start: Time | String | Float | Integer
@@ -567,9 +583,10 @@ class OpenTideConstants
             attr_reader datum: String | nil | AbsentValue
             attr_reader set_id: String | nil | AbsentValue
             attr_reader offset_id: String | nil | AbsentValue
+            attr_reader units: String | AbsentValue
         end
         class ArgsReleaseCurrents
-            def self.new: (member_id: "Release.currents", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, step_s: Integer | AbsentValue, bin_number: Integer | nil | AbsentValue, set_id: String | nil | AbsentValue) -> ArgsReleaseCurrents
+            def self.new: (member_id: "Release.currents", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, step_s: Integer | AbsentValue, bin_number: Integer | nil | AbsentValue, set_id: String | nil | AbsentValue, ?units: String | AbsentValue) -> ArgsReleaseCurrents
             attr_reader member_id: "Release.currents"
             attr_reader station: ::OpenTideConstants::Station | String
             attr_reader start: Time | String | Float | Integer
@@ -577,15 +594,17 @@ class OpenTideConstants
             attr_reader step_s: Integer | AbsentValue
             attr_reader bin_number: Integer | nil | AbsentValue
             attr_reader set_id: String | nil | AbsentValue
+            attr_reader units: String | AbsentValue
         end
         class ArgsReleaseCurrentEvents
-            def self.new: (member_id: "Release.current_events", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, bin_number: Integer | nil | AbsentValue, set_id: String | nil | AbsentValue) -> ArgsReleaseCurrentEvents
+            def self.new: (member_id: "Release.current_events", station: ::OpenTideConstants::Station | String, start: Time | String | Float | Integer, stop: Time | String | Float | Integer, bin_number: Integer | nil | AbsentValue, set_id: String | nil | AbsentValue, ?units: String | AbsentValue) -> ArgsReleaseCurrentEvents
             attr_reader member_id: "Release.current_events"
             attr_reader station: ::OpenTideConstants::Station | String
             attr_reader start: Time | String | Float | Integer
             attr_reader stop: Time | String | Float | Integer
             attr_reader bin_number: Integer | nil | AbsentValue
             attr_reader set_id: String | nil | AbsentValue
+            attr_reader units: String | AbsentValue
         end
         class ArgsReleaseDatums
             def self.new: (member_id: "Release.datums", station: ::OpenTideConstants::Station | String, set_id: String | nil | AbsentValue, all_sets: bool | AbsentValue) -> ArgsReleaseDatums

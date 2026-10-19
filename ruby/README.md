@@ -84,6 +84,10 @@ end
 
 `heights_at` preserves input order and repeated instants. `currents` returns velocities, speed and direction for the selected `bin_number`. `current_events` returns signed peaks and slack events. Results and their items are immutable.
 
+Pass `units: "feet"` to `heights`, `heights_at` or `extremes` to read the selected value as `item.height`; the default is `"meters"`. Pass `units: "knots"` to `currents` or `current_events`; the default is `"m/s"`. Current points expose `velocity_major`, `velocity_minor` and `speed`, and current events expose `velocity`. Every prediction result and item exposes its `units` label, including after `to_local`.
+
+Existing `height_m`, `velocity_major_ms`, `velocity_minor_ms`, `speed_ms`, `velocity_ms` and datum uncertainty fields always retain SI values. Conversion happens after prediction and datum/offset adjustments: feet divide the final metres by `0.3048`; knots divide the final metres per second by `(1852.0 / 3600.0)`. Other selector strings raise `InvalidArgumentError`.
+
 If high and low offsets differ, the station provides extrema only. Curve calls raise `ExtremesOnlyError`. Subordinate current stations also provide events only.
 
 The default `historical_offsets_policy: :fallback` permits eligible NOAA2020 historical profiles when no better contemporary path exists. These results retain the retired source label, unestablished current validity and unverified current accuracy. Select an exact profile with `offset_id:`. Use `historical_offsets_policy: :exclude` to disable historical prediction and discovery. Query flags cannot override that policy.

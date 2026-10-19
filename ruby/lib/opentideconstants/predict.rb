@@ -10,24 +10,27 @@ class OpenTideConstants
             check_open!
             Predict.astro_table(self, id)
         end
-        def heights(station, start:, stop:, step_s: 600, datum: nil, set_id: nil, offset_id: nil)
+        def heights(station, start:, stop:, step_s: 600, datum: nil, set_id: nil, offset_id: nil, units: "meters")
             check_open!
+            Predict.validate_units(units, "meters")
             first, last = Predict.window(start, stop, step_s)
             raise InvalidArgumentError, "step_s must be a positive integer" unless step_s.is_a?(Integer) && step_s > 0
             c = Predict.context(self, station, "water_level", set_id, datum, series: true, offset_id: offset_id)
             items = []
             first.step(last - 1, step_s) { |t| items << HeightPoint.new(time: Predict.utc(t), height_m: c.total.value(t)) } if first < last
-            Predict.result(self, c, HeightSeries, items, datum)
+            Predict.result(self, c, HeightSeries, items, datum, units: units)
         end
-        def heights_at(station, times, datum: nil, set_id: nil, offset_id: nil)
+        def heights_at(station, times, datum: nil, set_id: nil, offset_id: nil, units: "meters")
             check_open!
+            Predict.validate_units(units, "meters")
             raise InvalidArgumentError, "times must be an Array of Time" unless times.is_a?(Array)
             seconds = times.map { |t| Predict.instant(t) }
             c = Predict.context(self, station, "water_level", set_id, datum, series: true, offset_id: offset_id)
-            Predict.result(self, c, HeightSeries, seconds.map { |t| HeightPoint.new(time: Predict.utc(t), height_m: c.total.value(t)) }, datum)
+            Predict.result(self, c, HeightSeries, seconds.map { |t| HeightPoint.new(time: Predict.utc(t), height_m: c.total.value(t)) }, datum, units: units)
         end
-        def extremes(station, start:, stop:, datum: nil, set_id: nil, offset_id: nil)
+        def extremes(station, start:, stop:, datum: nil, set_id: nil, offset_id: nil, units: "meters")
             check_open!
+            Predict.validate_units(units, "meters")
             first, last = Predict.window(start, stop)
             c = Predict.context(self, station, "water_level", set_id, datum, offset_id: offset_id)
             if c.method == "offsets" && first != last
@@ -46,10 +49,11 @@ class OpenTideConstants
                 whole = (t + 0.5).floor
                 Extreme.new(time: Predict.utc(whole), type: kind.to_sym, height_m: value) if first <= whole && whole < last
             end
-            Predict.result(self, c, ExtremeList, items, datum)
+            Predict.result(self, c, ExtremeList, items, datum, units: units)
         end
-        def currents(station, start:, stop:, step_s: 600, bin_number: nil, set_id: nil)
+        def currents(station, start:, stop:, step_s: 600, bin_number: nil, set_id: nil, units: "m/s")
             check_open!
+            Predict.validate_units(units, "m/s")
             first, last = Predict.window(start, stop, step_s)
             raise InvalidArgumentError, "step_s must be a positive integer" unless step_s.is_a?(Integer) && step_s > 0
             c = Predict.context(self, station, "current", set_id, nil, bin_number, series: true)
@@ -65,10 +69,11 @@ class OpenTideConstants
                     items << CurrentPoint.new(time: Predict.utc(t), velocity_major_ms: c.sigma * major, velocity_minor_ms: c.sigma * minor, speed_ms: speed, direction_deg: direction)
                 end
             end
-            Predict.result(self, c, CurrentSeries, items)
+            Predict.result(self, c, CurrentSeries, items, units: units)
         end
-        def current_events(station, start:, stop:, bin_number: nil, set_id: nil)
+        def current_events(station, start:, stop:, bin_number: nil, set_id: nil, units: "m/s")
             check_open!
+            Predict.validate_units(units, "m/s")
             first, last = Predict.window(start, stop)
             c = Predict.context(self, station, "current", set_id, nil, bin_number)
             if c.method == "offsets"
@@ -94,7 +99,7 @@ class OpenTideConstants
                 whole = (t + 0.5).floor
                 CurrentEvent.new(time: Predict.utc(whole), type: k.to_sym, velocity_ms: value, direction_deg: direction) if first <= whole && whole < last
             end
-            Predict.result(self, c, CurrentEventList, items)
+            Predict.result(self, c, CurrentEventList, items, units: units)
         end
         def datums(station, set_id: nil, all_sets: false)
             check_open!
