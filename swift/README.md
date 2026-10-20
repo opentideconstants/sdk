@@ -1,5 +1,23 @@
 # OpenTideConstants for Swift
 
+Find stations inside inclusive latitude and longitude bounds with `bbox` on
+`OpenTideConstants` or a held `Release`. Results use station-ID order and the
+existing discovery filters. Apply `limit` after filtering; omit it for all matches.
+Flagged and fallback stations remain excluded unless explicitly included.
+
+```swift
+let boston = try client.bbox(
+    south: 42.2, west: -71.2, north: 42.5, east: -70.7, limit: 3
+)
+let pacific = try client.release.bbox(
+    south: -25, west: 170, north: -10, east: -170
+)
+```
+
+When `west > east`, the box crosses the date line. Bounds must be finite,
+latitudes within -90...90, longitudes within -180...180, and `south <= north`.
+A supplied limit must be positive. Invalid bounds or limits throw `invalid_argument`.
+
 Prediction calls accept a final, optional `units` argument on both `Station` and
 station ID overloads, through `Release` or `OpenTideConstants`:
 

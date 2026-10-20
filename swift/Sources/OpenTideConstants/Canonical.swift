@@ -134,6 +134,9 @@ internal enum Canonical {
         case (.near, .ReleaseNear, .ReleaseNear(let request)):
             try Release.validateNearArguments(lat: request.lat, lon: request.lon, radiusKm: request.radiusKm, limit: request.limit)
             try release().checkOpen()
+        case (.bbox, .ReleaseBbox, .ReleaseBbox(let request)):
+            try Release.validateBboxArguments(south: request.south, west: request.west, north: request.north, east: request.east, limit: request.limit)
+            try release().checkOpen()
         case (.nearest, .ReleaseNearest, .ReleaseNearest(let request)):
             try Release.validateNearArguments(lat: request.lat, lon: request.lon, radiusKm: request.maxKm ?? .infinity, limit: 1)
             try release().checkOpen()

@@ -326,6 +326,18 @@ internal static func validatedSearchQuery(name:String,limit:Int64?,match:String?
     guard !q.isEmpty,(limit==nil || limit!>0),(match==nil || match=="exact") else { throw OpenTideConstantsError.invalidArgument("invalid query/limit/match") }
     return q
 }
+public func bbox(south:Double,west:Double,north:Double,east:Double,limit:Int64?=nil,country:String?=nil,type:String?=nil,kind:String?=nil,source:String?=nil,sourceType:String?=nil,includeFlagged:Bool=false,includeFallback:Bool=false)throws->[Station] {
+    try Self.validateBboxArguments(south:south,west:west,north:north,east:east,limit:limit)
+    let selected=try filteredEntries(country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback).filter { entry in
+        guard let lat=entry.summary["lat"].number,let lon=entry.summary["lon"].number else { return false }
+        return south<=lat && lat<=north && (west<=east ? west<=lon && lon<=east : lon>=west || lon<=east)
+    }
+    let limited=limit.map { Array(selected.prefix(Int($0))) } ?? selected
+    return try limited.map { try requireStation(stationId:$0.id) }
+}
+internal static func validateBboxArguments(south:Double,west:Double,north:Double,east:Double,limit:Int64?)throws {
+    guard south.isFinite,west.isFinite,north.isFinite,east.isFinite,abs(south)<=90,abs(north)<=90,abs(west)<=180,abs(east)<=180,south<=north,(limit==nil || limit!>0) else { throw OpenTideConstantsError.invalidArgument("invalid bounds/limit") }
+}
 internal func distances(lat:Double,lon:Double,radiusKm:Double,country:String?,type:String?,kind:String?,source:String?,sourceType:String?,includeFlagged:Bool,includeFallback:Bool)throws->[(Double,IndexEntry)] {
     let selected=try filteredEntries(country:country,type:type,kind:kind,source:source,sourceType:sourceType,includeFlagged:includeFlagged,includeFallback:includeFallback)
     return selected.compactMap { e -> (Double,IndexEntry)? in
