@@ -291,6 +291,10 @@ import OpenTideConstants
         defer { explicit.close() }
         check(try explicit.release.stationCount == count && explicit.loadedFrom == client.loadedFrom, "Client.open.defaults")
         let ordinary = try client.stations(), complete = try client.stations(includeFlagged: true, includeFallback: true)
+        let clientBox: [Station] = try client.bbox(south: -90, west: -180, north: 90, east: 180)
+        let releaseBox: [Station] = try release.bbox(south: -90, west: -180, north: 90, east: 180, limit: 1)
+        check(clientBox.map(\.stationId) == ordinary.map(\.stationId), "Client.bbox.filterDefaults")
+        check(releaseBox.map(\.stationId) == Array(ordinary.prefix(1)).map(\.stationId), "Release.bbox.limit")
         for station in complete {
             inspect(owner: "Station", value: try native(station), path: "Station[\(station.stationId)]")
             for set in station.constantSets(includeNoConstants: true) {

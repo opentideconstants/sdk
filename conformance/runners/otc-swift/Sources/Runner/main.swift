@@ -194,7 +194,7 @@ private enum HeldPrediction {
         .object(["reference_station_id": plain(value.referenceStationId), "time_offset_high_min": plain(value.timeOffsetHighMin), "time_offset_low_min": plain(value.timeOffsetLowMin), "height_offset_high": plain(value.heightOffsetHigh), "height_offset_low": plain(value.heightOffsetLow), "height_adjusted_type": plain(value.heightAdjustedType), "licence_id": plain(value.licenceId)])
     }
     static func main() async {
-        emit(.object(["hello": .object(["runner": .string("swift"), "version": .string("0.1.0"), "features": .array(["fs", "fetch", "json", "eager", "stream", "predict", "prediction_units", "localtime_module", "localtime"].map(JSONValue.string))])]))
+        emit(.object(["hello": .object(["runner": .string("swift"), "version": .string("0.1.0"), "features": .array(["fs", "fetch", "json", "eager", "stream", "predict", "prediction_units", "station_bbox", "localtime_module", "localtime"].map(JSONValue.string))])]))
         var client: OpenTideConstants?
         var held: [String: Release] = [:]
         var prediction: HeldPrediction?
@@ -284,7 +284,7 @@ private enum HeldPrediction {
                         }
                         if op == "reference_station" { result = .object(["station_id": try r.referenceStation(station: station).map { .string($0.stationId) } ?? .null]) }
                         else { result = .object(["station_ids": .array(try r.subordinatesOf(station: station).map { .string($0.stationId) })]) }
-                    case "stations", "iter_stations", "search", "near", "nearest":
+                    case "stations", "iter_stations", "search", "bbox", "near", "nearest":
                         let country = try string(args, "country"), type = try string(args, "type"), kind = try string(args, "kind"), source = try string(args, "source"), sourceType = try string(args, "source_type")
                         let flagged = try boolean(args, "include_flagged"), fallback = try boolean(args, "include_fallback")
                         if op == "stations" { result = .object(["station_ids": .array(try r.stations(country: country, type: type, kind: kind, source: source, sourceType: sourceType, includeFlagged: flagged, includeFallback: fallback).map { .string($0.stationId) })]) }
@@ -294,6 +294,17 @@ private enum HeldPrediction {
                             while let station = try cursor() { ids.append(.string(station.stationId)) }
                             result = .object(["station_ids": .array(ids)])
                         } else if op == "search" { result = .object(["station_ids": .array(try r.search(name: args["name"].string ?? "", limit: integer(args, "limit"), match: string(args, "match"), country: country, type: type, kind: kind, source: source, sourceType: sourceType, includeFlagged: flagged, includeFallback: fallback).map { .string($0.stationId) })]) }
+                        else if op == "bbox" {
+                            let south = args["south"].number ?? .nan, west = args["west"].number ?? .nan, north = args["north"].number ?? .nan, east = args["east"].number ?? .nan
+                            let limit = try integer(args, "limit")
+                            let values: [Station]
+                            if q["on"].string == nil {
+                                values = try client.bbox(south: south, west: west, north: north, east: east, limit: limit, country: country, type: type, kind: kind, source: source, sourceType: sourceType, includeFlagged: flagged, includeFallback: fallback)
+                            } else {
+                                values = try r.bbox(south: south, west: west, north: north, east: east, limit: limit, country: country, type: type, kind: kind, source: source, sourceType: sourceType, includeFlagged: flagged, includeFallback: fallback)
+                            }
+                            result = .object(["station_ids": .array(values.map { .string($0.stationId) })])
+                        }
                         else if op == "near" {
                             let values = try r.near(lat: args["lat"].number ?? .nan, lon: args["lon"].number ?? .nan, radiusKm: args["radius_km"].number ?? .nan, limit: integer(args, "limit"), country: country, type: type, kind: kind, source: source, sourceType: sourceType, includeFlagged: flagged, includeFallback: fallback)
                             result = .object(["station_ids": .array(values.map { .string($0.station.stationId) }), "distance_km": .array(values.map { .number($0.distanceKm) })])
