@@ -403,6 +403,20 @@ class OpenTideConstants
             end
         end
 
+        class ArgsReleaseBbox
+            attr_reader :member_id, :south, :west, :north, :east, :limit, :filters
+            def initialize(member_id:, south:, west:, north:, east:, limit:, filters: nil)
+                @member_id = member_id
+                @south = south
+                @west = west
+                @north = north
+                @east = east
+                @limit = limit
+                @filters = filters
+                freeze
+            end
+        end
+
         class ArgsReleaseNear
             attr_reader :member_id, :lat, :lon, :radius_km, :limit, :filters
             def initialize(member_id:, lat:, lon:, radius_km:, limit:, filters: nil)
