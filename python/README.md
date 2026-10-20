@@ -29,7 +29,14 @@ with OpenTideConstants() as otc:                      # the latest release, cach
         print(otc.attribution([st]))
     for hit in otc.near(lat=37.8, lon=-122.4, radius_km=25):
         print(hit.station.station_id, hit.distance_km)
+    for station in otc.bbox(south=37.7, west=-122.5, north=37.9, east=-122.3, limit=10):
+        print(station.station_id, station.name)
+    # west > east includes both sides of the date line.
+    pacific = otc.bbox(south=-25, west=170, north=-10, east=-170)
 ```
+
+`bbox` returns a tuple in station-ID order with inclusive bounds. It accepts the same discovery filters
+as `stations`, and applies `limit` after filtering. The same method is available on a held `otc.release`.
 
 In production, pin a release: `OpenTideConstants(release="20261008")`. Offline: `offline=True` (or
 `OPENTIDECONSTANTS_OFFLINE=1`). A bundled file: make the bundle with `otc.download("20261008", to="data/")`,

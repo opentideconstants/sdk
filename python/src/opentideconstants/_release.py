@@ -165,6 +165,16 @@ def _limit(limit):
     return limit
 
 
+def _validate_bbox_arguments(south, west, north, east, limit):
+    south = _number("south", south, -90, 90)
+    west = _number("west", west, -180, 180)
+    north = _number("north", north, -90, 90)
+    east = _number("east", east, -180, 180)
+    if south > north:
+        raise InvalidArgumentError("south must not exceed north")
+    return south, west, north, east, _limit(limit)
+
+
 def _typed(cls, v):
     """The value of an enum field as the Station reports it: None, a schema value, or "other" for a value this
     SDK does not know (spec 7.3). Filters and stats use it (CR2 DR7)."""
@@ -1091,6 +1101,20 @@ class Release:
         if limit is not None:
             ranked = ranked[:limit]
         return tuple(self._station_from_entry(x[3]) for x in ranked)
+
+    def bbox(self, *, south, west, north, east, limit=None, country=None, type=None, kind=None,  # noqa: A002
+             source=None, source_type=None, include_flagged=False, include_fallback=False) -> Tuple[Station, ...]:
+        """Stations inside inclusive bounds, ordered by station_id; west > east crosses the date line."""
+        south, west, north, east, limit = _validate_bbox_arguments(south, west, north, east, limit)
+        entries = []
+        for e in self._filtered(country, type, kind, source, source_type, include_flagged, include_fallback):
+            if south <= e["lat"] <= north and (
+                west <= e["lon"] <= east if west <= east else e["lon"] >= west or e["lon"] <= east
+            ):
+                entries.append(e)
+                if limit is not None and len(entries) == limit:
+                    break
+        return tuple(self._station_from_entry(e) for e in entries)
 
     def _distances(self, lat, lon, radius_km, filters):
         cands = self._filtered(**filters)
