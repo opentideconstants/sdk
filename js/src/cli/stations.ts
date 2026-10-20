@@ -1,9 +1,13 @@
 import { parseArgs } from "node:util";
 import { InvalidArgumentError, OpenTideConstants, type OpenOptions } from "../index.js";
+import { isPredictionCommand, runPrediction } from "./predictions.js";
 
 const usage = `Usage:
     otc stations [--query <name>] [options]
     otc search <name> [options]
+    otc extremes <station> --from <time> --to <time> [options]
+    otc timeline <station> --from <time> --to <time> --step <seconds> [options]
+    otc currents <station> --from <time> --to <time> [--step <seconds>] [options]
 
 Options:
     --file <path>          Open a local release file
@@ -13,7 +17,10 @@ Options:
     --base-url <url>       Use a release mirror
     --mode <eager|stream>  Select the SDK loading mode
     --limit <count>        Limit name-search results
-    --json                Write {"stations": [...]} instead of a text table
+    --datum <name>        Height datum (SDK default: mean_level)
+    --units <units>       meters|feet for heights; m/s|knots for currents
+    --bin <number>        Select a current bin
+    --json                Write JSON instead of a text table
     --help                Show this help
 `;
 
@@ -21,7 +28,8 @@ Options:
 export async function runStations(args: string[]): Promise<string> {
     const command = args[0];
     if (command === undefined || command === "--help") return usage;
-    if (command !== "stations" && command !== "search") {
+    const prediction = isPredictionCommand(command);
+    if (command !== "stations" && command !== "search" && !prediction) {
         throw new InvalidArgumentError(`unknown command ${command}; use otc --help`);
     }
     const { values, positionals } = parseArgs({
@@ -38,10 +46,25 @@ export async function runStations(args: string[]): Promise<string> {
             limit: { type: "string" },
             json: { type: "boolean" },
             help: { type: "boolean" },
+            from: { type: "string" },
+            to: { type: "string" },
+            step: { type: "string" },
+            bin: { type: "string" },
+            datum: { type: "string" },
+            units: { type: "string" },
         },
     });
     if (values.help) return usage;
-    if (command === "search" ? positionals.length !== 1 || values.query !== undefined : positionals.length !== 0) {
+    if (prediction && (positionals.length !== 1 || values.from === undefined || values.to === undefined)) {
+        throw new InvalidArgumentError(`${command} requires a station, --from and --to`);
+    }
+    if (prediction && (values.query !== undefined || values.limit !== undefined)) {
+        throw new InvalidArgumentError("--query and --limit apply to station searches");
+    }
+    if (!prediction && [values.from, values.to, values.step, values.bin, values.datum, values.units].some((value) => value !== undefined)) {
+        throw new InvalidArgumentError("prediction options require extremes, timeline or currents");
+    }
+    if (!prediction && (command === "search" ? positionals.length !== 1 || values.query !== undefined : positionals.length !== 0)) {
         throw new InvalidArgumentError("use otc search <name> or otc stations --query <name>; quote names containing spaces");
     }
     const name = command === "search" ? positionals[0] : values.query;
@@ -61,6 +84,7 @@ export async function runStations(args: string[]): Promise<string> {
     };
     const client = await OpenTideConstants.open(options);
     try {
+        if (isPredictionCommand(command)) return await runPrediction(client, command, positionals[0], values);
         const stations = name === undefined ? client.stations() : client.search({
             name, limit: values.limit === undefined ? undefined : Number(values.limit),
         });
