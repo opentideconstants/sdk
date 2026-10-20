@@ -137,8 +137,8 @@ def test_accepted_prediction_profiles_require_native_features():
     assert "predict" in driver.profile_problem("python", base)
     assert "predict" in driver.profile_problem("python-no-tz", base)
     assert "stream" in driver.profile_problem("python", ["fs", "fetch", "json", "eager", "https_proxy"])
-    assert driver.profile_problem("python", base + driver.PREDICT_FEATURES) is None
-    assert driver.profile_problem("swift", driver.LANG_FEATURES + driver.PREDICT_FEATURES) is None
+    assert driver.profile_problem("python", base + driver.PREDICT_FEATURES + ["prediction_units"]) is None
+    assert driver.profile_problem("swift", driver.LANG_FEATURES + driver.PREDICT_FEATURES + ["prediction_units"]) is None
     assert driver.profile_problem("c-no-predict", ["fs", "stream", "require_checksum"]) is None
 
 

@@ -48,3 +48,18 @@ The SDK passes the shared conformance suite in `conformance/` (see `conformance/
 python3 conformance/driver.py --runner "python3 conformance/runners/python/runner.py"
 python3 conformance/runners/python/check_api.py
 ```
+
+## Prediction units
+
+`heights`, `heights_at`, and `extremes` accept `units="meters"` (the default) or
+`units="feet"`. Read each item's `height` for the selected value. `currents` and
+`current_events` accept `units="m/s"` (the default) or `units="knots"`. Current
+points expose `velocity_major`, `velocity_minor`, and `speed`; current events
+expose `velocity`. The same options are available on the client and its `release`.
+
+Every prediction result and item has a read-only `units` label for these selected
+values. Existing fields such as `height_m`, `velocity_major_ms`, `speed_ms`, and
+`datum_uncertainty_m` remain in SI units. Conversion uses final SI values: divide
+heights by `0.3048` for feet and currents by `1852.0 / 3600.0` for knots. Times,
+event types, directions, and provenance are unchanged. `to_local()` preserves
+the selected units. Unsupported unit strings raise `InvalidArgumentError`.

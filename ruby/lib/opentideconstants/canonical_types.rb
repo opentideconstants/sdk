@@ -654,8 +654,8 @@ class OpenTideConstants
         end
 
         class ArgsReleaseHeights
-            attr_reader :member_id, :station, :start, :stop, :step_s, :datum, :set_id, :offset_id
-            def initialize(member_id:, station:, start:, stop:, step_s:, datum:, set_id:, offset_id:)
+            attr_reader :member_id, :station, :start, :stop, :step_s, :datum, :set_id, :offset_id, :units
+            def initialize(member_id:, station:, start:, stop:, step_s:, datum:, set_id:, offset_id:, units: ABSENT)
                 @member_id = member_id
                 @station = station
                 @start = start
@@ -664,26 +664,28 @@ class OpenTideConstants
                 @datum = datum
                 @set_id = set_id
                 @offset_id = offset_id
+                @units = units
                 freeze
             end
         end
 
         class ArgsReleaseHeightsAt
-            attr_reader :member_id, :station, :times, :datum, :set_id, :offset_id
-            def initialize(member_id:, station:, times:, datum:, set_id:, offset_id:)
+            attr_reader :member_id, :station, :times, :datum, :set_id, :offset_id, :units
+            def initialize(member_id:, station:, times:, datum:, set_id:, offset_id:, units: ABSENT)
                 @member_id = member_id
                 @station = station
                 @times = times
                 @datum = datum
                 @set_id = set_id
                 @offset_id = offset_id
+                @units = units
                 freeze
             end
         end
 
         class ArgsReleaseExtremes
-            attr_reader :member_id, :station, :start, :stop, :datum, :set_id, :offset_id
-            def initialize(member_id:, station:, start:, stop:, datum:, set_id:, offset_id:)
+            attr_reader :member_id, :station, :start, :stop, :datum, :set_id, :offset_id, :units
+            def initialize(member_id:, station:, start:, stop:, datum:, set_id:, offset_id:, units: ABSENT)
                 @member_id = member_id
                 @station = station
                 @start = start
@@ -691,13 +693,14 @@ class OpenTideConstants
                 @datum = datum
                 @set_id = set_id
                 @offset_id = offset_id
+                @units = units
                 freeze
             end
         end
 
         class ArgsReleaseCurrents
-            attr_reader :member_id, :station, :start, :stop, :step_s, :bin_number, :set_id
-            def initialize(member_id:, station:, start:, stop:, step_s:, bin_number:, set_id:)
+            attr_reader :member_id, :station, :start, :stop, :step_s, :bin_number, :set_id, :units
+            def initialize(member_id:, station:, start:, stop:, step_s:, bin_number:, set_id:, units: ABSENT)
                 @member_id = member_id
                 @station = station
                 @start = start
@@ -705,19 +708,21 @@ class OpenTideConstants
                 @step_s = step_s
                 @bin_number = bin_number
                 @set_id = set_id
+                @units = units
                 freeze
             end
         end
 
         class ArgsReleaseCurrentEvents
-            attr_reader :member_id, :station, :start, :stop, :bin_number, :set_id
-            def initialize(member_id:, station:, start:, stop:, bin_number:, set_id:)
+            attr_reader :member_id, :station, :start, :stop, :bin_number, :set_id, :units
+            def initialize(member_id:, station:, start:, stop:, bin_number:, set_id:, units: ABSENT)
                 @member_id = member_id
                 @station = station
                 @start = start
                 @stop = stop
                 @bin_number = bin_number
                 @set_id = set_id
+                @units = units
                 freeze
             end
         end

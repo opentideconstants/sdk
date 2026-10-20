@@ -23,7 +23,7 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-FEATURES = ["fs", "fetch", "json", "eager", "stream", "https_proxy", "predict", "localtime_module"]
+FEATURES = ["fs", "fetch", "json", "eager", "stream", "https_proxy", "predict", "prediction_units", "localtime_module"]
 try:
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 except ImportError:
@@ -182,10 +182,18 @@ _PREDICTION_FIELDS = ['station_id', 'timezone', 'method', 'set_id', 'convention_
                       'datum_uncertainty_m', 'bin_number', 'omitted_event_types', 'tz', 'tz_version', 'release', 'algorithm']
 
 
-def enc_prediction(result):
+def enc_prediction(result, include_units=False):
     from dataclasses import fields
     encoded = {name: plain(getattr(result, name, None)) for name in _PREDICTION_FIELDS}
-    encoded['items'] = [{f.name: plain(getattr(item, f.name)) for f in fields(item) if not f.name.startswith('_')} for item in result.items]
+    encoded['items'] = [{f.name: plain(getattr(item, f.name)) for f in fields(item)
+                         if not f.name.startswith('_') and (include_units or f.name != 'units')}
+                        for item in result.items]
+    if include_units:
+        encoded['units'] = result.units
+        for item, row in zip(result.items, encoded['items']):
+            for name in ('height', 'velocity_major', 'velocity_minor', 'speed', 'velocity'):
+                if hasattr(item, name):
+                    row[name] = plain(getattr(item, name))
     return encoded
 
 
@@ -206,6 +214,7 @@ class Runner:
         self.client = None
         self.held = {}
         self.prediction = None
+        self.prediction_units = False
 
     def _sdk(self):
         import opentideconstants
@@ -401,12 +410,13 @@ class Runner:
             if 'times' in arguments:
                 arguments['times'] = [prediction_time(t) if isinstance(t, str) else t for t in arguments['times']]
             self.prediction = getattr(self.target(req), op)(a['station_id'], **arguments)
-            return {'prediction': enc_prediction(self.prediction)}
+            self.prediction_units = 'units' in arguments
+            return {'prediction': enc_prediction(self.prediction, self.prediction_units)}
         if op == 'to_local':
             if self.prediction is None:
                 raise ValueError('no prediction result is held')
             self.prediction = self.prediction.to_local(**a)
-            return {'prediction': enc_prediction(self.prediction)}
+            return {'prediction': enc_prediction(self.prediction, self.prediction_units)}
         if op in ('astro_table', 'valid_range', 'equilibrium_argument', 'node_factor', 'equilibrium_for_year', 'node_factor_for_year'):
             table = self.release(req).astro_table(a.get('id'))
             if op == 'astro_table':

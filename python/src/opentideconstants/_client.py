@@ -1470,25 +1470,25 @@ class OpenTideConstants:
         return self._r().nearest(lat=lat, lon=lon, max_km=max_km, country=country, type=type, kind=kind,
                                  source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
-    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None, offset_id=None):
+    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None, offset_id=None, units='meters'):
         """Heights using otc-predict-1 (prediction spec section 5.2)."""
-        return self._r().heights(station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id, offset_id=offset_id)
+        return self._r().heights(station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id, offset_id=offset_id, units=units)
 
-    def heights_at(self, station, times, *, datum=None, set_id=None, offset_id=None):
+    def heights_at(self, station, times, *, datum=None, set_id=None, offset_id=None, units='meters'):
         """Heights at using otc-predict-1 (prediction spec section 5.2)."""
-        return self._r().heights_at(station, times, datum=datum, set_id=set_id, offset_id=offset_id)
+        return self._r().heights_at(station, times, datum=datum, set_id=set_id, offset_id=offset_id, units=units)
 
-    def extremes(self, station, *, start, stop, datum=None, set_id=None, offset_id=None):
+    def extremes(self, station, *, start, stop, datum=None, set_id=None, offset_id=None, units='meters'):
         """Extremes using otc-predict-1 (prediction spec section 5.2)."""
-        return self._r().extremes(station, start=start, stop=stop, datum=datum, set_id=set_id, offset_id=offset_id)
+        return self._r().extremes(station, start=start, stop=stop, datum=datum, set_id=set_id, offset_id=offset_id, units=units)
 
-    def currents(self, station, *, start, stop, step_s=600, bin_number=None, set_id=None):
+    def currents(self, station, *, start, stop, step_s=600, bin_number=None, set_id=None, units='m/s'):
         """Currents using otc-predict-1 (prediction spec section 5.2)."""
-        return self._r().currents(station, start=start, stop=stop, step_s=step_s, bin_number=bin_number, set_id=set_id)
+        return self._r().currents(station, start=start, stop=stop, step_s=step_s, bin_number=bin_number, set_id=set_id, units=units)
 
-    def current_events(self, station, *, start, stop, bin_number=None, set_id=None):
+    def current_events(self, station, *, start, stop, bin_number=None, set_id=None, units='m/s'):
         """Current events using otc-predict-1 (prediction spec section 5.2)."""
-        return self._r().current_events(station, start=start, stop=stop, bin_number=bin_number, set_id=set_id)
+        return self._r().current_events(station, start=start, stop=stop, bin_number=bin_number, set_id=set_id, units=units)
 
     def datums(self, station, *, set_id=None, all_sets=False):
         """Datums using otc-predict-1 (prediction spec section 5.2)."""

@@ -7,9 +7,9 @@ import {HeightPoint,Extreme,CurrentPoint,CurrentEvent,HeightSeries,ExtremeList,C
 import type {ExtremeType,CurrentEventType,PredictionMethod} from '../types.js';
 import {requireHistoricalOffset} from '../historical-offsets.js';
 
-export interface HeightOptions {datum?:string|null;setId?:string|null;offsetId?:string|null;}
+export interface HeightOptions {units?:'meters'|'feet';datum?:string|null;setId?:string|null;offsetId?:string|null;}
 export interface HeightWindowOptions extends HeightOptions {start:Date;stop:Date;stepS?:number;}
-export interface CurrentOptions {binNumber?:number|null;setId?:string|null;}
+export interface CurrentOptions {units?:'m/s'|'knots';binNumber?:number|null;setId?:string|null;}
 export interface CurrentWindowOptions extends CurrentOptions {start:Date;stop:Date;stepS?:number;}
 export interface DatumOptions {setId?:string|null;allSets?:boolean;}
 export interface RangeOptions {setId?:string|null;}
@@ -118,11 +118,11 @@ function tideFields(release:Release,c:Context,datum:string|null|undefined=null) 
 }
 export function heights(release:Release,station:Station|string,opts:HeightWindowOptions):HeightSeries {
     const step=opts.stepS===undefined?600:opts.stepS,[start,stop]=window(opts.start,opts.stop,step),c=context(release,station,'water_level',opts.setId,opts.datum,null,true,opts.offsetId),items:HeightPoint[]=[];
-    for(let t=start;t<stop;t+=step)items.push(new HeightPoint({time:utc(t),height_m:c.total.value(t),local_time:null,utc_offset_s:null}));return new HeightSeries({...tideFields(release,c,opts.datum),items});
+    for(let t=start;t<stop;t+=step)items.push(new HeightPoint({time:utc(t),height_m:c.total.value(t),local_time:null,utc_offset_s:null}));return new HeightSeries({...tideFields(release,c,opts.datum),items,units:opts.units});
 }
 export function heightsAt(release:Release,station:Station|string,times:readonly Date[],opts:HeightOptions={}):HeightSeries {
     const seconds=predictionSeconds(times),c=context(release,station,'water_level',opts.setId,opts.datum,null,true,opts.offsetId);
-    return heightSeriesFromContext(release,c,seconds,opts.datum);
+    return new HeightSeries({...heightSeriesFromContext(release,c,seconds,opts.datum),units:opts.units});
 }
 /** @internal Original sequence/instant guard phase; no model selection or evaluation. */
 export function predictionSeconds(times:readonly Date[]):number[] {
@@ -142,7 +142,7 @@ export function extremes(release:Release,station:Station|string,opts:Omit<Height
     if(c.method==='offsets'&&start!==stop){const off=c.offsets as JsonObject,margin=Math.max(120,Math.max(Math.abs(num(off,'time_offset_high_min')??0),Math.abs(num(off,'time_offset_low_min')??0))+60)*60;
         candidates=events(c.total,start-margin,stop+margin).map(([root,kind,value]):[number,string,number]=>{const height=num(off,`height_offset_${kind}`);return [root+(num(off,`time_offset_${kind}_min`)??0)*60,kind,(off['height_adjusted_type']==='R'?value*(height??1):value+(height??0))+(num(off,'_subterm')??0)];}).sort((a,b)=>Math.floor(a[0]+0.5)-Math.floor(b[0]+0.5));
     }else candidates=events(c.total,start,stop);
-    const items=candidates.filter(([t])=>start<=Math.floor(t+0.5)&&Math.floor(t+0.5)<stop).map(([t,kind,value])=>new Extreme({time:utc(Math.floor(t+0.5)),type:kind as ExtremeType,height_m:value,local_time:null,utc_offset_s:null}));return new ExtremeList({...tideFields(release,c,opts.datum),items});
+    const items=candidates.filter(([t])=>start<=Math.floor(t+0.5)&&Math.floor(t+0.5)<stop).map(([t,kind,value])=>new Extreme({time:utc(Math.floor(t+0.5)),type:kind as ExtremeType,height_m:value,local_time:null,utc_offset_s:null}));return new ExtremeList({...tideFields(release,c,opts.datum),items,units:opts.units});
 }
 function currentEventCandidates(c:Context,start:number,stop:number,eventSource:(total:Sum,start:number,stop:number,slack?:boolean)=>Event[]):[number,CurrentEventType,number,number|null][] {
     const row=c.currentBin as JsonObject,total=new Sum(c.table,objects(row,'constituents'),{amplitude:'major_amplitude_ms',phase:'major_phase_deg',multiplier:c.sigma,mean:c.sigma*(num(row,'mean_major_ms')??0)}),candidates:[number,CurrentEventType,number,number|null][]=[];
@@ -155,7 +155,7 @@ export function unroundedCurrentEventsFor(c:Context,start:number,stop:number):[n
 export function currents(release:Release,station:Station|string,opts:CurrentWindowOptions):CurrentSeries {
     const step=opts.stepS===undefined?600:opts.stepS,[start,stop]=window(opts.start,opts.stop,step),c=context(release,station,'current',opts.setId,null,opts.binNumber,true),theta=(num(c.currentBin,'azimuth_deg')??0)*RAD,items:CurrentPoint[]=[];
     for(let t=start;t<stop;t+=step){const major=c.total.value(t),minor=(c.minor as Sum).value(t),east=major*Math.sin(theta)+minor*Math.sin(theta+Math.PI/2),north=major*Math.cos(theta)+minor*Math.cos(theta+Math.PI/2),speed=Math.hypot(east,north),direction=speed<1e-9?null:angle(Math.atan2(east,north)/RAD);items.push(new CurrentPoint({time:utc(t),velocity_major_ms:c.sigma*major,velocity_minor_ms:c.sigma*minor,speed_ms:speed,direction_deg:direction,local_time:null,utc_offset_s:null}));}
-    return new CurrentSeries({...resultFields(release,c),items,bin_number:c.binNumber as number});
+    return new CurrentSeries({...resultFields(release,c),items,bin_number:c.binNumber as number,units:opts.units});
 }
 export function currentEvents(release:Release,station:Station|string,opts:Omit<CurrentWindowOptions,'stepS'>):CurrentEventList {
     const [start,stop]=window(opts.start,opts.stop),c=context(release,station,'current',opts.setId,null,opts.binNumber);let candidates;
@@ -163,7 +163,7 @@ export function currentEvents(release:Release,station:Station|string,opts:Omit<C
         const margin=Math.max(120,Math.max(0,...kept.map(k=>Math.abs(num(entry,`time_adj_${k}_min`) as number)))+60)*60;
         candidates=(start===stop?[]:currentEventsFor(c,start-margin,stop+margin)).filter(([,kind])=>kept.includes(kind)).map(([root,kind,value,direction]):[number,CurrentEventType,number,number|null]=>{const time=root+(num(entry,`time_adj_${kind}_min`) as number)*60;if(kind==='max_flood'||kind==='max_ebb'){value*=num(entry,kind==='max_flood'?'flood_amp_ratio':'ebb_amp_ratio') as number;direction=num(entry,kind==='max_flood'?'mean_flood_dir_deg':'mean_ebb_dir_deg');}return [time,kind,value,direction];}).sort((a,b)=>Math.floor(a[0]+0.5)-Math.floor(b[0]+0.5));
     }else candidates=currentEventsFor(c,start,stop);
-    const items=candidates.filter(([t])=>start<=Math.floor(t+0.5)&&Math.floor(t+0.5)<stop).map(([t,type,value,direction])=>new CurrentEvent({time:utc(Math.floor(t+0.5)),type,velocity_ms:value,direction_deg:direction,local_time:null,utc_offset_s:null}));return new CurrentEventList({...resultFields(release,c),items,bin_number:c.binNumber as number,omitted_event_types:c.omitted});
+    const items=candidates.filter(([t])=>start<=Math.floor(t+0.5)&&Math.floor(t+0.5)<stop).map(([t,type,value,direction])=>new CurrentEvent({time:utc(Math.floor(t+0.5)),type,velocity_ms:value,direction_deg:direction,local_time:null,utc_offset_s:null}));return new CurrentEventList({...resultFields(release,c),items,bin_number:c.binNumber as number,omitted_event_types:c.omitted,units:opts.units});
 }
 /** @internal Discovery validates the same model and own policy as prediction, without evaluating a time window. */
 export function historicalDiscovery(release:Release,station:Station):boolean {try{context(release,station,'water_level',null,'chart');return true;}catch(e){if(e instanceof X.OpenTideConstantsError)return false;throw e;}}

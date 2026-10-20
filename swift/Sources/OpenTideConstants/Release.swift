@@ -377,8 +377,9 @@ public func nearest(lat:Double,lon:Double,maxKm:Double?=nil,country:String?=nil,
 }
 
 public extension Release {
-    func heights(station: Station, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries {
+    func heights(station: Station, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = "meters") throws -> HeightSeries {
         try checkOpen()
+        try validatePredictionUnits(units, height: true)
         let (a, b) = try Predict.window(start, stop, stepS: stepS)
         let context = try Predict.context(self, supplied: station, quantity: .waterLevel, setId: setId, datum: datum, series: true, offsetId: offsetId)
         var items: [HeightPoint] = []
@@ -387,10 +388,11 @@ public extension Release {
             items.append(HeightPoint(time: Date(timeIntervalSince1970: time), heightM: try context.total!.value(time)))
             time += Double(stepS)
         }
-        return Predict.heightSeries(self, context: context, items: items, datum: datum)
+        return Predict.heightSeries(self, context: context, items: items, datum: datum).withUnits(units)
     }
-    func heights(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries {
+    func heights(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = "meters") throws -> HeightSeries {
         try checkOpen()
+        try validatePredictionUnits(units, height: true)
         let (a, b) = try Predict.window(start, stop, stepS: stepS)
         let selectedStation = try requireStation(stationId: stationId)
         let context = try Predict.context(self, supplied: selectedStation, quantity: .waterLevel, setId: setId, datum: datum, series: true, offsetId: offsetId)
@@ -400,61 +402,69 @@ public extension Release {
             items.append(HeightPoint(time: Date(timeIntervalSince1970: time), heightM: try context.total!.value(time)))
             time += Double(stepS)
         }
-        return Predict.heightSeries(self, context: context, items: items, datum: datum)
+        return Predict.heightSeries(self, context: context, items: items, datum: datum).withUnits(units)
     }
-    func heightsAt(station: Station, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries {
+    func heightsAt(station: Station, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = "meters") throws -> HeightSeries {
         try checkOpen()
+        try validatePredictionUnits(units, height: true)
         let seconds = try times.map(predictionInstant)
         let context = try Predict.context(self, supplied: station, quantity: .waterLevel, setId: setId, datum: datum, series: true, offsetId: offsetId)
         let items = try seconds.map { HeightPoint(time: Date(timeIntervalSince1970: $0), heightM: try context.total!.value($0)) }
-        return Predict.heightSeries(self, context: context, items: items, datum: datum)
+        return Predict.heightSeries(self, context: context, items: items, datum: datum).withUnits(units)
     }
-    func heightsAt(stationId: String, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries {
+    func heightsAt(stationId: String, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = "meters") throws -> HeightSeries {
         try checkOpen()
+        try validatePredictionUnits(units, height: true)
         let seconds = try times.map(predictionInstant)
         let selectedStation = try requireStation(stationId: stationId)
         let context = try Predict.context(self, supplied: selectedStation, quantity: .waterLevel, setId: setId, datum: datum, series: true, offsetId: offsetId)
         let items = try seconds.map { HeightPoint(time: Date(timeIntervalSince1970: $0), heightM: try context.total!.value($0)) }
-        return Predict.heightSeries(self, context: context, items: items, datum: datum)
+        return Predict.heightSeries(self, context: context, items: items, datum: datum).withUnits(units)
     }
-    func extremes(station: Station, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> ExtremeList {
+    func extremes(station: Station, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = "meters") throws -> ExtremeList {
         try checkOpen()
+        try validatePredictionUnits(units, height: true)
         let (a, b) = try Predict.window(start, stop)
         let context = try Predict.context(self, supplied: station, quantity: .waterLevel, setId: setId, datum: datum, offsetId: offsetId)
-        return try Predict.extremes(self, context: context, start: a, stop: b, datum: datum)
+        return try Predict.extremes(self, context: context, start: a, stop: b, datum: datum).withUnits(units)
     }
-    func extremes(stationId: String, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> ExtremeList {
+    func extremes(stationId: String, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = "meters") throws -> ExtremeList {
         try checkOpen()
+        try validatePredictionUnits(units, height: true)
         let (a, b) = try Predict.window(start, stop)
         let selectedStation = try requireStation(stationId: stationId)
         let context = try Predict.context(self, supplied: selectedStation, quantity: .waterLevel, setId: setId, datum: datum, offsetId: offsetId)
-        return try Predict.extremes(self, context: context, start: a, stop: b, datum: datum)
+        return try Predict.extremes(self, context: context, start: a, stop: b, datum: datum).withUnits(units)
     }
-    func currents(station: Station, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentSeries {
+    func currents(station: Station, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil, units: String = "m/s") throws -> CurrentSeries {
         try checkOpen()
+        try validatePredictionUnits(units, height: false)
         let (a, b) = try Predict.window(start, stop, stepS: stepS)
         let context = try Predict.context(self, supplied: station, quantity: .current, setId: setId, binNumber: binNumber, series: true)
-        return try Predict.currents(self, context: context, start: a, stop: b, stepS: stepS)
+        return try Predict.currents(self, context: context, start: a, stop: b, stepS: stepS).withUnits(units)
     }
-    func currents(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentSeries {
+    func currents(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil, units: String = "m/s") throws -> CurrentSeries {
         try checkOpen()
+        try validatePredictionUnits(units, height: false)
         let (a, b) = try Predict.window(start, stop, stepS: stepS)
         let selectedStation = try requireStation(stationId: stationId)
         let context = try Predict.context(self, supplied: selectedStation, quantity: .current, setId: setId, binNumber: binNumber, series: true)
-        return try Predict.currents(self, context: context, start: a, stop: b, stepS: stepS)
+        return try Predict.currents(self, context: context, start: a, stop: b, stepS: stepS).withUnits(units)
     }
-    func currentEvents(station: Station, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentEventList {
+    func currentEvents(station: Station, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil, units: String = "m/s") throws -> CurrentEventList {
         try checkOpen()
+        try validatePredictionUnits(units, height: false)
         let (a, b) = try Predict.window(start, stop)
         let context = try Predict.context(self, supplied: station, quantity: .current, setId: setId, binNumber: binNumber)
-        return try Predict.currentEvents(self, context: context, start: a, stop: b)
+        return try Predict.currentEvents(self, context: context, start: a, stop: b).withUnits(units)
     }
-    func currentEvents(stationId: String, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentEventList {
+    func currentEvents(stationId: String, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil, units: String = "m/s") throws -> CurrentEventList {
         try checkOpen()
+        try validatePredictionUnits(units, height: false)
         let (a, b) = try Predict.window(start, stop)
         let selectedStation = try requireStation(stationId: stationId)
         let context = try Predict.context(self, supplied: selectedStation, quantity: .current, setId: setId, binNumber: binNumber)
-        return try Predict.currentEvents(self, context: context, start: a, stop: b)
+        return try Predict.currentEvents(self, context: context, start: a, stop: b).withUnits(units)
     }
     func datums(station: Station, setId: String? = nil, allSets: Bool = false) throws -> DatumsResult {
         try checkOpen()

@@ -225,12 +225,16 @@ internal enum CanonicalMemberID: String, CaseIterable {
     case AstroTableEquilibriumForYear = "AstroTable.equilibrium_for_year"
     case AstroTableNodeFactorForYear = "AstroTable.node_factor_for_year"
     case AstroTableValidRange = "AstroTable.valid_range"
+    case HeightPointUnits = "HeightPoint.units"
+    case HeightPointHeight = "HeightPoint.height"
     case HeightPointTime = "HeightPoint.time"
     case HeightPointHeightM = "HeightPoint.height_m"
     case HeightPointLocalTime = "HeightPoint.local_time"
     case HeightPointUtcOffsetS = "HeightPoint.utc_offset_s"
     case HeightPointLocalDatetime = "HeightPoint.local_datetime"
     case HeightPointLocalTimeObject = "HeightPoint.local_time_object"
+    case ExtremeUnits = "Extreme.units"
+    case ExtremeHeight = "Extreme.height"
     case ExtremeTime = "Extreme.time"
     case ExtremeType = "Extreme.type"
     case ExtremeHeightM = "Extreme.height_m"
@@ -238,6 +242,10 @@ internal enum CanonicalMemberID: String, CaseIterable {
     case ExtremeUtcOffsetS = "Extreme.utc_offset_s"
     case ExtremeLocalDatetime = "Extreme.local_datetime"
     case ExtremeLocalTimeObject = "Extreme.local_time_object"
+    case CurrentPointUnits = "CurrentPoint.units"
+    case CurrentPointVelocityMajor = "CurrentPoint.velocity_major"
+    case CurrentPointVelocityMinor = "CurrentPoint.velocity_minor"
+    case CurrentPointSpeed = "CurrentPoint.speed"
     case CurrentPointTime = "CurrentPoint.time"
     case CurrentPointVelocityMajorMs = "CurrentPoint.velocity_major_ms"
     case CurrentPointVelocityMinorMs = "CurrentPoint.velocity_minor_ms"
@@ -247,6 +255,8 @@ internal enum CanonicalMemberID: String, CaseIterable {
     case CurrentPointUtcOffsetS = "CurrentPoint.utc_offset_s"
     case CurrentPointLocalDatetime = "CurrentPoint.local_datetime"
     case CurrentPointLocalTimeObject = "CurrentPoint.local_time_object"
+    case CurrentEventUnits = "CurrentEvent.units"
+    case CurrentEventVelocity = "CurrentEvent.velocity"
     case CurrentEventTime = "CurrentEvent.time"
     case CurrentEventType = "CurrentEvent.type"
     case CurrentEventVelocityMs = "CurrentEvent.velocity_ms"
@@ -255,6 +265,7 @@ internal enum CanonicalMemberID: String, CaseIterable {
     case CurrentEventUtcOffsetS = "CurrentEvent.utc_offset_s"
     case CurrentEventLocalDatetime = "CurrentEvent.local_datetime"
     case CurrentEventLocalTimeObject = "CurrentEvent.local_time_object"
+    case HeightSeriesUnits = "HeightSeries.units"
     case HeightSeriesItems = "HeightSeries.items"
     case HeightSeriesStationId = "HeightSeries.station_id"
     case HeightSeriesTimezone = "HeightSeries.timezone"
@@ -283,6 +294,7 @@ internal enum CanonicalMemberID: String, CaseIterable {
     case HeightSeriesReferenceSourceVersion = "HeightSeries.reference_source_version"
     case HeightSeriesReference2020Equivalence = "HeightSeries.reference_2020_equivalence"
     case HeightSeriesSourceNote = "HeightSeries.source_note"
+    case ExtremeListUnits = "ExtremeList.units"
     case ExtremeListItems = "ExtremeList.items"
     case ExtremeListStationId = "ExtremeList.station_id"
     case ExtremeListTimezone = "ExtremeList.timezone"
@@ -311,6 +323,7 @@ internal enum CanonicalMemberID: String, CaseIterable {
     case ExtremeListReferenceSourceVersion = "ExtremeList.reference_source_version"
     case ExtremeListReference2020Equivalence = "ExtremeList.reference_2020_equivalence"
     case ExtremeListSourceNote = "ExtremeList.source_note"
+    case CurrentSeriesUnits = "CurrentSeries.units"
     case CurrentSeriesItems = "CurrentSeries.items"
     case CurrentSeriesStationId = "CurrentSeries.station_id"
     case CurrentSeriesTimezone = "CurrentSeries.timezone"
@@ -330,6 +343,7 @@ internal enum CanonicalMemberID: String, CaseIterable {
     case CurrentSeriesRelease = "CurrentSeries.release"
     case CurrentSeriesAlgorithm = "CurrentSeries.algorithm"
     case CurrentSeriesToLocal = "CurrentSeries.to_local"
+    case CurrentEventListUnits = "CurrentEventList.units"
     case CurrentEventListItems = "CurrentEventList.items"
     case CurrentEventListStationId = "CurrentEventList.station_id"
     case CurrentEventListTimezone = "CurrentEventList.timezone"
@@ -1045,6 +1059,17 @@ internal struct CanonicalReleaseHeightsArguments {
     let datum: String?
     let setId: String?
     let offsetId: String?
+    let units: String
+    init(station: CanonicalStationRequest, start: Date, stop: Date, stepS: Int64, datum: String?, setId: String?, offsetId: String?, units: String = "meters") {
+        self.station = station
+        self.start = start
+        self.stop = stop
+        self.stepS = stepS
+        self.datum = datum
+        self.setId = setId
+        self.offsetId = offsetId
+        self.units = units
+    }
 }
 
 internal struct CanonicalReleaseHeightsAtArguments {
@@ -1053,6 +1078,15 @@ internal struct CanonicalReleaseHeightsAtArguments {
     let datum: String?
     let setId: String?
     let offsetId: String?
+    let units: String
+    init(station: CanonicalStationRequest, times: [Date], datum: String?, setId: String?, offsetId: String?, units: String = "meters") {
+        self.station = station
+        self.times = times
+        self.datum = datum
+        self.setId = setId
+        self.offsetId = offsetId
+        self.units = units
+    }
 }
 
 internal struct CanonicalReleaseExtremesArguments {
@@ -1062,6 +1096,16 @@ internal struct CanonicalReleaseExtremesArguments {
     let datum: String?
     let setId: String?
     let offsetId: String?
+    let units: String
+    init(station: CanonicalStationRequest, start: Date, stop: Date, datum: String?, setId: String?, offsetId: String?, units: String = "meters") {
+        self.station = station
+        self.start = start
+        self.stop = stop
+        self.datum = datum
+        self.setId = setId
+        self.offsetId = offsetId
+        self.units = units
+    }
 }
 
 internal struct CanonicalReleaseCurrentsArguments {
@@ -1071,6 +1115,16 @@ internal struct CanonicalReleaseCurrentsArguments {
     let stepS: Int64
     let binNumber: Int64?
     let setId: String?
+    let units: String
+    init(station: CanonicalStationRequest, start: Date, stop: Date, stepS: Int64, binNumber: Int64?, setId: String?, units: String = "m/s") {
+        self.station = station
+        self.start = start
+        self.stop = stop
+        self.stepS = stepS
+        self.binNumber = binNumber
+        self.setId = setId
+        self.units = units
+    }
 }
 
 internal struct CanonicalReleaseCurrentEventsArguments {
@@ -1079,6 +1133,15 @@ internal struct CanonicalReleaseCurrentEventsArguments {
     let stop: Date
     let binNumber: Int64?
     let setId: String?
+    let units: String
+    init(station: CanonicalStationRequest, start: Date, stop: Date, binNumber: Int64?, setId: String?, units: String = "m/s") {
+        self.station = station
+        self.start = start
+        self.stop = stop
+        self.binNumber = binNumber
+        self.setId = setId
+        self.units = units
+    }
 }
 
 internal struct CanonicalReleaseDatumsArguments {
@@ -2043,6 +2106,14 @@ internal struct CanonicalHeightPointFields {
     let heightM: Double
     let localTime: String?
     let utcOffsetS: Int64?
+    let units: String
+    init(time: Date, heightM: Double, localTime: String?, utcOffsetS: Int64?, units: String = "meters") {
+        self.time = time
+        self.heightM = heightM
+        self.localTime = localTime
+        self.utcOffsetS = utcOffsetS
+        self.units = units
+    }
 }
 
 internal struct CanonicalExtremeFields {
@@ -2051,6 +2122,15 @@ internal struct CanonicalExtremeFields {
     let heightM: Double
     let localTime: String?
     let utcOffsetS: Int64?
+    let units: String
+    init(time: Date, type: ExtremeType, heightM: Double, localTime: String?, utcOffsetS: Int64?, units: String = "meters") {
+        self.time = time
+        self.type = type
+        self.heightM = heightM
+        self.localTime = localTime
+        self.utcOffsetS = utcOffsetS
+        self.units = units
+    }
 }
 
 internal struct CanonicalCurrentPointFields {
@@ -2061,6 +2141,17 @@ internal struct CanonicalCurrentPointFields {
     let directionDeg: Double?
     let localTime: String?
     let utcOffsetS: Int64?
+    let units: String
+    init(time: Date, velocityMajorMs: Double, velocityMinorMs: Double, speedMs: Double, directionDeg: Double?, localTime: String?, utcOffsetS: Int64?, units: String = "m/s") {
+        self.time = time
+        self.velocityMajorMs = velocityMajorMs
+        self.velocityMinorMs = velocityMinorMs
+        self.speedMs = speedMs
+        self.directionDeg = directionDeg
+        self.localTime = localTime
+        self.utcOffsetS = utcOffsetS
+        self.units = units
+    }
 }
 
 internal struct CanonicalCurrentEventFields {
@@ -2070,6 +2161,16 @@ internal struct CanonicalCurrentEventFields {
     let directionDeg: Double?
     let localTime: String?
     let utcOffsetS: Int64?
+    let units: String
+    init(time: Date, type: CurrentEventType, velocityMs: Double, directionDeg: Double?, localTime: String?, utcOffsetS: Int64?, units: String = "m/s") {
+        self.time = time
+        self.type = type
+        self.velocityMs = velocityMs
+        self.directionDeg = directionDeg
+        self.localTime = localTime
+        self.utcOffsetS = utcOffsetS
+        self.units = units
+    }
 }
 
 internal struct CanonicalHeightSeriesFields {
@@ -2100,6 +2201,37 @@ internal struct CanonicalHeightSeriesFields {
     let referenceSourceVersion: String?
     let reference2020Equivalence: String?
     let sourceNote: String?
+    let units: String
+    init(items: [HeightPoint], stationId: String?, timezone: String?, method: PredictionMethod?, setId: String?, conventionId: String?, astroTableId: String?, referenceStationId: String?, referenceBin: Int64?, datum: String?, datumName: String?, datumKind: String?, datumUncertaintyM: Double?, tz: String?, tzVersion: String?, release: String?, algorithm: String?, offsetId: String?, offsetSource: String?, offsetSourceVersion: String?, historicalOffsets: Bool, currentValidity: String?, currentAccuracy: String?, referenceSetId: String?, referenceSourceVersion: String?, reference2020Equivalence: String?, sourceNote: String?, units: String = "meters") {
+        self.items = items
+        self.stationId = stationId
+        self.timezone = timezone
+        self.method = method
+        self.setId = setId
+        self.conventionId = conventionId
+        self.astroTableId = astroTableId
+        self.referenceStationId = referenceStationId
+        self.referenceBin = referenceBin
+        self.datum = datum
+        self.datumName = datumName
+        self.datumKind = datumKind
+        self.datumUncertaintyM = datumUncertaintyM
+        self.tz = tz
+        self.tzVersion = tzVersion
+        self.release = release
+        self.algorithm = algorithm
+        self.offsetId = offsetId
+        self.offsetSource = offsetSource
+        self.offsetSourceVersion = offsetSourceVersion
+        self.historicalOffsets = historicalOffsets
+        self.currentValidity = currentValidity
+        self.currentAccuracy = currentAccuracy
+        self.referenceSetId = referenceSetId
+        self.referenceSourceVersion = referenceSourceVersion
+        self.reference2020Equivalence = reference2020Equivalence
+        self.sourceNote = sourceNote
+        self.units = units
+    }
 }
 
 internal struct CanonicalExtremeListFields {
@@ -2130,6 +2262,37 @@ internal struct CanonicalExtremeListFields {
     let referenceSourceVersion: String?
     let reference2020Equivalence: String?
     let sourceNote: String?
+    let units: String
+    init(items: [Extreme], stationId: String?, timezone: String?, method: PredictionMethod?, setId: String?, conventionId: String?, astroTableId: String?, referenceStationId: String?, referenceBin: Int64?, datum: String?, datumName: String?, datumKind: String?, datumUncertaintyM: Double?, tz: String?, tzVersion: String?, release: String?, algorithm: String?, offsetId: String?, offsetSource: String?, offsetSourceVersion: String?, historicalOffsets: Bool, currentValidity: String?, currentAccuracy: String?, referenceSetId: String?, referenceSourceVersion: String?, reference2020Equivalence: String?, sourceNote: String?, units: String = "meters") {
+        self.items = items
+        self.stationId = stationId
+        self.timezone = timezone
+        self.method = method
+        self.setId = setId
+        self.conventionId = conventionId
+        self.astroTableId = astroTableId
+        self.referenceStationId = referenceStationId
+        self.referenceBin = referenceBin
+        self.datum = datum
+        self.datumName = datumName
+        self.datumKind = datumKind
+        self.datumUncertaintyM = datumUncertaintyM
+        self.tz = tz
+        self.tzVersion = tzVersion
+        self.release = release
+        self.algorithm = algorithm
+        self.offsetId = offsetId
+        self.offsetSource = offsetSource
+        self.offsetSourceVersion = offsetSourceVersion
+        self.historicalOffsets = historicalOffsets
+        self.currentValidity = currentValidity
+        self.currentAccuracy = currentAccuracy
+        self.referenceSetId = referenceSetId
+        self.referenceSourceVersion = referenceSourceVersion
+        self.reference2020Equivalence = reference2020Equivalence
+        self.sourceNote = sourceNote
+        self.units = units
+    }
 }
 
 internal struct CanonicalCurrentSeriesFields {
@@ -2151,6 +2314,28 @@ internal struct CanonicalCurrentSeriesFields {
     let release: String?
     let algorithm: String?
     let binNumber: Int64?
+    let units: String
+    init(items: [CurrentPoint], stationId: String?, timezone: String?, method: PredictionMethod?, setId: String?, conventionId: String?, astroTableId: String?, referenceStationId: String?, referenceBin: Int64?, datum: String?, datumName: String?, datumKind: String?, datumUncertaintyM: Double?, tz: String?, tzVersion: String?, release: String?, algorithm: String?, binNumber: Int64?, units: String = "m/s") {
+        self.items = items
+        self.stationId = stationId
+        self.timezone = timezone
+        self.method = method
+        self.setId = setId
+        self.conventionId = conventionId
+        self.astroTableId = astroTableId
+        self.referenceStationId = referenceStationId
+        self.referenceBin = referenceBin
+        self.datum = datum
+        self.datumName = datumName
+        self.datumKind = datumKind
+        self.datumUncertaintyM = datumUncertaintyM
+        self.tz = tz
+        self.tzVersion = tzVersion
+        self.release = release
+        self.algorithm = algorithm
+        self.binNumber = binNumber
+        self.units = units
+    }
 }
 
 internal struct CanonicalCurrentEventListFields {
@@ -2173,6 +2358,29 @@ internal struct CanonicalCurrentEventListFields {
     let algorithm: String?
     let binNumber: Int64?
     let omittedEventTypes: [CurrentEventType]?
+    let units: String
+    init(items: [CurrentEvent], stationId: String?, timezone: String?, method: PredictionMethod?, setId: String?, conventionId: String?, astroTableId: String?, referenceStationId: String?, referenceBin: Int64?, datum: String?, datumName: String?, datumKind: String?, datumUncertaintyM: Double?, tz: String?, tzVersion: String?, release: String?, algorithm: String?, binNumber: Int64?, omittedEventTypes: [CurrentEventType]?, units: String = "m/s") {
+        self.items = items
+        self.stationId = stationId
+        self.timezone = timezone
+        self.method = method
+        self.setId = setId
+        self.conventionId = conventionId
+        self.astroTableId = astroTableId
+        self.referenceStationId = referenceStationId
+        self.referenceBin = referenceBin
+        self.datum = datum
+        self.datumName = datumName
+        self.datumKind = datumKind
+        self.datumUncertaintyM = datumUncertaintyM
+        self.tz = tz
+        self.tzVersion = tzVersion
+        self.release = release
+        self.algorithm = algorithm
+        self.binNumber = binNumber
+        self.omittedEventTypes = omittedEventTypes
+        self.units = units
+    }
 }
 
 internal struct CanonicalDatumInfoFields {

@@ -35,7 +35,7 @@ class Runner
 
     def hello
         { "hello" => { "runner" => "ruby", "version" => OpenTideConstants::VERSION,
-                       "features" => %w[fs fetch json eager stream predict localtime_module] + localtime_features } }
+                       "features" => %w[fs fetch json eager stream predict prediction_units localtime_module] + localtime_features } }
     end
 
     def localtime_features
@@ -261,6 +261,7 @@ class Runner
             else
                 @prediction = q(target).public_send(op, args["station_id"], **kw)
             end
+            @prediction_units = args.key?("units")
             {"prediction" => prediction(@prediction)}
         when "to_local"
             raise ArgumentError, "no prediction held" unless @prediction
@@ -330,7 +331,21 @@ class Runner
     def prediction(value)
         fields = %w[station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m bin_number omitted_event_types tz tz_version release algorithm]
         out = fields.to_h { |key| [key, value.respond_to?(key) ? prediction_value(value.public_send(key)) : nil] }
-        out["items"] = value.items.map { |item| prediction_value(item) }
+        out["units"] = value.units if @prediction_units
+        out["items"] = value.items.map do |item|
+            encoded = prediction_value(item)
+            encoded.delete("units")
+            if @prediction_units
+                selected = case item
+                           when OpenTideConstants::HeightPoint, OpenTideConstants::Extreme then %w[height]
+                           when OpenTideConstants::CurrentPoint then %w[velocity_major velocity_minor speed]
+                           when OpenTideConstants::CurrentEvent then %w[velocity]
+                           end
+                encoded["units"] = item.units
+                selected.each { |field| encoded[field] = item.public_send(field) }
+            end
+            encoded
+        end
         out
     end
 

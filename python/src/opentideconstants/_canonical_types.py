@@ -1023,6 +1023,7 @@ class _Arguments14:
     datum: str | None | _Omitted
     set_id: str | None | _Omitted
     offset_id: str | None | _Omitted
+    units: str | _Omitted = _OMITTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -1033,6 +1034,7 @@ class _Arguments15:
     datum: str | None | _Omitted
     set_id: str | None | _Omitted
     offset_id: str | None | _Omitted
+    units: str | _Omitted = _OMITTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -1044,6 +1046,7 @@ class _Arguments16:
     datum: str | None | _Omitted
     set_id: str | None | _Omitted
     offset_id: str | None | _Omitted
+    units: str | _Omitted = _OMITTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -1055,6 +1058,7 @@ class _Arguments17:
     step_s: int | _Omitted
     bin_number: int | None | _Omitted
     set_id: str | None | _Omitted
+    units: str | _Omitted = _OMITTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -1065,6 +1069,7 @@ class _Arguments18:
     stop: datetime
     bin_number: int | None | _Omitted
     set_id: str | None | _Omitted
+    units: str | _Omitted = _OMITTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -3235,6 +3240,7 @@ class _Request14:
     datum: str | None | _Omitted
     set_id: str | None | _Omitted
     offset_id: str | int | None | _Omitted
+    units: str | _Omitted = _OMITTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -3245,6 +3251,7 @@ class _Request15:
     datum: str | None | _Omitted
     set_id: str | None | _Omitted
     offset_id: str | int | None | _Omitted
+    units: str | _Omitted = _OMITTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -3256,6 +3263,7 @@ class _Request16:
     datum: str | None | _Omitted
     set_id: str | None | _Omitted
     offset_id: str | int | None | _Omitted
+    units: str | _Omitted = _OMITTED
 
 
 @dataclass(frozen=True, slots=True)
@@ -3562,7 +3570,11 @@ class _StatsModelFields:
     raw_fields: _StatsRawFields
 
 
-class _HeightPointRawFields(TypedDict):
+class _PredictionUnitsRawFields(TypedDict, total=False):
+    units: str
+
+
+class _HeightPointRawFields(_PredictionUnitsRawFields):
     height_m: float
     local_time: str | None
     utc_offset_s: int | None
@@ -3575,7 +3587,7 @@ class _HeightPointModelFields:
     native_local: datetime | None
 
 
-class _ExtremeRawFields(TypedDict):
+class _ExtremeRawFields(_PredictionUnitsRawFields):
     type: E.ExtremeType
     height_m: float
     local_time: str | None
@@ -3589,7 +3601,7 @@ class _ExtremeModelFields:
     native_local: datetime | None
 
 
-class _CurrentPointRawFields(TypedDict):
+class _CurrentPointRawFields(_PredictionUnitsRawFields):
     velocity_major_ms: float
     velocity_minor_ms: float
     speed_ms: float
@@ -3605,7 +3617,7 @@ class _CurrentPointModelFields:
     native_local: datetime | None
 
 
-class _CurrentEventRawFields(TypedDict):
+class _CurrentEventRawFields(_PredictionUnitsRawFields):
     type: E.CurrentEventType
     velocity_ms: float
     direction_deg: float | None
@@ -3620,7 +3632,7 @@ class _CurrentEventModelFields:
     native_local: datetime | None
 
 
-class _HeightSeriesRawFields(TypedDict):
+class _HeightSeriesRawFields(_PredictionUnitsRawFields):
     station_id: str | None
     timezone: str | None
     method: E.PredictionMethod | None
@@ -3655,7 +3667,7 @@ class _HeightSeriesModelFields:
     native_items: tuple[HeightPoint, ...]
 
 
-class _ExtremeListRawFields(TypedDict):
+class _ExtremeListRawFields(_PredictionUnitsRawFields):
     station_id: str | None
     timezone: str | None
     method: E.PredictionMethod | None
@@ -3690,7 +3702,7 @@ class _ExtremeListModelFields:
     native_items: tuple[Extreme, ...]
 
 
-class _CurrentSeriesRawFields(TypedDict):
+class _CurrentSeriesRawFields(_PredictionUnitsRawFields):
     station_id: str | None
     timezone: str | None
     method: E.PredictionMethod | None
@@ -3716,7 +3728,7 @@ class _CurrentSeriesModelFields:
     native_items: tuple[CurrentPoint, ...]
 
 
-class _CurrentEventListRawFields(TypedDict):
+class _CurrentEventListRawFields(_PredictionUnitsRawFields):
     station_id: str | None
     timezone: str | None
     method: E.PredictionMethod | None

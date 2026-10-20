@@ -1621,6 +1621,27 @@
        "swift": "offsetId",
        "swift_type": "String?",
        "swift_default": "nil"
+      },
+      {
+       "name": "units",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": "meters",
+       "values": [
+        "meters",
+        "feet"
+       ],
+       "languages": [
+        "ruby",
+        "python",
+        "typescript",
+        "swift"
+       ],
+       "note": "SDK-UNITS: labels only selected-value fields; existing SI fields are unchanged. Unsupported selectors are invalid_argument. Conversion is applied to final SI values after all prediction operations.",
+       "swift": "units",
+       "swift_type": "String",
+       "swift_default": "\"meters\""
       }
      ],
      "returns": "HeightSeries",
@@ -1654,8 +1675,8 @@
      "swift_returns": "HeightSeries",
      "swift_async": false,
      "swift_declarations": [
-      "func heights(station: Station, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries",
-      "func heights(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries"
+      "func heights(station: Station, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = \"meters\") throws -> HeightSeries",
+      "func heights(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = \"meters\") throws -> HeightSeries"
      ]
     },
     {
@@ -1719,6 +1740,27 @@
        "swift": "offsetId",
        "swift_type": "String?",
        "swift_default": "nil"
+      },
+      {
+       "name": "units",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": "meters",
+       "values": [
+        "meters",
+        "feet"
+       ],
+       "languages": [
+        "ruby",
+        "python",
+        "typescript",
+        "swift"
+       ],
+       "note": "SDK-UNITS: labels only selected-value fields; existing SI fields are unchanged. Unsupported selectors are invalid_argument. Conversion is applied to final SI values after all prediction operations.",
+       "swift": "units",
+       "swift_type": "String",
+       "swift_default": "\"meters\""
       }
      ],
      "returns": "HeightSeries",
@@ -1752,8 +1794,8 @@
      "swift_returns": "HeightSeries",
      "swift_async": false,
      "swift_declarations": [
-      "func heightsAt(station: Station, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries",
-      "func heightsAt(stationId: String, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> HeightSeries"
+      "func heightsAt(station: Station, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = \"meters\") throws -> HeightSeries",
+      "func heightsAt(stationId: String, times: [Date], datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = \"meters\") throws -> HeightSeries"
      ]
     },
     {
@@ -1827,6 +1869,27 @@
        "swift": "offsetId",
        "swift_type": "String?",
        "swift_default": "nil"
+      },
+      {
+       "name": "units",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": "meters",
+       "values": [
+        "meters",
+        "feet"
+       ],
+       "languages": [
+        "ruby",
+        "python",
+        "typescript",
+        "swift"
+       ],
+       "note": "SDK-UNITS: labels only selected-value fields; existing SI fields are unchanged. Unsupported selectors are invalid_argument. Conversion is applied to final SI values after all prediction operations.",
+       "swift": "units",
+       "swift_type": "String",
+       "swift_default": "\"meters\""
       }
      ],
      "returns": "ExtremeList",
@@ -1859,8 +1922,8 @@
      "swift_returns": "ExtremeList",
      "swift_async": false,
      "swift_declarations": [
-      "func extremes(station: Station, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> ExtremeList",
-      "func extremes(stationId: String, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil) throws -> ExtremeList"
+      "func extremes(station: Station, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = \"meters\") throws -> ExtremeList",
+      "func extremes(stationId: String, start: Date, stop: Date, datum: String? = nil, setId: String? = nil, offsetId: String? = nil, units: String = \"meters\") throws -> ExtremeList"
      ]
     },
     {
@@ -1929,6 +1992,27 @@
        "swift": "setId",
        "swift_type": "String?",
        "swift_default": "nil"
+      },
+      {
+       "name": "units",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": "m/s",
+       "values": [
+        "m/s",
+        "knots"
+       ],
+       "languages": [
+        "ruby",
+        "python",
+        "typescript",
+        "swift"
+       ],
+       "note": "SDK-UNITS: labels only selected-value fields; existing SI fields are unchanged. Unsupported selectors are invalid_argument. Conversion is applied to final SI values after all prediction operations.",
+       "swift": "units",
+       "swift_type": "String",
+       "swift_default": "\"m/s\""
       }
      ],
      "returns": "CurrentSeries",
@@ -1961,8 +2045,8 @@
      "swift_returns": "CurrentSeries",
      "swift_async": false,
      "swift_declarations": [
-      "func currents(station: Station, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentSeries",
-      "func currents(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentSeries"
+      "func currents(station: Station, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil, units: String = \"m/s\") throws -> CurrentSeries",
+      "func currents(stationId: String, start: Date, stop: Date, stepS: Int64 = 600, binNumber: Int64? = nil, setId: String? = nil, units: String = \"m/s\") throws -> CurrentSeries"
      ]
     },
     {
@@ -2020,6 +2104,27 @@
        "swift": "setId",
        "swift_type": "String?",
        "swift_default": "nil"
+      },
+      {
+       "name": "units",
+       "type": "string",
+       "required": false,
+       "positional": false,
+       "default": "m/s",
+       "values": [
+        "m/s",
+        "knots"
+       ],
+       "languages": [
+        "ruby",
+        "python",
+        "typescript",
+        "swift"
+       ],
+       "note": "SDK-UNITS: labels only selected-value fields; existing SI fields are unchanged. Unsupported selectors are invalid_argument. Conversion is applied to final SI values after all prediction operations.",
+       "swift": "units",
+       "swift_type": "String",
+       "swift_default": "\"m/s\""
       }
      ],
      "returns": "CurrentEventList",
@@ -2051,8 +2156,8 @@
      "swift_returns": "CurrentEventList",
      "swift_async": false,
      "swift_declarations": [
-      "func currentEvents(station: Station, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentEventList",
-      "func currentEvents(stationId: String, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil) throws -> CurrentEventList"
+      "func currentEvents(station: Station, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil, units: String = \"m/s\") throws -> CurrentEventList",
+      "func currentEvents(stationId: String, start: Date, stop: Date, binNumber: Int64? = nil, setId: String? = nil, units: String = \"m/s\") throws -> CurrentEventList"
      ]
     },
     {
@@ -4659,6 +4764,43 @@
       "ruby"
      ],
      "note": "a Time with the to_local offset; nil before to_local"
+    },
+    {
+     "name": "units",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "default": "meters",
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only selected-value units, default meters; SI-suffixed fields and uncertainty_m remain SI. Preserved through localization and native construction.",
+     "swift": "units",
+     "swift_returns": "String",
+     "swift_declarations": [
+      "let units: String"
+     ]
+    },
+    {
+     "name": "height",
+     "kind": "field",
+     "type": "number",
+     "nullable": false,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only final selected value: height_m for meters, height_m / 0.3048 for feet. The existing height_m stays SI.",
+     "swift": "height",
+     "swift_returns": "Double",
+     "swift_declarations": [
+      "var height: Double { get }"
+     ]
     }
    ],
    "swift": "HeightPoint"
@@ -4757,6 +4899,43 @@
       "ruby"
      ],
      "note": "a Time with the to_local offset; nil before to_local"
+    },
+    {
+     "name": "units",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "default": "meters",
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only selected-value units, default meters; SI-suffixed fields and uncertainty_m remain SI. Preserved through localization and native construction.",
+     "swift": "units",
+     "swift_returns": "String",
+     "swift_declarations": [
+      "let units: String"
+     ]
+    },
+    {
+     "name": "height",
+     "kind": "field",
+     "type": "number",
+     "nullable": false,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only final selected value: height_m for meters, height_m / 0.3048 for feet. The existing height_m stays SI.",
+     "swift": "height",
+     "swift_returns": "Double",
+     "swift_declarations": [
+      "var height: Double { get }"
+     ]
     }
    ],
    "swift": "Extreme"
@@ -4877,6 +5056,79 @@
       "ruby"
      ],
      "note": "a Time with the to_local offset; nil before to_local"
+    },
+    {
+     "name": "units",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "default": "m/s",
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only selected-value units, default m/s; SI-suffixed fields and uncertainty_m remain SI. Preserved through localization and native construction.",
+     "swift": "units",
+     "swift_returns": "String",
+     "swift_declarations": [
+      "let units: String"
+     ]
+    },
+    {
+     "name": "velocity_major",
+     "kind": "field",
+     "type": "number",
+     "nullable": false,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only final selected value: velocity_major_ms for m/s, velocity_major_ms / (1852.0 / 3600.0) for knots. The existing velocity_major_ms stays SI.",
+     "swift": "velocityMajor",
+     "swift_returns": "Double",
+     "swift_declarations": [
+      "var velocityMajor: Double { get }"
+     ]
+    },
+    {
+     "name": "velocity_minor",
+     "kind": "field",
+     "type": "number",
+     "nullable": false,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only final selected value: velocity_minor_ms for m/s, velocity_minor_ms / (1852.0 / 3600.0) for knots. The existing velocity_minor_ms stays SI.",
+     "swift": "velocityMinor",
+     "swift_returns": "Double",
+     "swift_declarations": [
+      "var velocityMinor: Double { get }"
+     ]
+    },
+    {
+     "name": "speed",
+     "kind": "field",
+     "type": "number",
+     "nullable": false,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only final selected value: speed_ms for m/s, speed_ms / (1852.0 / 3600.0) for knots. The existing speed_ms stays SI.",
+     "swift": "speed",
+     "swift_returns": "Double",
+     "swift_declarations": [
+      "var speed: Double { get }"
+     ]
     }
    ],
    "swift": "CurrentPoint"
@@ -4987,6 +5239,43 @@
       "ruby"
      ],
      "note": "a Time with the to_local offset; nil before to_local"
+    },
+    {
+     "name": "units",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "default": "m/s",
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only selected-value units, default m/s; SI-suffixed fields and uncertainty_m remain SI. Preserved through localization and native construction.",
+     "swift": "units",
+     "swift_returns": "String",
+     "swift_declarations": [
+      "let units: String"
+     ]
+    },
+    {
+     "name": "velocity",
+     "kind": "field",
+     "type": "number",
+     "nullable": false,
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only final selected value: velocity_ms for m/s, velocity_ms / (1852.0 / 3600.0) for knots. The existing velocity_ms stays SI.",
+     "swift": "velocity",
+     "swift_returns": "Double",
+     "swift_declarations": [
+      "var velocity: Double { get }"
+     ]
     }
    ],
    "swift": "CurrentEvent"
@@ -5370,6 +5659,25 @@
      "swift_returns": "String?",
      "swift_declarations": [
       "let sourceNote: String?"
+     ]
+    },
+    {
+     "name": "units",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "default": "meters",
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only selected-value units, default meters; SI-suffixed fields and uncertainty_m remain SI. Preserved through localization and native construction.",
+     "swift": "units",
+     "swift_returns": "String",
+     "swift_declarations": [
+      "let units: String"
      ]
     }
    ],
@@ -5755,6 +6063,25 @@
      "swift_declarations": [
       "let sourceNote: String?"
      ]
+    },
+    {
+     "name": "units",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "default": "meters",
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only selected-value units, default meters; SI-suffixed fields and uncertainty_m remain SI. Preserved through localization and native construction.",
+     "swift": "units",
+     "swift_returns": "String",
+     "swift_declarations": [
+      "let units: String"
+     ]
     }
    ],
    "swift": "ExtremeList"
@@ -6031,6 +6358,25 @@
      "swift_async": false,
      "swift_declarations": [
       "func toLocal(tz: String = \"station\") throws -> CurrentSeries"
+     ]
+    },
+    {
+     "name": "units",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "default": "m/s",
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only selected-value units, default m/s; SI-suffixed fields and uncertainty_m remain SI. Preserved through localization and native construction.",
+     "swift": "units",
+     "swift_returns": "String",
+     "swift_declarations": [
+      "let units: String"
      ]
     }
    ],
@@ -6322,6 +6668,25 @@
      "swift_async": false,
      "swift_declarations": [
       "func toLocal(tz: String = \"station\") throws -> CurrentEventList"
+     ]
+    },
+    {
+     "name": "units",
+     "kind": "field",
+     "type": "string",
+     "nullable": false,
+     "default": "m/s",
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "note": "Read-only selected-value units, default m/s; SI-suffixed fields and uncertainty_m remain SI. Preserved through localization and native construction.",
+     "swift": "units",
+     "swift_returns": "String",
+     "swift_declarations": [
+      "let units: String"
      ]
     }
    ],
@@ -7652,7 +8017,7 @@
    "code": "invalid_argument",
    "class": "InvalidArgumentError",
    "c": "OTC_E_INVALID_ARGUMENT",
-   "when": "a bad datestamp (a counter longer than 9 digits from the caller too), lat or lon out of range, a negative radius, an empty query, or a NULL handle; also a limit of 0 or less, a file name that is not OTC_<D><ext>, a malformed proxy or base_url, file together with release, offline or on_network_error, and an unknown, removed or foreign station in attribution; also a timeout outside 0.001 to 1e6 seconds, a user_agent that is not a string or has a control character, and a null, unknown or foreign station in reference_station or subordinates_of; prediction (spec 5.4): start > stop, step_s <= 0 or not an integer, a bin_number that is not an integer or (outside C) is 0 or less, in C a negative bin_number, in every SDK a bin_number above 2^53 - 1, a naive datetime, a datum of the wrong type, a subordinate R height ratio of 0 or less (4.8 step 3), a set_id that names no set of the station, with commercial_only a set_id whose licence is non-commercial (the message names commercial_only), a height_adjusted_type other than R or A (the message names the value), and an astro table that fails the table check of 4.2a (a negative row speed or a malformed table; the message names the table and the row)",
+   "when": "a bad datestamp (a counter longer than 9 digits from the caller too), lat or lon out of range, a negative radius, an empty query, or a NULL handle; also a limit of 0 or less, a file name that is not OTC_<D><ext>, a malformed proxy or base_url, file together with release, offline or on_network_error, and an unknown, removed or foreign station in attribution; also a timeout outside 0.001 to 1e6 seconds, a user_agent that is not a string or has a control character, and a null, unknown or foreign station in reference_station or subordinates_of; prediction (spec 5.4): start > stop, step_s <= 0 or not an integer, a bin_number that is not an integer or (outside C) is 0 or less, in C a negative bin_number, in every SDK a bin_number above 2^53 - 1, a naive datetime, a datum of the wrong type, a subordinate R height ratio of 0 or less (4.8 step 3), a set_id that names no set of the station, with commercial_only a set_id whose licence is non-commercial (the message names commercial_only), a height_adjusted_type other than R or A (the message names the value), and an astro table that fails the table check of 4.2a (a negative row speed or a malformed table; the message names the table and the row); Python/Ruby/TypeScript/Swift prediction units other than meters or feet for heights/extremes, or m/s or knots for currents/current_events",
    "fields": [],
    "languages": [
     "ruby",

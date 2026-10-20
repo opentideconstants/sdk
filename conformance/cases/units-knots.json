@@ -1,0 +1,902 @@
+{
+ "suite_version": "1.0",
+ "group": "units-knots",
+ "description": "Generated from authored prediction calls and independent KP1-H expectations; do not edit.",
+ "cases": [
+  {
+   "id": "units-knots/currents/default-bin",
+   "title": "knots: no bin_number: default_current_bin, else the lowest bin number in the set",
+   "spec": "4.7",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "prediction_units"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0016",
+      "stop": "2010-03-01T03:00:00Z",
+      "units": "knots"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "velocity_major_ms": 1.0826042319469042,
+         "velocity_minor_ms": 0.0041168850628994225,
+         "speed_ms": 1.0826120596834157,
+         "direction_deg": 40.217881100843385,
+         "time": "2010-03-01T00:00:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 2.1044142737628806,
+         "velocity_minor": 0.008002584355528034,
+         "speed": 2.1044294896653866
+        },
+        {
+         "velocity_major_ms": 1.0507652451150182,
+         "velocity_minor_ms": 0.00887423181555309,
+         "speed_ms": 1.050802718083628,
+         "direction_deg": 40.48387967108563,
+         "time": "2010-03-01T00:10:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 2.04252423456483,
+         "velocity_minor": 0.017250126639304062,
+         "speed": 2.0425970761884775
+        },
+        {
+         "velocity_major_ms": 1.0125864965815181,
+         "velocity_minor_ms": 0.013477459859220487,
+         "speed_ms": 1.0126761846629402,
+         "direction_deg": 40.76255803955516,
+         "time": "2010-03-01T00:20:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.9683106844997111,
+         "velocity_minor": 0.026198086119435072,
+         "speed": 1.968485024182821
+        },
+        {
+         "velocity_major_ms": 0.9683061384581485,
+         "velocity_minor_ms": 0.01789428105489835,
+         "speed_ms": 0.9684714673495562,
+         "direction_deg": 41.058704527611894,
+         "time": "2010-03-01T00:30:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.8822365542383015,
+         "velocity_minor": 0.03478369967474841,
+         "speed": 1.8825579278933058
+        },
+        {
+         "velocity_major_ms": 0.91820550607821,
+         "velocity_minor_ms": 0.022093654028650187,
+         "speed_ms": 0.9184712738788728,
+         "direction_deg": 41.37837216819306,
+         "time": "2010-03-01T00:40:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.7848487159187667,
+         "velocity_minor": 0.04294662770147984,
+         "speed": 1.785365327194353
+        },
+        {
+         "velocity_major_ms": 0.8626071556577843,
+         "velocity_minor_ms": 0.0260460078379398,
+         "speed_ms": 0.86300028940685,
+         "direction_deg": 41.729493011965005,
+         "time": "2010-03-01T00:50:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.6767741686652393,
+         "velocity_minor": 0.050629388885844104,
+         "speed": 1.6775383595381532
+        },
+        {
+         "velocity_major_ms": 0.8018726054926583,
+         "velocity_minor_ms": 0.02972345517698344,
+         "speed_ms": 0.8024233042648016,
+         "direction_deg": 42.122842426441494,
+         "time": "2010-03-01T01:00:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.5587156478259014,
+         "velocity_minor": 0.05777777464208444,
+         "speed": 1.559786120601126
+        },
+        {
+         "velocity_major_ms": 0.7363997968872817,
+         "velocity_minor_ms": 0.033099993573287245,
+         "speed_ms": 0.737143317428966,
+         "direction_deg": 42.57362140916155,
+         "time": "2010-03-01T01:10:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.4314466894137226,
+         "velocity_minor": 0.06434124020725382,
+         "speed": 1.432891977723692
+        },
+        {
+         "velocity_major_ms": 0.6666202930373369,
+         "velocity_minor_ms": 0.03615169311423158,
+         "speed_ms": 0.6675998502128431,
+         "direction_deg": 43.10418450756262,
+         "time": "2010-03-01T01:20:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.2958061851697693,
+         "velocity_minor": 0.07027326955250199,
+         "speed": 1.2977102919904075
+        },
+        {
+         "velocity_major_ms": 0.5929962359828819,
+         "velocity_minor_ms": 0.03885686933986579,
+         "speed_ms": 0.5942679464557726,
+         "direction_deg": 43.74902278044458,
+         "time": "2010-03-01T01:30:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.152692467353334,
+         "velocity_minor": 0.07553171145978231,
+         "speed": 1.1551644747520418
+        },
+        {
+         "velocity_major_ms": 0.5160170834952577,
+         "velocity_minor_ms": 0.04119624004552877,
+         "speed_ms": 0.5176589230882054,
+         "direction_deg": 44.56452923841318,
+         "time": "2010-03-01T01:40:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 1.0030569657575201,
+         "velocity_minor": 0.08007908432176218,
+         "speed": 1.0062484466077426
+        },
+        {
+         "velocity_major_ms": 0.43619614935297224,
+         "velocity_minor_ms": 0.043153064854295986,
+         "speed_ms": 0.43832552711047923,
+         "direction_deg": 45.64991062805841,
+         "time": "2010-03-01T01:50:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.8478974825435744,
+         "velocity_minor": 0.08388284744895548,
+         "speed": 0.85203666176983
+        },
+        {
+         "velocity_major_ms": 0.3540669718805969,
+         "velocity_minor_ms": 0.04471326654410822,
+         "speed_ms": 0.3568791066758319,
+         "direction_deg": 47.1974843285004,
+         "time": "2010-03-01T02:00:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.6882511332452207,
+         "velocity_minor": 0.0869156369107935,
+         "speed": 0.6937174859789388
+        },
+        {
+         "velocity_major_ms": 0.2701795368687996,
+         "velocity_minor_ms": 0.0458655332465369,
+         "speed_ms": 0.274044940260951,
+         "direction_deg": 49.634650166200366,
+         "time": "2010-03-01T02:10:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5251870047125694,
+         "velocity_minor": 0.0891554641941322,
+         "speed": 0.5327007478074641
+        },
+        {
+         "velocity_major_ms": 0.1850963820435196,
+         "velocity_minor_ms": 0.046601400772837684,
+         "speed_ms": 0.19087263082901956,
+         "direction_deg": 54.13155988111143,
+         "time": "2010-03-01T02:20:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.3597985828059776,
+         "velocity_minor": 0.09058587623229787,
+         "speed": 0.37102671219463845
+        },
+        {
+         "velocity_major_ms": 0.09938861110777064,
+         "velocity_minor_ms": 0.04691531446696938,
+         "speed_ms": 0.1099051534254254,
+         "direction_deg": 65.26914442712611,
+         "time": "2010-03-01T02:30:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.19319600431316106,
+         "velocity_minor": 0.09119607563773745,
+         "speed": 0.2136385271768528
+        },
+        {
+         "velocity_major_ms": 0.013631846037958625,
+         "velocity_minor_ms": 0.04680467013365827,
+         "speed_ms": 0.048749403819156295,
+         "direction_deg": 113.76181528861169,
+         "time": "2010-03-01T02:40:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.02649818884268415,
+         "velocity_minor": 0.09098100025981089,
+         "speed": 0.09476126012362994
+        },
+        {
+         "velocity_major_ms": -0.07159785324540285,
+         "velocity_minor_ms": 0.046269833741390806,
+         "speed_ms": 0.08524758121968148,
+         "direction_deg": 187.1275921571537,
+         "time": "2010-03-01T02:50:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": -0.13917509270164702,
+         "velocity_minor": 0.08994136148434498,
+         "speed": 0.16570804124776098
+        }
+       ],
+       "units": "knots"
+      }
+     },
+     "op": "currents"
+    },
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0018",
+      "stop": "2010-03-01T03:00:00Z",
+      "units": "knots"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 1,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0018/noaa",
+       "station_id": "OTC-P-0018",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "velocity_major_ms": 0.08632706658722968,
+         "velocity_minor_ms": -0.009530037896301241,
+         "speed_ms": 0.08685150573168507,
+         "direction_deg": 83.70036653327075,
+         "time": "2010-03-01T00:00:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.16780639293413974,
+         "velocity_minor": -0.018524911677475414,
+         "speed": 0.16882582107670963
+        },
+        {
+         "velocity_major_ms": 0.11009658541324376,
+         "velocity_minor_ms": -0.009253861919361277,
+         "speed_ms": 0.1104848047474325,
+         "direction_deg": 85.1954558988816,
+         "time": "2010-03-01T00:10:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.2140106411920505,
+         "velocity_minor": -0.01798806852575626,
+         "speed": 0.2147652792066722
+        },
+        {
+         "velocity_major_ms": 0.13308395690039093,
+         "velocity_minor_ms": -0.008911944725774562,
+         "speed_ms": 0.133382016565429,
+         "direction_deg": 86.16891751736237,
+         "time": "2010-03-01T00:20:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.25869451665302773,
+         "velocity_minor": -0.017323434672131977,
+         "speed": 0.25927389829133063
+        },
+        {
+         "velocity_major_ms": 0.15512587433618816,
+         "velocity_minor_ms": -0.008506715361108882,
+         "speed_ms": 0.15535894275773687,
+         "direction_deg": 86.86118638405947,
+         "time": "2010-03-01T00:30:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.3015405764634327,
+         "velocity_minor": -0.01653573180345139,
+         "speed": 0.30199362523102197
+        },
+        {
+         "velocity_major_ms": 0.1760657476955144,
+         "velocity_minor_ms": -0.0080410526527881,
+         "speed_ms": 0.17624927245054217,
+         "direction_deg": 87.38507653236606,
+         "time": "2010-03-01T00:40:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.34224443396536275,
+         "velocity_minor": -0.01563055591254706,
+         "speed": 0.34260117754964997
+        },
+        {
+         "velocity_major_ms": 0.19575481608667164,
+         "velocity_minor_ms": -0.007518264758341911,
+         "speed_ms": 0.19589913814538124,
+         "direction_deg": 87.80054849152637,
+         "time": "2010-03-01T00:50:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.38051692111880014,
+         "velocity_minor": -0.014614337543213217,
+         "speed": 0.3807974607577605
+        },
+        {
+         "velocity_major_ms": 0.21405320457725563,
+         "velocity_minor_ms": -0.006942065663619752,
+         "speed_ms": 0.21416574577992264,
+         "direction_deg": 88.14246322276325,
+         "time": "2010-03-01T01:00:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.4160861428067604,
+         "velocity_minor": -0.013494296106388286,
+         "speed": 0.41630490540373727
+        },
+        {
+         "velocity_major_ms": 0.2308309178925309,
+         "velocity_minor_ms": -0.0063165487979232994,
+         "speed_ms": 0.23091732599314607,
+         "direction_deg": 88.43252673119389,
+         "time": "2010-03-01T01:10:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.4486994084304056,
+         "velocity_minor": -0.012278388592075527,
+         "speed": 0.44886737234088864
+        },
+        {
+         "velocity_major_ms": 0.24596876392705416,
+         "velocity_minor_ms": -0.005646157953491431,
+         "speed_ms": 0.2460335585391527,
+         "direction_deg": 88.68501912973143,
+         "time": "2010-03-01T01:20:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.4781250270720275,
+         "velocity_minor": -0.010975253041344035,
+         "speed": 0.47825097772189507
+        },
+        {
+         "velocity_major_ms": 0.2593592005082272,
+         "velocity_minor_ms": -0.004935655715948005,
+         "speed_ms": 0.25940615949821466,
+         "direction_deg": 88.90978183560583,
+         "time": "2010-03-01T01:30:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5041539534717159,
+         "velocity_minor": -0.009594147180028517,
+         "speed": 0.5042452344457736
+        },
+        {
+         "velocity_major_ms": 0.27090709939663865,
+         "velocity_minor_ms": -0.00419008962997475,
+         "speed_ms": 0.27093950128138844,
+         "direction_deg": 89.11388327970926,
+         "time": "2010-03-01T01:40:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5266012731252154,
+         "velocity_minor": -0.008144882650058909,
+         "speed": 0.5266642573504311
+        },
+        {
+         "velocity_major_ms": 0.28053042209532536,
+         "velocity_minor_ms": -0.003414756340586566,
+         "speed_ms": 0.2805512043849518,
+         "direction_deg": 89.30260161237815,
+         "time": "2010-03-01T01:50:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5453075159520363,
+         "velocity_minor": -0.00663775530567583,
+         "speed": 0.545347913491267
+        },
+        {
+         "velocity_major_ms": 0.28816080266715277,
+         "velocity_minor_ms": -0.0026151639647389465,
+         "speed_ms": 0.28817266920431617,
+         "direction_deg": 89.48003426187316,
+         "time": "2010-03-01T02:00:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5601397892018088,
+         "velocity_minor": -0.005083472069686936,
+         "speed": 0.5601628559047183
+        },
+        {
+         "velocity_major_ms": 0.2937440334195289,
+         "velocity_minor_ms": -0.0017969929606078295,
+         "speed_ms": 0.2937495299626432,
+         "direction_deg": 89.6494947424749,
+         "time": "2010-03-01T02:10:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5709927215498402,
+         "velocity_minor": -0.0034930748694320655,
+         "speed": 0.5710034059749003
+        },
+        {
+         "velocity_major_ms": 0.2972404500062733,
+         "velocity_minor_ms": -0.000966055772526242,
+         "speed_ms": 0.2972420198822628,
+         "direction_deg": 89.81378468627366,
+         "time": "2010-03-01T02:20:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5777892116752612,
+         "velocity_minor": -0.0018778621928155891,
+         "speed": 0.5777922632700572
+        },
+        {
+         "velocity_major_ms": 0.29862521321083735,
+         "velocity_minor_ms": -0.0001282555382470837,
+         "speed_ms": 0.2986252407528559,
+         "direction_deg": 89.97539222991288,
+         "time": "2010-03-01T02:30:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5804809760037875,
+         "velocity_minor": -0.00024930882164659896,
+         "speed": 0.5804810295411885
+        },
+        {
+         "velocity_major_ms": 0.2978884854088074,
+         "velocity_minor_ms": 0.0007104558480665524,
+         "speed_ms": 0.29788933261643546,
+         "direction_deg": 90.1366485998575,
+         "time": "2010-03-01T02:40:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5790488917233837,
+         "velocity_minor": 0.001381015687386387,
+         "speed": 0.5790505385632655
+        },
+        {
+         "velocity_major_ms": 0.29503550045632904,
+         "velocity_minor_ms": 0.0015441200192570933,
+         "speed_ms": 0.2950395411400824,
+         "direction_deg": 90.29986476968418,
+         "time": "2010-03-01T02:50:00Z",
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity_major": 0.5735031326364927,
+         "velocity_minor": 0.003001529195100181,
+         "speed": 0.5735109870973524
+        }
+       ],
+       "units": "knots"
+      }
+     },
+     "op": "currents"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "bin": {
+          "$bin": [
+           "OTC-P-0016/noaa",
+           2
+          ]
+         },
+         "times": [
+          "2010-03-01T00:00:00Z",
+          "2010-03-01T00:10:00Z",
+          "2010-03-01T00:20:00Z",
+          "2010-03-01T00:30:00Z",
+          "2010-03-01T00:40:00Z",
+          "2010-03-01T00:50:00Z",
+          "2010-03-01T01:00:00Z",
+          "2010-03-01T01:10:00Z",
+          "2010-03-01T01:20:00Z",
+          "2010-03-01T01:30:00Z",
+          "2010-03-01T01:40:00Z",
+          "2010-03-01T01:50:00Z",
+          "2010-03-01T02:00:00Z",
+          "2010-03-01T02:10:00Z",
+          "2010-03-01T02:20:00Z",
+          "2010-03-01T02:30:00Z",
+          "2010-03-01T02:40:00Z",
+          "2010-03-01T02:50:00Z"
+         ]
+        },
+        "entry": "currents_strict"
+       }
+      }
+     },
+     {
+      "authored_step": 1,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "bin": {
+          "$bin": [
+           "OTC-P-0018/noaa",
+           1
+          ]
+         },
+         "times": [
+          "2010-03-01T00:00:00Z",
+          "2010-03-01T00:10:00Z",
+          "2010-03-01T00:20:00Z",
+          "2010-03-01T00:30:00Z",
+          "2010-03-01T00:40:00Z",
+          "2010-03-01T00:50:00Z",
+          "2010-03-01T01:00:00Z",
+          "2010-03-01T01:10:00Z",
+          "2010-03-01T01:20:00Z",
+          "2010-03-01T01:30:00Z",
+          "2010-03-01T01:40:00Z",
+          "2010-03-01T01:50:00Z",
+          "2010-03-01T02:00:00Z",
+          "2010-03-01T02:10:00Z",
+          "2010-03-01T02:20:00Z",
+          "2010-03-01T02:30:00Z",
+          "2010-03-01T02:40:00Z",
+          "2010-03-01T02:50:00Z"
+         ]
+        },
+        "entry": "currents_strict"
+       }
+      }
+     }
+    ]
+   },
+   "runners": [
+    "python",
+    "ruby",
+    "typescript",
+    "swift",
+    "typescript-browser",
+    "python-no-tz",
+    "ruby-no-tz"
+   ],
+   "units_provenance": {
+    "source_case": "predict-currents/default-bin",
+    "si_divisor": 0.5144444444444445,
+    "note": "Selected values only; accepted SI items and science provenance unchanged."
+   }
+  },
+  {
+   "id": "units-knots/current-events/basic",
+   "title": "knots: events of the default bin over 2 days (cross-checked by a 5 s scan of W' and W)",
+   "spec": "4.7",
+   "matrix": {
+    "root": "predict",
+    "release": "20991231.7"
+   },
+   "requires": [
+    "predict",
+    "prediction_units"
+   ],
+   "steps": [
+    {
+     "args": {
+      "start": "2010-03-01T00:00:00Z",
+      "station_id": "OTC-P-0016",
+      "stop": "2010-03-03T00:00:00Z",
+      "units": "knots"
+     },
+     "expect": {
+      "prediction": {
+       "algorithm": "otc-predict-1",
+       "astro_table_id": "otc-test-predict-a",
+       "bin_number": 2,
+       "convention_id": "predict-greenwich-v1",
+       "datum": null,
+       "datum_kind": null,
+       "datum_name": null,
+       "datum_uncertainty_m": null,
+       "method": "harmonic",
+       "omitted_event_types": null,
+       "reference_bin": null,
+       "reference_station_id": null,
+       "release": "20991231.7",
+       "set_id": "OTC-P-0016/noaa",
+       "station_id": "OTC-P-0016",
+       "timezone": "America/New_York",
+       "tz": null,
+       "tz_version": null,
+       "items": [
+        {
+         "time": "2010-03-01T02:41:36Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 0.0
+        },
+        {
+         "time": "2010-03-01T05:43:45Z",
+         "type": "max_ebb",
+         "velocity_ms": -0.9584474722648791,
+         "direction_deg": 220.0,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": -1.8630728402557044
+        },
+        {
+         "time": "2010-03-01T08:52:07Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 0.0
+        },
+        {
+         "time": "2010-03-01T11:55:06Z",
+         "type": "max_flood",
+         "velocity_ms": 0.8925269375565027,
+         "direction_deg": 40.0,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 1.7349335719240873
+        },
+        {
+         "time": "2010-03-01T15:06:48Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 0.0
+        },
+        {
+         "time": "2010-03-01T17:47:12Z",
+         "type": "max_ebb",
+         "velocity_ms": -0.673045803778506,
+         "direction_deg": 220.0,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": -1.3082963788351087
+        },
+        {
+         "time": "2010-03-01T20:23:01Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 0.0
+        },
+        {
+         "time": "2010-03-01T23:56:31Z",
+         "type": "max_flood",
+         "velocity_ms": 1.1301856636734138,
+         "direction_deg": 40.0,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 2.196905177766895
+        },
+        {
+         "time": "2010-03-02T03:21:03Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 0.0
+        },
+        {
+         "time": "2010-03-02T06:22:45Z",
+         "type": "max_ebb",
+         "velocity_ms": -0.9362788418301394,
+         "direction_deg": 220.0,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": -1.8199804700801845
+        },
+        {
+         "time": "2010-03-02T09:31:11Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 0.0
+        },
+        {
+         "time": "2010-03-02T12:34:27Z",
+         "type": "max_flood",
+         "velocity_ms": 0.8709058908547344,
+         "direction_deg": 40.0,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 1.6929056193720537
+        },
+        {
+         "time": "2010-03-02T15:47:11Z",
+         "type": "slack_before_ebb",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 0.0
+        },
+        {
+         "time": "2010-03-02T18:26:58Z",
+         "type": "max_ebb",
+         "velocity_ms": -0.6451184635058667,
+         "direction_deg": 220.0,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": -1.2540099722576241
+        },
+        {
+         "time": "2010-03-02T21:02:46Z",
+         "type": "slack_before_flood",
+         "velocity_ms": 0.0,
+         "direction_deg": null,
+         "local_time": null,
+         "utc_offset_s": null,
+         "units": "knots",
+         "velocity": 0.0
+        }
+       ],
+       "units": "knots"
+      }
+     },
+     "op": "current_events"
+    }
+   ],
+   "scientific_gate_ready": true,
+   "prediction_provenance": {
+    "calls_sha256": "a6a9cc9c8986bed26fd673bed55ca5296153ee361e8eb4b7ceca8aa563dc76c3",
+    "oracle_commit": "c7b907d8b97213a0be66a88a296d24dd9e81af80",
+    "expected_sha256": "d2af2fdeaaaa74f52247da6b345db6fe21511f193469484c040f426d38d8bb1f",
+    "strict_source_sha256": "cd195a46e158561932c229a9b056bd1477ee847e01f76efb9b9e4a7550189bd8",
+    "crosscheck_sha256": "06717c80d2cd629400dbeeba52f73c9477407ba3c7a70d041a776f04d63a7ca8",
+    "steps": [
+     {
+      "authored_step": 0,
+      "source": "strict",
+      "authored_controls": {
+       "strict": {
+        "args": {
+         "astro": "otc-test-predict-a",
+         "bin": {
+          "$bin": [
+           "OTC-P-0016/noaa",
+           2
+          ]
+         },
+         "start": "2010-03-01T00:00:00Z",
+         "stop": "2010-03-03T00:00:00Z"
+        },
+        "crosscheck": "scan_5s",
+        "entry": "current_events_strict"
+       }
+      }
+     }
+    ]
+   },
+   "runners": [
+    "python",
+    "ruby",
+    "typescript",
+    "swift",
+    "typescript-browser",
+    "python-no-tz",
+    "ruby-no-tz"
+   ],
+   "units_provenance": {
+    "source_case": "predict-current-events/basic",
+    "si_divisor": 0.5144444444444445,
+    "note": "Selected values only; accepted SI items and science provenance unchanged."
+   }
+  }
+ ]
+}

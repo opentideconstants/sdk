@@ -139,3 +139,101 @@ def test_named_exception_cannot_spread_to_other_subjects(mutation):
     else:
         c["steps"][0]["expect"]["prediction"]["items"].pop()
     assert driver.check_cases(driver.expand([c]))
+
+
+def test_units_cases_derive_only_selected_values_from_pinned_si():
+    originals = {c["id"]: c for c in bc.prediction_cases()}
+    cases = bc.units_cases(list(originals.values()))
+    assert {c["id"].split("/", 1)[0] for c in cases} == {
+        "units-feet", "units-knots", "units-defaults"}
+    operations = set()
+    fields = {"height": "height_m", "velocity_major": "velocity_major_ms",
+              "velocity_minor": "velocity_minor_ms", "speed": "speed_ms", "velocity": "velocity_ms"}
+    for case in cases:
+        source = originals[case["units_provenance"]["source_case"]]
+        assert case["prediction_provenance"] == source["prediction_provenance"]
+        assert case["matrix"] == source["matrix"]
+        assert "prediction_units" in case["requires"]
+        assert "c" not in case["runners"]
+        for step, original in zip(case["steps"], source["steps"], strict=True):
+            if "prediction" not in step.get("expect", {}):
+                assert step == original
+                continue
+            if step["op"] != "to_local":
+                operations.add(step["op"])
+                assert step["args"]["units"] == step["expect"]["prediction"]["units"]
+            actual = copy.deepcopy(step["expect"]["prediction"])
+            units = actual.pop("units")
+            factor = {"meters": 1.0, "feet": 0.3048, "m/s": 1.0, "knots": 1852.0 / 3600.0}[units]
+            for item in actual["items"]:
+                assert item.pop("units") == units
+                for selected, si in fields.items():
+                    if si in item:
+                        assert item.pop(selected) == item[si] / factor
+            assert actual == original["expect"]["prediction"]
+    assert operations == {"heights", "heights_at", "extremes", "currents", "current_events"}
+    assert driver.check_cases(driver.expand(cases)) == []
+
+
+def test_units_are_required_in_active_profiles_and_prediction_requests():
+    for profile in ("python", "ruby", "typescript", "swift", "typescript-browser", "python-no-tz", "ruby-no-tz"):
+        assert "prediction_units" in driver.PROFILES[profile]
+        without = set(driver.PROFILES[profile]) - {"prediction_units"}
+        assert "prediction_units" in driver.profile_problem(profile, without)
+    for profile in ("c", "c-fetch", "c-no-localtime", "c-no-predict"):
+        assert "prediction_units" not in driver.PROFILES[profile]
+    for op in ("heights", "heights_at", "extremes", "currents", "current_events"):
+        assert "units" in driver.OPS[op]
+        assert "prediction_units" in driver.step_needs({"op": op, "args": {"units": "feet"}})
+        assert "prediction_units" not in driver.step_needs({"op": op})
+
+
+def test_browser_units_cases_execute_the_same_assertions_without_filesystem():
+    originals = bc.units_cases(bc.prediction_cases())
+    unchanged = copy.deepcopy(originals)
+    cases = bc.units_browser_cases(originals)
+    assert originals == unchanged
+    assert len(cases) == len(originals) == 12
+    assert {c["id"].split("/", 1)[0] for c in cases} == {
+        "units-browser-feet", "units-browser-knots", "units-browser-defaults"}
+    for case, source in zip(cases, originals, strict=True):
+        matrix = source["matrix"]
+        assert case["id"] == source["id"].replace("units-", "units-browser-", 1)
+        assert "matrix" not in case
+        assert case["runners"] == ["typescript-browser"]
+        assert set(case["requires"]) <= set(driver.PROFILES["typescript-browser"])
+        assert {"fetch", "eager", "prediction_units"} <= set(case["requires"])
+        assert case["steps"][0] == {
+            "op": "open",
+            "args": {"release": matrix["release"], "base_url": f"${{server}}/{matrix['root']}/",
+                     "mode": "eager", **matrix.get("open_args", {})},
+            "expect": {"datestamp": matrix["release"]}}
+        assert case["steps"][1:] == source["steps"]
+        assert case["units_provenance"] == source["units_provenance"]
+        provenance = copy.deepcopy(case["prediction_provenance"])
+        opening = provenance["steps"].pop(0)
+        assert opening == {"authored_step": 0, "source": "authored_interface", "authored_controls": {}}
+        for row in provenance["steps"]:
+            row["authored_step"] -= 1
+        assert provenance == source["prediction_provenance"]
+        assert case["scientific_gate_ready"] is True
+    assert driver.expand(cases) == cases
+    assert driver.check_cases(cases) == []
+
+
+def test_units_manifest_preserves_si_and_excludes_c():
+    api = json.loads((CONF / "api.json").read_text())
+    for operation in api["objects"]["Release"]["members"]:
+        if operation["name"] not in {"heights", "heights_at", "extremes", "currents", "current_events"}:
+            continue
+        units = next(a for a in operation["args"] if a["name"] == "units")
+        assert units["default"] == ("m/s" if operation["name"] in {"currents", "current_events"} else "meters")
+        assert set(units["languages"]) == {"python", "ruby", "typescript", "swift"}
+    pairs = {"HeightPoint": {"height": "height_m"}, "Extreme": {"height": "height_m"},
+             "CurrentPoint": {"velocity_major": "velocity_major_ms", "velocity_minor": "velocity_minor_ms", "speed": "speed_ms"},
+             "CurrentEvent": {"velocity": "velocity_ms"}}
+    for name in (*pairs, "HeightSeries", "ExtremeList", "CurrentSeries", "CurrentEventList"):
+        members = {m["name"]: m for m in api["objects"][name]["members"]}
+        for selected in ("units", *pairs.get(name, {})):
+            assert set(members[selected]["languages"]) == {"python", "ruby", "typescript", "swift"}
+        assert set(pairs.get(name, {}).values()) <= members.keys()

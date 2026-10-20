@@ -1,36 +1,44 @@
 class OpenTideConstants
     class HeightPoint
-        attr_reader :time, :height_m, :local_time, :utc_offset_s
-        def initialize(time: nil, height_m: nil, local_time: nil, utc_offset_s: nil, _local: nil)
+        attr_reader :time, :height_m, :local_time, :utc_offset_s, :units
+        def initialize(time: nil, height_m: nil, local_time: nil, utc_offset_s: nil, _local: nil, units: "meters")
             @time = Util.deep_freeze(time)
             @height_m = Util.deep_freeze(height_m)
             @local_time = Util.deep_freeze(local_time)
             @utc_offset_s = Util.deep_freeze(utc_offset_s)
+            @units = Util.deep_freeze(units)
             @_local = _local
             freeze
+        end
+        def height
+            units == "meters" || height_m.nil? ? height_m : height_m / 0.3048
         end
         def local_time_object
             @_local
         end
     end
     class Extreme
-        attr_reader :time, :type, :height_m, :local_time, :utc_offset_s
-        def initialize(time: nil, type: nil, height_m: nil, local_time: nil, utc_offset_s: nil, _local: nil)
+        attr_reader :time, :type, :height_m, :local_time, :utc_offset_s, :units
+        def initialize(time: nil, type: nil, height_m: nil, local_time: nil, utc_offset_s: nil, _local: nil, units: "meters")
             @time = Util.deep_freeze(time)
             @type = Util.deep_freeze(type)
             @height_m = Util.deep_freeze(height_m)
             @local_time = Util.deep_freeze(local_time)
             @utc_offset_s = Util.deep_freeze(utc_offset_s)
+            @units = Util.deep_freeze(units)
             @_local = _local
             freeze
+        end
+        def height
+            units == "meters" || height_m.nil? ? height_m : height_m / 0.3048
         end
         def local_time_object
             @_local
         end
     end
     class CurrentPoint
-        attr_reader :time, :velocity_major_ms, :velocity_minor_ms, :speed_ms, :direction_deg, :local_time, :utc_offset_s
-        def initialize(time: nil, velocity_major_ms: nil, velocity_minor_ms: nil, speed_ms: nil, direction_deg: nil, local_time: nil, utc_offset_s: nil, _local: nil)
+        attr_reader :time, :velocity_major_ms, :velocity_minor_ms, :speed_ms, :direction_deg, :local_time, :utc_offset_s, :units
+        def initialize(time: nil, velocity_major_ms: nil, velocity_minor_ms: nil, speed_ms: nil, direction_deg: nil, local_time: nil, utc_offset_s: nil, _local: nil, units: "m/s")
             @time = Util.deep_freeze(time)
             @velocity_major_ms = Util.deep_freeze(velocity_major_ms)
             @velocity_minor_ms = Util.deep_freeze(velocity_minor_ms)
@@ -38,32 +46,46 @@ class OpenTideConstants
             @direction_deg = Util.deep_freeze(direction_deg)
             @local_time = Util.deep_freeze(local_time)
             @utc_offset_s = Util.deep_freeze(utc_offset_s)
+            @units = Util.deep_freeze(units)
             @_local = _local
             freeze
+        end
+        def velocity_major
+            units == "m/s" || velocity_major_ms.nil? ? velocity_major_ms : velocity_major_ms / (1852.0 / 3600.0)
+        end
+        def velocity_minor
+            units == "m/s" || velocity_minor_ms.nil? ? velocity_minor_ms : velocity_minor_ms / (1852.0 / 3600.0)
+        end
+        def speed
+            units == "m/s" || speed_ms.nil? ? speed_ms : speed_ms / (1852.0 / 3600.0)
         end
         def local_time_object
             @_local
         end
     end
     class CurrentEvent
-        attr_reader :time, :type, :velocity_ms, :direction_deg, :local_time, :utc_offset_s
-        def initialize(time: nil, type: nil, velocity_ms: nil, direction_deg: nil, local_time: nil, utc_offset_s: nil, _local: nil)
+        attr_reader :time, :type, :velocity_ms, :direction_deg, :local_time, :utc_offset_s, :units
+        def initialize(time: nil, type: nil, velocity_ms: nil, direction_deg: nil, local_time: nil, utc_offset_s: nil, _local: nil, units: "m/s")
             @time = Util.deep_freeze(time)
             @type = Util.deep_freeze(type)
             @velocity_ms = Util.deep_freeze(velocity_ms)
             @direction_deg = Util.deep_freeze(direction_deg)
             @local_time = Util.deep_freeze(local_time)
             @utc_offset_s = Util.deep_freeze(utc_offset_s)
+            @units = Util.deep_freeze(units)
             @_local = _local
             freeze
+        end
+        def velocity
+            units == "m/s" || velocity_ms.nil? ? velocity_ms : velocity_ms / (1852.0 / 3600.0)
         end
         def local_time_object
             @_local
         end
     end
     class HeightSeries
-        attr_reader :items, :station_id, :timezone, :method, :set_id, :convention_id, :astro_table_id, :reference_station_id, :reference_bin, :datum, :datum_name, :datum_kind, :datum_uncertainty_m, :tz, :tz_version, :release, :algorithm, :offset_id, :offset_source, :offset_source_version, :historical_offsets, :current_validity, :current_accuracy, :reference_set_id, :reference_source_version, :reference_2020_equivalence, :source_note
-        def initialize(items: [], station_id: nil, timezone: nil, method: nil, set_id: nil, convention_id: nil, astro_table_id: nil, reference_station_id: nil, reference_bin: nil, datum: nil, datum_name: nil, datum_kind: nil, datum_uncertainty_m: nil, tz: nil, tz_version: nil, release: nil, algorithm: nil, offset_id: nil, offset_source: nil, offset_source_version: nil, historical_offsets: false, current_validity: nil, current_accuracy: nil, reference_set_id: nil, reference_source_version: nil, reference_2020_equivalence: nil, source_note: nil, _local: nil)
+        attr_reader :items, :station_id, :timezone, :method, :set_id, :convention_id, :astro_table_id, :reference_station_id, :reference_bin, :datum, :datum_name, :datum_kind, :datum_uncertainty_m, :tz, :tz_version, :release, :algorithm, :offset_id, :offset_source, :offset_source_version, :historical_offsets, :current_validity, :current_accuracy, :reference_set_id, :reference_source_version, :reference_2020_equivalence, :source_note, :units
+        def initialize(items: [], station_id: nil, timezone: nil, method: nil, set_id: nil, convention_id: nil, astro_table_id: nil, reference_station_id: nil, reference_bin: nil, datum: nil, datum_name: nil, datum_kind: nil, datum_uncertainty_m: nil, tz: nil, tz_version: nil, release: nil, algorithm: nil, offset_id: nil, offset_source: nil, offset_source_version: nil, historical_offsets: false, current_validity: nil, current_accuracy: nil, reference_set_id: nil, reference_source_version: nil, reference_2020_equivalence: nil, source_note: nil, _local: nil, units: "meters")
             @items = Util.deep_freeze(items)
             @station_id = Util.deep_freeze(station_id)
             @timezone = Util.deep_freeze(timezone)
@@ -91,6 +113,7 @@ class OpenTideConstants
             @reference_source_version = Util.deep_freeze(reference_source_version)
             @reference_2020_equivalence = Util.deep_freeze(reference_2020_equivalence)
             @source_note = Util.deep_freeze(source_note)
+            @units = Util.deep_freeze(units)
             @_local = _local
             freeze
         end
@@ -99,8 +122,8 @@ class OpenTideConstants
         end
     end
     class ExtremeList
-        attr_reader :items, :station_id, :timezone, :method, :set_id, :convention_id, :astro_table_id, :reference_station_id, :reference_bin, :datum, :datum_name, :datum_kind, :datum_uncertainty_m, :tz, :tz_version, :release, :algorithm, :offset_id, :offset_source, :offset_source_version, :historical_offsets, :current_validity, :current_accuracy, :reference_set_id, :reference_source_version, :reference_2020_equivalence, :source_note
-        def initialize(items: [], station_id: nil, timezone: nil, method: nil, set_id: nil, convention_id: nil, astro_table_id: nil, reference_station_id: nil, reference_bin: nil, datum: nil, datum_name: nil, datum_kind: nil, datum_uncertainty_m: nil, tz: nil, tz_version: nil, release: nil, algorithm: nil, offset_id: nil, offset_source: nil, offset_source_version: nil, historical_offsets: false, current_validity: nil, current_accuracy: nil, reference_set_id: nil, reference_source_version: nil, reference_2020_equivalence: nil, source_note: nil, _local: nil)
+        attr_reader :items, :station_id, :timezone, :method, :set_id, :convention_id, :astro_table_id, :reference_station_id, :reference_bin, :datum, :datum_name, :datum_kind, :datum_uncertainty_m, :tz, :tz_version, :release, :algorithm, :offset_id, :offset_source, :offset_source_version, :historical_offsets, :current_validity, :current_accuracy, :reference_set_id, :reference_source_version, :reference_2020_equivalence, :source_note, :units
+        def initialize(items: [], station_id: nil, timezone: nil, method: nil, set_id: nil, convention_id: nil, astro_table_id: nil, reference_station_id: nil, reference_bin: nil, datum: nil, datum_name: nil, datum_kind: nil, datum_uncertainty_m: nil, tz: nil, tz_version: nil, release: nil, algorithm: nil, offset_id: nil, offset_source: nil, offset_source_version: nil, historical_offsets: false, current_validity: nil, current_accuracy: nil, reference_set_id: nil, reference_source_version: nil, reference_2020_equivalence: nil, source_note: nil, _local: nil, units: "meters")
             @items = Util.deep_freeze(items)
             @station_id = Util.deep_freeze(station_id)
             @timezone = Util.deep_freeze(timezone)
@@ -128,6 +151,7 @@ class OpenTideConstants
             @reference_source_version = Util.deep_freeze(reference_source_version)
             @reference_2020_equivalence = Util.deep_freeze(reference_2020_equivalence)
             @source_note = Util.deep_freeze(source_note)
+            @units = Util.deep_freeze(units)
             @_local = _local
             freeze
         end
@@ -136,8 +160,8 @@ class OpenTideConstants
         end
     end
     class CurrentSeries
-        attr_reader :items, :station_id, :timezone, :method, :set_id, :convention_id, :astro_table_id, :reference_station_id, :reference_bin, :datum, :datum_name, :datum_kind, :datum_uncertainty_m, :bin_number, :tz, :tz_version, :release, :algorithm
-        def initialize(items: [], station_id: nil, timezone: nil, method: nil, set_id: nil, convention_id: nil, astro_table_id: nil, reference_station_id: nil, reference_bin: nil, datum: nil, datum_name: nil, datum_kind: nil, datum_uncertainty_m: nil, bin_number: nil, tz: nil, tz_version: nil, release: nil, algorithm: nil, _local: nil)
+        attr_reader :items, :station_id, :timezone, :method, :set_id, :convention_id, :astro_table_id, :reference_station_id, :reference_bin, :datum, :datum_name, :datum_kind, :datum_uncertainty_m, :bin_number, :tz, :tz_version, :release, :algorithm, :units
+        def initialize(items: [], station_id: nil, timezone: nil, method: nil, set_id: nil, convention_id: nil, astro_table_id: nil, reference_station_id: nil, reference_bin: nil, datum: nil, datum_name: nil, datum_kind: nil, datum_uncertainty_m: nil, bin_number: nil, tz: nil, tz_version: nil, release: nil, algorithm: nil, _local: nil, units: "m/s")
             @items = Util.deep_freeze(items)
             @station_id = Util.deep_freeze(station_id)
             @timezone = Util.deep_freeze(timezone)
@@ -156,6 +180,7 @@ class OpenTideConstants
             @tz_version = Util.deep_freeze(tz_version)
             @release = Util.deep_freeze(release)
             @algorithm = Util.deep_freeze(algorithm)
+            @units = Util.deep_freeze(units)
             @_local = _local
             freeze
         end
@@ -164,8 +189,8 @@ class OpenTideConstants
         end
     end
     class CurrentEventList
-        attr_reader :items, :station_id, :timezone, :method, :set_id, :convention_id, :astro_table_id, :reference_station_id, :reference_bin, :datum, :datum_name, :datum_kind, :datum_uncertainty_m, :bin_number, :omitted_event_types, :tz, :tz_version, :release, :algorithm
-        def initialize(items: [], station_id: nil, timezone: nil, method: nil, set_id: nil, convention_id: nil, astro_table_id: nil, reference_station_id: nil, reference_bin: nil, datum: nil, datum_name: nil, datum_kind: nil, datum_uncertainty_m: nil, bin_number: nil, omitted_event_types: nil, tz: nil, tz_version: nil, release: nil, algorithm: nil, _local: nil)
+        attr_reader :items, :station_id, :timezone, :method, :set_id, :convention_id, :astro_table_id, :reference_station_id, :reference_bin, :datum, :datum_name, :datum_kind, :datum_uncertainty_m, :bin_number, :omitted_event_types, :tz, :tz_version, :release, :algorithm, :units
+        def initialize(items: [], station_id: nil, timezone: nil, method: nil, set_id: nil, convention_id: nil, astro_table_id: nil, reference_station_id: nil, reference_bin: nil, datum: nil, datum_name: nil, datum_kind: nil, datum_uncertainty_m: nil, bin_number: nil, omitted_event_types: nil, tz: nil, tz_version: nil, release: nil, algorithm: nil, _local: nil, units: "m/s")
             @items = Util.deep_freeze(items)
             @station_id = Util.deep_freeze(station_id)
             @timezone = Util.deep_freeze(timezone)
@@ -185,6 +210,7 @@ class OpenTideConstants
             @tz_version = Util.deep_freeze(tz_version)
             @release = Util.deep_freeze(release)
             @algorithm = Util.deep_freeze(algorithm)
+            @units = Util.deep_freeze(units)
             @_local = _local
             freeze
         end

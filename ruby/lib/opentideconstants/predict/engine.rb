@@ -188,8 +188,18 @@ class OpenTideConstants
             eligible &&= constants.convention.v0_model == "schureman_tcd" && constants.convention.nodal_handling == :f_u_at_prediction && d["chart_datum"] == "mllw" && !d["msl_offset_m"].nil? && d.dig("named", "mllw") == 0.0 && d.dig("basis", "mllw", "kind") == "published"
             raise NoConstantsError, "historical offsets ineligible" unless eligible
         end
-        def result(release, c, klass, items, datum = nil)
-            fields = {items: items, station_id: c.station.station_id, timezone: c.station.timezone, method: c.method.to_sym, set_id: c.constants.set_id, convention_id: c.constants.convention.convention_id, astro_table_id: c.table.instance_variable_get(:@raw)["astro_table_id"], reference_station_id: c.reference&.station_id, reference_bin: c.reference_bin, datum: datum, datum_name: c.datum_name, datum_kind: c.datum_kind, datum_uncertainty_m: c.datum_uncertainty, release: release.datestamp, algorithm: "otc-predict-1"}
+        def validate_units(units, default)
+            allowed = default == "meters" ? %w[meters feet] : ["m/s", "knots"]
+            raise InvalidArgumentError, "units must be #{allowed.join(' or ')}" unless allowed.include?(units)
+        end
+        def present_units(item, units)
+            fields = item.instance_variables.to_h { |field| [field.to_s.delete_prefix("@").to_sym, item.instance_variable_get(field)] }
+            item.class.new(**fields.merge(units: units))
+        end
+        def result(release, c, klass, items, datum = nil, units: nil)
+            units ||= [HeightSeries, ExtremeList].include?(klass) ? "meters" : "m/s"
+            items = items.map { |item| present_units(item, units) }
+            fields = {items: items, units: units, station_id: c.station.station_id, timezone: c.station.timezone, method: c.method.to_sym, set_id: c.constants.set_id, convention_id: c.constants.convention.convention_id, astro_table_id: c.table.instance_variable_get(:@raw)["astro_table_id"], reference_station_id: c.reference&.station_id, reference_bin: c.reference_bin, datum: datum, datum_name: c.datum_name, datum_kind: c.datum_kind, datum_uncertainty_m: c.datum_uncertainty, release: release.datestamp, algorithm: "otc-predict-1"}
             fields[:bin_number] = c.bin_number if [CurrentSeries, CurrentEventList].include?(klass)
             fields[:omitted_event_types] = c.omitted if klass == CurrentEventList
             if [HeightSeries, ExtremeList].include?(klass) && c.offsets && c.offsets["offset_id"]

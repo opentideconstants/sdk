@@ -72,6 +72,8 @@ try {
 
 `heights`, `heightsAt`, `extremes`, `currents` and `currentEvents` return promises for immutable results. `datums` and `ranges` are synchronous. `release.astroTable()` returns a promise. Times use UTC `Date` values; fractional seconds are floored. A window includes `start` and excludes `stop`.
 
+Pass `units: "feet"` to `heights`, `heightsAt` or `extremes` to read each item's `height` in feet; the default is `"meters"`. Pass `units: "knots"` to `currents` or `currentEvents`; the default is `"m/s"`. Current points expose `velocity_major`, `velocity_minor` and `speed`, and current events expose `velocity`. Each result and item has read-only `units` metadata. Existing SI fields (`height_m`, `velocity_major_ms`, `velocity_minor_ms`, `speed_ms`, `velocity_ms`) and datum uncertainty remain unchanged. Selected values use the final SI value divided by `0.3048` for feet or `1852 / 3600` for knots. Localization retains the selector and both representations. Unsupported selectors raise `InvalidArgumentError`.
+
 Results retain the selected set, convention, astro table, datum and reference identifiers. Historical NOAA offsets also retain their source, vintage and reference labels. Their current accuracy is `unverified`; their current validity is `unestablished`. Unequal tide corrections support extrema only. Open with `historicalOffsetsPolicy: "exclude"` to exclude these offsets from discovery and prediction, including explicit selectors.
 
 `toLocal(zone)` returns a new result. It leaves the UTC instants unchanged and adds wall times and UTC offsets. Node reports its native time-zone database version. Browsers report `null` when that version is unavailable.
@@ -81,5 +83,7 @@ Results retain the selected set, convention, astro table, datum and reference id
 ## Development checks
 
 `npm run test:unit` runs the portable reader tests. `npm run test:native` is a separate mandatory acceptance gate that requires the actual release inputs. It fails when inputs are absent. Set `OTC_CORE_NATIVE_JSON`, `OTC_CORE_NATIVE_JSONL`, `OTC_CORE_NATIVE_META`, `OTC_PREDICT_NATIVE_JSON`, `OTC_HISTORY_NATIVE_JSON`, `OTC_HISTORY_NATIVE_JSONL`, `OTC_HISTORY_BROWSER_JSON` and `OTC_HISTORY_REFERENCE_REPORT` to the pinned artifacts. The browser historical input is a lossless subset of the same release. Restricted release artifacts are not bundled or fetched from an invented public URL. CI also checks the bundled immutable prediction vectors.
+
+Run `node --test test/units.test.mjs` with `OTC_UNITS_NATIVE_JSON` set to the accepted actual release to check the reference, subordinate and current units paths in eager and stream modes, including defaults, Client/Release forwarding, localization and native construction.
 
 The full guide: https://opentideconstants.org. Code licence: MIT. Data permissions are recorded per source.
