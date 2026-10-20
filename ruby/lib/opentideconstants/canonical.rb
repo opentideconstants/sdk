@@ -61,6 +61,10 @@ class OpenTideConstants
         end
 
         def validate_prediction_times(arguments)
+            if %w[Release.heights Release.heights_at Release.extremes Release.currents Release.current_events].include?(arguments.member_id)
+                default = %w[Release.currents Release.current_events].include?(arguments.member_id) ? "m/s" : "meters"
+                Predict.validate_units(argument_value(arguments, :units, default), default)
+            end
             if arguments.member_id == "Release.heights_at"
                 raise InvalidArgumentError, "times must be an Array of Time" unless arguments.times.is_a?(Array)
                 arguments.times.each { |time| Predict.instant(time) }
@@ -339,28 +343,28 @@ class OpenTideConstants
                  "HistoricalOffsetVintage", "HistoricalOffsetProvenance", "Tombstone"
                 OpenTideConstants.const_get(model_type, false).new(raw_fields)
             when "HeightPoint"
-                HeightPoint.new(**result_field_inputs(raw_fields, context, %w[height_m local_time utc_offset_s], time: true))
+                HeightPoint.new(**result_field_inputs(raw_fields, context, %w[units height_m local_time utc_offset_s], time: true))
             when "Extreme"
-                fields = result_field_inputs(raw_fields, context, %w[type height_m local_time utc_offset_s], time: true)
+                fields = result_field_inputs(raw_fields, context, %w[units type height_m local_time utc_offset_s], time: true)
                 fields[:type] = Util.enum(fields[:type], ENUMS[:extreme_type]) if fields.key?(:type)
                 Extreme.new(**fields)
             when "CurrentPoint"
-                CurrentPoint.new(**result_field_inputs(raw_fields, context, %w[velocity_major_ms velocity_minor_ms speed_ms direction_deg local_time utc_offset_s], time: true))
+                CurrentPoint.new(**result_field_inputs(raw_fields, context, %w[units velocity_major_ms velocity_minor_ms speed_ms direction_deg local_time utc_offset_s], time: true))
             when "CurrentEvent"
-                fields = result_field_inputs(raw_fields, context, %w[type velocity_ms direction_deg local_time utc_offset_s], time: true)
+                fields = result_field_inputs(raw_fields, context, %w[units type velocity_ms direction_deg local_time utc_offset_s], time: true)
                 fields[:type] = Util.enum(fields[:type], ENUMS[:current_event_type]) if fields.key?(:type)
                 CurrentEvent.new(**fields)
             when "HeightSeries", "ExtremeList"
-                fields = %w[station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m tz tz_version release algorithm offset_id offset_source offset_source_version historical_offsets current_validity current_accuracy reference_set_id reference_source_version reference_2020_equivalence source_note]
+                fields = %w[units station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m tz tz_version release algorithm offset_id offset_source offset_source_version historical_offsets current_validity current_accuracy reference_set_id reference_source_version reference_2020_equivalence source_note]
                 keywords = result_field_inputs(raw_fields, context, fields, collection: :items)
                 keywords[:method] = Util.enum(keywords[:method], ENUMS[:prediction_method]) if keywords.key?(:method)
                 model_type == "HeightSeries" ? HeightSeries.new(**keywords) : ExtremeList.new(**keywords)
             when "CurrentSeries"
-                fields = result_field_inputs(raw_fields, context, %w[station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m bin_number tz tz_version release algorithm], collection: :items)
+                fields = result_field_inputs(raw_fields, context, %w[units station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m bin_number tz tz_version release algorithm], collection: :items)
                 fields[:method] = Util.enum(fields[:method], ENUMS[:prediction_method]) if fields.key?(:method)
                 CurrentSeries.new(**fields)
             when "CurrentEventList"
-                fields = result_field_inputs(raw_fields, context, %w[station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m bin_number omitted_event_types tz tz_version release algorithm], collection: :items)
+                fields = result_field_inputs(raw_fields, context, %w[units station_id timezone method set_id convention_id astro_table_id reference_station_id reference_bin datum datum_name datum_kind datum_uncertainty_m bin_number omitted_event_types tz tz_version release algorithm], collection: :items)
                 fields[:method] = Util.enum(fields[:method], ENUMS[:prediction_method]) if fields.key?(:method)
                 if fields[:omitted_event_types]
                     fields[:omitted_event_types] = fields[:omitted_event_types].map { |type| Util.enum(type, ENUMS[:current_event_type]) }

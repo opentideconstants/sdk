@@ -1146,35 +1146,50 @@ class Release:
             raise InvalidArgumentError(f"{what}: station {station.station_id} is not an active station of release "
                                        f"{self.datestamp}")
 
-    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None, offset_id=None):
+    def heights(self, station, *, start, stop, step_s=600, datum=None, set_id=None, offset_id=None, units='meters'):
         """Heights using otc-predict-1 (prediction spec section 5.2)."""
         self._check_open()
+        if units not in ('meters', 'feet'):
+            raise InvalidArgumentError("unsupported prediction units")
+        from ._predict._results import _with_units
         from ._predict._engine import heights
-        return heights(self, station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id, offset_id=offset_id)
+        return _with_units(heights(self, station, start=start, stop=stop, step_s=step_s, datum=datum, set_id=set_id, offset_id=offset_id), units)
 
-    def heights_at(self, station, times, *, datum=None, set_id=None, offset_id=None):
+    def heights_at(self, station, times, *, datum=None, set_id=None, offset_id=None, units='meters'):
         """Heights at using otc-predict-1 (prediction spec section 5.2)."""
         self._check_open()
+        if units not in ('meters', 'feet'):
+            raise InvalidArgumentError("unsupported prediction units")
+        from ._predict._results import _with_units
         from ._predict._engine import heights_at
-        return heights_at(self, station, times, datum=datum, set_id=set_id, offset_id=offset_id)
+        return _with_units(heights_at(self, station, times, datum=datum, set_id=set_id, offset_id=offset_id), units)
 
-    def extremes(self, station, *, start, stop, datum=None, set_id=None, offset_id=None):
+    def extremes(self, station, *, start, stop, datum=None, set_id=None, offset_id=None, units='meters'):
         """Extremes using otc-predict-1 (prediction spec section 5.2)."""
         self._check_open()
+        if units not in ('meters', 'feet'):
+            raise InvalidArgumentError("unsupported prediction units")
+        from ._predict._results import _with_units
         from ._predict._engine import extremes
-        return extremes(self, station, start=start, stop=stop, datum=datum, set_id=set_id, offset_id=offset_id)
+        return _with_units(extremes(self, station, start=start, stop=stop, datum=datum, set_id=set_id, offset_id=offset_id), units)
 
-    def currents(self, station, *, start, stop, step_s=600, bin_number=None, set_id=None):
+    def currents(self, station, *, start, stop, step_s=600, bin_number=None, set_id=None, units='m/s'):
         """Currents using otc-predict-1 (prediction spec section 5.2)."""
         self._check_open()
+        if units not in ('m/s', 'knots'):
+            raise InvalidArgumentError("unsupported prediction units")
+        from ._predict._results import _with_units
         from ._predict._engine import currents
-        return currents(self, station, start=start, stop=stop, step_s=step_s, bin_number=bin_number, set_id=set_id)
+        return _with_units(currents(self, station, start=start, stop=stop, step_s=step_s, bin_number=bin_number, set_id=set_id), units)
 
-    def current_events(self, station, *, start, stop, bin_number=None, set_id=None):
+    def current_events(self, station, *, start, stop, bin_number=None, set_id=None, units='m/s'):
         """Current events using otc-predict-1 (prediction spec section 5.2)."""
         self._check_open()
+        if units not in ('m/s', 'knots'):
+            raise InvalidArgumentError("unsupported prediction units")
+        from ._predict._results import _with_units
         from ._predict._engine import current_events
-        return current_events(self, station, start=start, stop=stop, bin_number=bin_number, set_id=set_id)
+        return _with_units(current_events(self, station, start=start, stop=stop, bin_number=bin_number, set_id=set_id), units)
 
     def datums(self, station, *, set_id=None, all_sets=False):
         """Datums using otc-predict-1 (prediction spec section 5.2)."""

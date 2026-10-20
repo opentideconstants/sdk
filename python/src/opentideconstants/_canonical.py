@@ -119,6 +119,11 @@ def _validate_operation_arguments(
     arguments: T._CArguments,
     member_contract: T._CMemberContract,
 ) -> T._CValidatedArguments:
+    if isinstance(arguments, (T._Arguments14, T._Arguments15, T._Arguments16,
+                              T._Arguments17, T._Arguments18)):
+        allowed = ('m/s', 'knots') if isinstance(arguments, (T._Arguments17, T._Arguments18)) else ('meters', 'feet')
+        if _specified(arguments.units, allowed[0]) not in allowed:
+            raise _errors.InvalidArgumentError("unsupported prediction units")
     if isinstance(arguments, T._MemberRequests):
         return _validate_request_arguments(arguments, member_contract)
     if isinstance(arguments, T._Arguments13):
@@ -354,6 +359,8 @@ def _validate_request_arguments(
             validated.append(station)
         return T._Arguments13(arguments.member_id, tuple(validated))
     if isinstance(arguments, (T._Request14, T._Request15, T._Request16)):
+        if _specified(arguments.units, 'meters') not in ('meters', 'feet'):
+            raise _errors.InvalidArgumentError("unsupported prediction units")
         if isinstance(arguments, T._Request15):
             for instant in arguments.times:
                 _astro.instant(instant)
@@ -383,6 +390,7 @@ def _validate_request_arguments(
                 arguments.datum,
                 arguments.set_id,
                 offset,
+                units=arguments.units,
             )
         if isinstance(arguments, T._Request15):
             return T._Arguments15(
@@ -392,6 +400,7 @@ def _validate_request_arguments(
                 arguments.datum,
                 arguments.set_id,
                 offset,
+                units=arguments.units,
             )
         return T._Arguments16(
             arguments.member_id,
@@ -401,6 +410,7 @@ def _validate_request_arguments(
             arguments.datum,
             arguments.set_id,
             offset,
+            units=arguments.units,
         )
     if isinstance(arguments, (T._Request19, T._Request20)):
         if prepared is not None and prepared.station_error is not None:
@@ -628,6 +638,7 @@ def _materialize_typed_model(
                 "B07 prepared HeightPoint source binding incomplete"
             )
         return _results.HeightPoint(
+            units=field_contract.raw_fields.get("units", "meters"),
             time=field_contract.native_time,
             height_m=field_contract.raw_fields["height_m"],
             local_time=field_contract.raw_fields["local_time"],
@@ -638,6 +649,7 @@ def _materialize_typed_model(
         if field_contract.raw_fields is not raw_fields:
             raise NotImplementedError("B07 prepared Extreme source binding incomplete")
         return _results.Extreme(
+            units=field_contract.raw_fields.get("units", "meters"),
             time=field_contract.native_time,
             type=field_contract.raw_fields["type"],
             height_m=field_contract.raw_fields["height_m"],
@@ -653,6 +665,7 @@ def _materialize_typed_model(
                 "B07 prepared CurrentPoint source binding incomplete"
             )
         return _results.CurrentPoint(
+            units=field_contract.raw_fields.get("units", "m/s"),
             time=field_contract.native_time,
             velocity_major_ms=field_contract.raw_fields["velocity_major_ms"],
             velocity_minor_ms=field_contract.raw_fields["velocity_minor_ms"],
@@ -670,6 +683,7 @@ def _materialize_typed_model(
                 "B07 prepared CurrentEvent source binding incomplete"
             )
         return _results.CurrentEvent(
+            units=field_contract.raw_fields.get("units", "m/s"),
             time=field_contract.native_time,
             type=field_contract.raw_fields["type"],
             velocity_ms=field_contract.raw_fields["velocity_ms"],
@@ -686,6 +700,7 @@ def _materialize_typed_model(
                 "B07 prepared HeightSeries source binding incomplete"
             )
         return _results.HeightSeries(
+            units=field_contract.raw_fields.get("units", "meters"),
             items=field_contract.native_items,
             station_id=field_contract.raw_fields["station_id"],
             timezone=field_contract.raw_fields["timezone"],
@@ -726,6 +741,7 @@ def _materialize_typed_model(
                 "B07 prepared ExtremeList source binding incomplete"
             )
         return _results.ExtremeList(
+            units=field_contract.raw_fields.get("units", "meters"),
             items=field_contract.native_items,
             station_id=field_contract.raw_fields["station_id"],
             timezone=field_contract.raw_fields["timezone"],
@@ -766,6 +782,7 @@ def _materialize_typed_model(
                 "B07 prepared CurrentSeries source binding incomplete"
             )
         return _results.CurrentSeries(
+            units=field_contract.raw_fields.get("units", "m/s"),
             items=field_contract.native_items,
             station_id=field_contract.raw_fields["station_id"],
             timezone=field_contract.raw_fields["timezone"],
@@ -793,6 +810,7 @@ def _materialize_typed_model(
                 "B07 prepared CurrentEventList source binding incomplete"
             )
         return _results.CurrentEventList(
+            units=field_contract.raw_fields.get("units", "m/s"),
             items=field_contract.native_items,
             station_id=field_contract.raw_fields["station_id"],
             timezone=field_contract.raw_fields["timezone"],

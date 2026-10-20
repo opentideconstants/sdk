@@ -53,7 +53,7 @@ CASES_DIR = HERE / "cases"
 CROSS_DIR = HERE / "cross"
 DEFAULT_TOL = 1e-9
 FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum", "https_proxy",
-            "predict", "localtime_module", "localtime", "tzdir_env"]
+            "predict", "prediction_units", "localtime_module", "localtime", "tzdir_env"]
 # The features of Python, Ruby and TypeScript on Node. require_checksum is the C open option (otc_open_options), which
 # no other SDK has (CR2 DR34). https_proxy: a proxy reached over TLS (CR2 DR39); Ruby's Net::HTTP has none.
 LANG_FEATURES = ["fs", "fetch", "json", "eager", "stream"]
@@ -62,7 +62,7 @@ LANG_FEATURES = ["fs", "fetch", "json", "eager", "stream"]
 PREDICT_FEATURES = ["predict", "localtime_module", "localtime"]
 # A feature that implies another: zone rules are usable only when the local-time module is built, so a case or an
 # expect_if_missing that names localtime also covers localtime_module, and a runner may not claim one without the other.
-IMPLIED = {"localtime": {"localtime_module"}}
+IMPLIED = {"localtime": {"localtime_module"}, "prediction_units": {"predict"}}
 # Runners the case-level runners filter never skips: the RED runners, which must fail every case (README "null runner").
 RED_RUNNERS = {"null", "almost"}
 
@@ -135,11 +135,11 @@ OPS = {
     "newer_format_major": [],
     "raw": ["object", "station_id", "set_id", "name", "convention_id", "licence_id"],
     # prediction (prediction spec 5.2; README "Operations")
-    "heights": ["station_id", "start", "stop", "step_s", "datum", "set_id", "offset_id"],
-    "heights_at": ["station_id", "times", "datum", "set_id", "offset_id"],
-    "extremes": ["station_id", "start", "stop", "datum", "set_id", "offset_id"],
-    "currents": ["station_id", "start", "stop", "step_s", "bin_number", "set_id"],
-    "current_events": ["station_id", "start", "stop", "bin_number", "set_id"],
+    "heights": ["station_id", "start", "stop", "step_s", "datum", "set_id", "offset_id", "units"],
+    "heights_at": ["station_id", "times", "datum", "set_id", "offset_id", "units"],
+    "extremes": ["station_id", "start", "stop", "datum", "set_id", "offset_id", "units"],
+    "currents": ["station_id", "start", "stop", "step_s", "bin_number", "set_id", "units"],
+    "current_events": ["station_id", "start", "stop", "bin_number", "set_id", "units"],
     "datums": ["station_id", "set_id", "all_sets"], "ranges": ["station_id", "set_id"],
     "astro_table": ["id"],
     "equilibrium_argument": ["id", "name", "at"], "node_factor": ["id", "name", "at"],
@@ -185,14 +185,15 @@ SERVER_ALIAS = "otc-fixture.invalid"
 # on Windows); c-no-predict is C with -DOTC_WITH_PREDICT=OFF.
 _C = ["fs", "stream", "require_checksum"]
 PROFILES = {
-    "python": LANG_FEATURES + ["https_proxy"] + PREDICT_FEATURES, "ruby": LANG_FEATURES + PREDICT_FEATURES,
-    "typescript": LANG_FEATURES + ["https_proxy"] + PREDICT_FEATURES,
-    "swift": LANG_FEATURES + PREDICT_FEATURES,
-    "typescript-browser": ["fetch", "json", "eager", "stream"] + PREDICT_FEATURES,
+    "python": LANG_FEATURES + ["https_proxy", "prediction_units"] + PREDICT_FEATURES,
+    "ruby": LANG_FEATURES + ["prediction_units"] + PREDICT_FEATURES,
+    "typescript": LANG_FEATURES + ["https_proxy", "prediction_units"] + PREDICT_FEATURES,
+    "swift": LANG_FEATURES + ["prediction_units"] + PREDICT_FEATURES,
+    "typescript-browser": ["fetch", "json", "eager", "stream", "prediction_units"] + PREDICT_FEATURES,
     "c": _C + PREDICT_FEATURES + ["tzdir_env"],
     "c-fetch": ["fs", "fetch", "stream", "require_checksum", "https_proxy"] + PREDICT_FEATURES + ["tzdir_env"],
-    "python-no-tz": LANG_FEATURES + ["https_proxy", "predict", "localtime_module"],
-    "ruby-no-tz": LANG_FEATURES + ["predict", "localtime_module"],
+    "python-no-tz": LANG_FEATURES + ["https_proxy", "predict", "prediction_units", "localtime_module"],
+    "ruby-no-tz": LANG_FEATURES + ["predict", "prediction_units", "localtime_module"],
     "c-no-localtime": _C + ["predict"],
     "c-no-predict": list(_C),
     "none": [],
@@ -747,6 +748,8 @@ def step_needs(st):
         need.add("fs")
     if op in PREDICT_OPS:
         need.add("predict")
+    if op in {"heights", "heights_at", "extremes", "currents", "current_events"} and "units" in a:
+        need.add("prediction_units")
     if op == "to_local":
         need |= {"localtime_module", "localtime"}
     return need

@@ -88,11 +88,11 @@ export interface MemberArguments {
     readonly "Release.reference_station": { readonly station: T.Station };
     readonly "Release.subordinates_of": { readonly station: T.Station };
     readonly "Release.attribution": { readonly stations?: ReadonlyArray<T.Station> | null };
-    readonly "Release.heights": { readonly station: T.Station | string; readonly start: Date; readonly stop: Date; readonly step_s?: number; readonly datum?: string | null; readonly set_id?: string | null; readonly offset_id?: string | null };
-    readonly "Release.heights_at": { readonly station: T.Station | string; readonly times: ReadonlyArray<Date>; readonly datum?: string | null; readonly set_id?: string | null; readonly offset_id?: string | null };
-    readonly "Release.extremes": { readonly station: T.Station | string; readonly start: Date; readonly stop: Date; readonly datum?: string | null; readonly set_id?: string | null; readonly offset_id?: string | null };
-    readonly "Release.currents": { readonly station: T.Station | string; readonly start: Date; readonly stop: Date; readonly step_s?: number; readonly bin_number?: number | null; readonly set_id?: string | null };
-    readonly "Release.current_events": { readonly station: T.Station | string; readonly start: Date; readonly stop: Date; readonly bin_number?: number | null; readonly set_id?: string | null };
+    readonly "Release.heights": { readonly units?: "meters" | "feet"; readonly station: T.Station | string; readonly start: Date; readonly stop: Date; readonly step_s?: number; readonly datum?: string | null; readonly set_id?: string | null; readonly offset_id?: string | null };
+    readonly "Release.heights_at": { readonly units?: "meters" | "feet"; readonly station: T.Station | string; readonly times: ReadonlyArray<Date>; readonly datum?: string | null; readonly set_id?: string | null; readonly offset_id?: string | null };
+    readonly "Release.extremes": { readonly units?: "meters" | "feet"; readonly station: T.Station | string; readonly start: Date; readonly stop: Date; readonly datum?: string | null; readonly set_id?: string | null; readonly offset_id?: string | null };
+    readonly "Release.currents": { readonly units?: "m/s" | "knots"; readonly station: T.Station | string; readonly start: Date; readonly stop: Date; readonly step_s?: number; readonly bin_number?: number | null; readonly set_id?: string | null };
+    readonly "Release.current_events": { readonly units?: "m/s" | "knots"; readonly station: T.Station | string; readonly start: Date; readonly stop: Date; readonly bin_number?: number | null; readonly set_id?: string | null };
     readonly "Release.datums": { readonly station: T.Station | string; readonly set_id?: string | null; readonly all_sets?: boolean };
     readonly "Release.ranges": { readonly station: T.Station | string; readonly set_id?: string | null };
     readonly "Release.astro_table": { readonly id?: string | null };
@@ -265,12 +265,16 @@ export interface MemberArguments {
     readonly "AstroTable.equilibrium_for_year": { readonly name: string; readonly year: number };
     readonly "AstroTable.node_factor_for_year": { readonly name: string; readonly year: number };
     readonly "AstroTable.valid_range": {  };
+    readonly "HeightPoint.units": {  };
+    readonly "HeightPoint.height": {  };
     readonly "HeightPoint.time": {  };
     readonly "HeightPoint.height_m": {  };
     readonly "HeightPoint.local_time": {  };
     readonly "HeightPoint.utc_offset_s": {  };
     readonly "HeightPoint.local_datetime": {  };
     readonly "HeightPoint.local_time_object": {  };
+    readonly "Extreme.units": {  };
+    readonly "Extreme.height": {  };
     readonly "Extreme.time": {  };
     readonly "Extreme.type": {  };
     readonly "Extreme.height_m": {  };
@@ -278,6 +282,10 @@ export interface MemberArguments {
     readonly "Extreme.utc_offset_s": {  };
     readonly "Extreme.local_datetime": {  };
     readonly "Extreme.local_time_object": {  };
+    readonly "CurrentPoint.units": {  };
+    readonly "CurrentPoint.velocity_major": {  };
+    readonly "CurrentPoint.velocity_minor": {  };
+    readonly "CurrentPoint.speed": {  };
     readonly "CurrentPoint.time": {  };
     readonly "CurrentPoint.velocity_major_ms": {  };
     readonly "CurrentPoint.velocity_minor_ms": {  };
@@ -287,6 +295,8 @@ export interface MemberArguments {
     readonly "CurrentPoint.utc_offset_s": {  };
     readonly "CurrentPoint.local_datetime": {  };
     readonly "CurrentPoint.local_time_object": {  };
+    readonly "CurrentEvent.units": {  };
+    readonly "CurrentEvent.velocity": {  };
     readonly "CurrentEvent.time": {  };
     readonly "CurrentEvent.type": {  };
     readonly "CurrentEvent.velocity_ms": {  };
@@ -295,6 +305,7 @@ export interface MemberArguments {
     readonly "CurrentEvent.utc_offset_s": {  };
     readonly "CurrentEvent.local_datetime": {  };
     readonly "CurrentEvent.local_time_object": {  };
+    readonly "HeightSeries.units": {  };
     readonly "HeightSeries.items": {  };
     readonly "HeightSeries.station_id": {  };
     readonly "HeightSeries.timezone": {  };
@@ -323,6 +334,7 @@ export interface MemberArguments {
     readonly "HeightSeries.reference_source_version": {  };
     readonly "HeightSeries.reference_2020_equivalence": {  };
     readonly "HeightSeries.source_note": {  };
+    readonly "ExtremeList.units": {  };
     readonly "ExtremeList.items": {  };
     readonly "ExtremeList.station_id": {  };
     readonly "ExtremeList.timezone": {  };
@@ -351,6 +363,7 @@ export interface MemberArguments {
     readonly "ExtremeList.reference_source_version": {  };
     readonly "ExtremeList.reference_2020_equivalence": {  };
     readonly "ExtremeList.source_note": {  };
+    readonly "CurrentSeries.units": {  };
     readonly "CurrentSeries.items": {  };
     readonly "CurrentSeries.station_id": {  };
     readonly "CurrentSeries.timezone": {  };
@@ -370,6 +383,7 @@ export interface MemberArguments {
     readonly "CurrentSeries.release": {  };
     readonly "CurrentSeries.algorithm": {  };
     readonly "CurrentSeries.to_local": { readonly tz?: string };
+    readonly "CurrentEventList.units": {  };
     readonly "CurrentEventList.items": {  };
     readonly "CurrentEventList.station_id": {  };
     readonly "CurrentEventList.timezone": {  };
@@ -675,12 +689,16 @@ export interface MemberValues {
     readonly "AstroTable.equilibrium_for_year": number;
     readonly "AstroTable.node_factor_for_year": number;
     readonly "AstroTable.valid_range": readonly [number, number];
+    readonly "HeightPoint.units": T.HeightPoint['units'];
+    readonly "HeightPoint.height": number;
     readonly "HeightPoint.time": Date;
     readonly "HeightPoint.height_m": number;
     readonly "HeightPoint.local_time": string | null;
     readonly "HeightPoint.utc_offset_s": number | null;
     readonly "HeightPoint.local_datetime": Date | null;
     readonly "HeightPoint.local_time_object": Date | null;
+    readonly "Extreme.units": T.Extreme['units'];
+    readonly "Extreme.height": number;
     readonly "Extreme.time": Date;
     readonly "Extreme.type": "high" | "low" | T.Other;
     readonly "Extreme.height_m": number;
@@ -688,6 +706,10 @@ export interface MemberValues {
     readonly "Extreme.utc_offset_s": number | null;
     readonly "Extreme.local_datetime": Date | null;
     readonly "Extreme.local_time_object": Date | null;
+    readonly "CurrentPoint.units": T.CurrentPoint['units'];
+    readonly "CurrentPoint.velocity_major": number;
+    readonly "CurrentPoint.velocity_minor": number;
+    readonly "CurrentPoint.speed": number;
     readonly "CurrentPoint.time": Date;
     readonly "CurrentPoint.velocity_major_ms": number;
     readonly "CurrentPoint.velocity_minor_ms": number;
@@ -697,6 +719,8 @@ export interface MemberValues {
     readonly "CurrentPoint.utc_offset_s": number | null;
     readonly "CurrentPoint.local_datetime": Date | null;
     readonly "CurrentPoint.local_time_object": Date | null;
+    readonly "CurrentEvent.units": T.CurrentEvent['units'];
+    readonly "CurrentEvent.velocity": number;
     readonly "CurrentEvent.time": Date;
     readonly "CurrentEvent.type": "max_flood" | "max_ebb" | "slack_before_flood" | "slack_before_ebb" | T.Other;
     readonly "CurrentEvent.velocity_ms": number;
@@ -705,6 +729,7 @@ export interface MemberValues {
     readonly "CurrentEvent.utc_offset_s": number | null;
     readonly "CurrentEvent.local_datetime": Date | null;
     readonly "CurrentEvent.local_time_object": Date | null;
+    readonly "HeightSeries.units": T.HeightSeries['units'];
     readonly "HeightSeries.items": ReadonlyArray<T.HeightPoint>;
     readonly "HeightSeries.station_id": string;
     readonly "HeightSeries.timezone": string;
@@ -733,6 +758,7 @@ export interface MemberValues {
     readonly "HeightSeries.reference_source_version": string | null;
     readonly "HeightSeries.reference_2020_equivalence": string | null;
     readonly "HeightSeries.source_note": string | null;
+    readonly "ExtremeList.units": T.ExtremeList['units'];
     readonly "ExtremeList.items": ReadonlyArray<T.Extreme>;
     readonly "ExtremeList.station_id": string;
     readonly "ExtremeList.timezone": string;
@@ -761,6 +787,7 @@ export interface MemberValues {
     readonly "ExtremeList.reference_source_version": string | null;
     readonly "ExtremeList.reference_2020_equivalence": string | null;
     readonly "ExtremeList.source_note": string | null;
+    readonly "CurrentSeries.units": T.CurrentSeries['units'];
     readonly "CurrentSeries.items": ReadonlyArray<T.CurrentPoint>;
     readonly "CurrentSeries.station_id": string;
     readonly "CurrentSeries.timezone": string;
@@ -780,6 +807,7 @@ export interface MemberValues {
     readonly "CurrentSeries.release": string;
     readonly "CurrentSeries.algorithm": string;
     readonly "CurrentSeries.to_local": T.CurrentSeries;
+    readonly "CurrentEventList.units": T.CurrentEventList['units'];
     readonly "CurrentEventList.items": ReadonlyArray<T.CurrentEvent>;
     readonly "CurrentEventList.station_id": string;
     readonly "CurrentEventList.timezone": string;

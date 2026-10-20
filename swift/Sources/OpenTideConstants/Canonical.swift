@@ -145,29 +145,34 @@ internal enum Canonical {
             try release().checkOpen()
         case (.heights, .ReleaseHeights, .ReleaseHeights(let request)):
             try release().checkOpen()
+            try validatePredictionUnits(request.units, height: true)
             _ = try Predict.window(request.start, request.stop, stepS: request.stepS)
             try stationPhase(request.station)
             try Predict.options(nil)
             try Predict.optionExclusion(setId: request.setId, offsetId: request.offsetId)
         case (.heightsAt, .ReleaseHeightsAt, .ReleaseHeightsAt(let request)):
             try release().checkOpen()
+            try validatePredictionUnits(request.units, height: true)
             _ = try request.times.map(predictionInstant)
             try stationPhase(request.station)
             try Predict.options(nil)
             try Predict.optionExclusion(setId: request.setId, offsetId: request.offsetId)
         case (.extremes, .ReleaseExtremes, .ReleaseExtremes(let request)):
             try release().checkOpen()
+            try validatePredictionUnits(request.units, height: true)
             _ = try Predict.window(request.start, request.stop)
             try stationPhase(request.station)
             try Predict.options(nil)
             try Predict.optionExclusion(setId: request.setId, offsetId: request.offsetId)
         case (.currents, .ReleaseCurrents, .ReleaseCurrents(let request)):
             try release().checkOpen()
+            try validatePredictionUnits(request.units, height: false)
             _ = try Predict.window(request.start, request.stop, stepS: request.stepS)
             try stationPhase(request.station)
             try Predict.options(request.binNumber)
         case (.currentEvents, .ReleaseCurrentEvents, .ReleaseCurrentEvents(let request)):
             try release().checkOpen()
+            try validatePredictionUnits(request.units, height: false)
             _ = try Predict.window(request.start, request.stop)
             try stationPhase(request.station)
             try Predict.options(request.binNumber)
@@ -268,21 +273,21 @@ internal enum Canonical {
         case (.UpdateResult, .UpdateResult(let fields)):
             return .UpdateResult(UpdateResult(updated: fields.updated, from: fields.from, to: fields.to))
         case (.HeightPoint, .HeightPoint(let fields)):
-            return .HeightPoint(HeightPoint(time: fields.time, heightM: fields.heightM, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS))
+            return .HeightPoint(HeightPoint(time: fields.time, heightM: fields.heightM, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS, units: fields.units))
         case (.Extreme, .Extreme(let fields)):
-            return .Extreme(Extreme(time: fields.time, type: fields.type, heightM: fields.heightM, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS))
+            return .Extreme(Extreme(time: fields.time, type: fields.type, heightM: fields.heightM, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS, units: fields.units))
         case (.CurrentPoint, .CurrentPoint(let fields)):
-            return .CurrentPoint(CurrentPoint(time: fields.time, velocityMajorMs: fields.velocityMajorMs, velocityMinorMs: fields.velocityMinorMs, speedMs: fields.speedMs, directionDeg: fields.directionDeg, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS))
+            return .CurrentPoint(CurrentPoint(time: fields.time, velocityMajorMs: fields.velocityMajorMs, velocityMinorMs: fields.velocityMinorMs, speedMs: fields.speedMs, directionDeg: fields.directionDeg, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS, units: fields.units))
         case (.CurrentEvent, .CurrentEvent(let fields)):
-            return .CurrentEvent(CurrentEvent(time: fields.time, type: fields.type, velocityMs: fields.velocityMs, directionDeg: fields.directionDeg, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS))
+            return .CurrentEvent(CurrentEvent(time: fields.time, type: fields.type, velocityMs: fields.velocityMs, directionDeg: fields.directionDeg, localTime: fields.localTime, utcOffsetS: fields.utcOffsetS, units: fields.units))
         case (.HeightSeries, .HeightSeries(let fields)):
-            return .HeightSeries(HeightSeries(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, offsetId: fields.offsetId, offsetSource: fields.offsetSource, offsetSourceVersion: fields.offsetSourceVersion, historicalOffsets: fields.historicalOffsets, currentValidity: fields.currentValidity, currentAccuracy: fields.currentAccuracy, referenceSetId: fields.referenceSetId, referenceSourceVersion: fields.referenceSourceVersion, reference2020Equivalence: fields.reference2020Equivalence, sourceNote: fields.sourceNote))
+            return .HeightSeries(HeightSeries(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, offsetId: fields.offsetId, offsetSource: fields.offsetSource, offsetSourceVersion: fields.offsetSourceVersion, historicalOffsets: fields.historicalOffsets, currentValidity: fields.currentValidity, currentAccuracy: fields.currentAccuracy, referenceSetId: fields.referenceSetId, referenceSourceVersion: fields.referenceSourceVersion, reference2020Equivalence: fields.reference2020Equivalence, sourceNote: fields.sourceNote, units: fields.units))
         case (.ExtremeList, .ExtremeList(let fields)):
-            return .ExtremeList(ExtremeList(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, offsetId: fields.offsetId, offsetSource: fields.offsetSource, offsetSourceVersion: fields.offsetSourceVersion, historicalOffsets: fields.historicalOffsets, currentValidity: fields.currentValidity, currentAccuracy: fields.currentAccuracy, referenceSetId: fields.referenceSetId, referenceSourceVersion: fields.referenceSourceVersion, reference2020Equivalence: fields.reference2020Equivalence, sourceNote: fields.sourceNote))
+            return .ExtremeList(ExtremeList(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, offsetId: fields.offsetId, offsetSource: fields.offsetSource, offsetSourceVersion: fields.offsetSourceVersion, historicalOffsets: fields.historicalOffsets, currentValidity: fields.currentValidity, currentAccuracy: fields.currentAccuracy, referenceSetId: fields.referenceSetId, referenceSourceVersion: fields.referenceSourceVersion, reference2020Equivalence: fields.reference2020Equivalence, sourceNote: fields.sourceNote, units: fields.units))
         case (.CurrentSeries, .CurrentSeries(let fields)):
-            return .CurrentSeries(CurrentSeries(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, binNumber: fields.binNumber))
+            return .CurrentSeries(CurrentSeries(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, binNumber: fields.binNumber, units: fields.units))
         case (.CurrentEventList, .CurrentEventList(let fields)):
-            return .CurrentEventList(CurrentEventList(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, binNumber: fields.binNumber, omittedEventTypes: fields.omittedEventTypes))
+            return .CurrentEventList(CurrentEventList(items: fields.items, stationId: fields.stationId, timezone: fields.timezone, method: fields.method, setId: fields.setId, conventionId: fields.conventionId, astroTableId: fields.astroTableId, referenceStationId: fields.referenceStationId, referenceBin: fields.referenceBin, datum: fields.datum, datumName: fields.datumName, datumKind: fields.datumKind, datumUncertaintyM: fields.datumUncertaintyM, tz: fields.tz, tzVersion: fields.tzVersion, release: fields.release, algorithm: fields.algorithm, binNumber: fields.binNumber, omittedEventTypes: fields.omittedEventTypes, units: fields.units))
         case (.DatumInfo, .DatumInfo(let fields)):
             return .DatumInfo(DatumInfo(setId: fields.setId, zero: fields.zero, zeroName: fields.zeroName, chartDatum: fields.chartDatum, mslOffsetM: fields.mslOffsetM, levels: fields.levels))
         case (.DatumLevel, .DatumLevel(let fields)):

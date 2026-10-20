@@ -28,18 +28,28 @@ class _LocalResult:
 class HeightPoint(_LocalItem):
     time: datetime
     height_m: float
+    units: str = field(default='meters', kw_only=True)
     local_time: str | None = field(default=None, kw_only=True)
     utc_offset_s: int | None = field(default=None, kw_only=True)
     _local: datetime | None = field(default=None, repr=False, compare=False, kw_only=True)
+
+    @property
+    def height(self) -> float:
+        return self.height_m / 0.3048 if self.units == 'feet' else self.height_m
 
 @dataclass(frozen=True, slots=True)
 class Extreme(_LocalItem):
     time: datetime
     type: ExtremeType
     height_m: float
+    units: str = field(default='meters', kw_only=True)
     local_time: str | None = field(default=None, kw_only=True)
     utc_offset_s: int | None = field(default=None, kw_only=True)
     _local: datetime | None = field(default=None, repr=False, compare=False, kw_only=True)
+
+    @property
+    def height(self) -> float:
+        return self.height_m / 0.3048 if self.units == 'feet' else self.height_m
 
 @dataclass(frozen=True, slots=True)
 class CurrentPoint(_LocalItem):
@@ -48,9 +58,22 @@ class CurrentPoint(_LocalItem):
     velocity_minor_ms: float
     speed_ms: float
     direction_deg: float | None
+    units: str = field(default='m/s', kw_only=True)
     local_time: str | None = field(default=None, kw_only=True)
     utc_offset_s: int | None = field(default=None, kw_only=True)
     _local: datetime | None = field(default=None, repr=False, compare=False, kw_only=True)
+
+    @property
+    def velocity_major(self) -> float:
+        return self.velocity_major_ms / (1852.0 / 3600.0) if self.units == 'knots' else self.velocity_major_ms
+
+    @property
+    def velocity_minor(self) -> float:
+        return self.velocity_minor_ms / (1852.0 / 3600.0) if self.units == 'knots' else self.velocity_minor_ms
+
+    @property
+    def speed(self) -> float:
+        return self.speed_ms / (1852.0 / 3600.0) if self.units == 'knots' else self.speed_ms
 
 @dataclass(frozen=True, slots=True)
 class CurrentEvent(_LocalItem):
@@ -58,14 +81,20 @@ class CurrentEvent(_LocalItem):
     type: CurrentEventType
     velocity_ms: float
     direction_deg: float | None
+    units: str = field(default='m/s', kw_only=True)
     local_time: str | None = field(default=None, kw_only=True)
     utc_offset_s: int | None = field(default=None, kw_only=True)
     _local: datetime | None = field(default=None, repr=False, compare=False, kw_only=True)
+
+    @property
+    def velocity(self) -> float:
+        return self.velocity_ms / (1852.0 / 3600.0) if self.units == 'knots' else self.velocity_ms
 
 
 @dataclass(frozen=True, slots=True)
 class HeightSeries(_LocalResult):
     items: tuple[HeightPoint, ...]
+    units: str = field(default='meters', kw_only=True)
     station_id: str | None = None
     timezone: str | None = None
     method: PredictionMethod | None = None
@@ -97,6 +126,7 @@ class HeightSeries(_LocalResult):
 @dataclass(frozen=True, slots=True)
 class ExtremeList(_LocalResult):
     items: tuple[Extreme, ...]
+    units: str = field(default='meters', kw_only=True)
     station_id: str | None = None
     timezone: str | None = None
     method: PredictionMethod | None = None
@@ -128,6 +158,7 @@ class ExtremeList(_LocalResult):
 @dataclass(frozen=True, slots=True)
 class CurrentSeries(_LocalResult):
     items: tuple[CurrentPoint, ...]
+    units: str = field(default='m/s', kw_only=True)
     station_id: str | None = None
     timezone: str | None = None
     method: PredictionMethod | None = None
@@ -150,6 +181,7 @@ class CurrentSeries(_LocalResult):
 @dataclass(frozen=True, slots=True)
 class CurrentEventList(_LocalResult):
     items: tuple[CurrentEvent, ...]
+    units: str = field(default='m/s', kw_only=True)
     station_id: str | None = None
     timezone: str | None = None
     method: PredictionMethod | None = None
@@ -168,6 +200,13 @@ class CurrentEventList(_LocalResult):
     tz_version: str | None = None
     release: str | None = None
     algorithm: str | None = None
+
+
+def _with_units(result, units):
+    """Attach presentation metadata after all SI calculations are complete."""
+    if result.units == units:
+        return result
+    return replace(result, units=units, items=tuple(replace(item, units=units) for item in result.items))
 
 
 @dataclass(frozen=True, slots=True)
