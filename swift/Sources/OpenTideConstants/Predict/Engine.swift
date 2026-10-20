@@ -155,7 +155,13 @@ internal enum Predict {
             usable = false
         }
         let blockedBetter = historical && offsetId == nil && release.betterHistoricalPath(release.byId[station.stationId]!)
-        if setId == nil && !usable && station.type == .subordinate && ((!tideOffsets.isNull && !blockedBetter) || !currentOffsets.isEmpty) {
+        let harmonicBins = usable && selected?.quantity == .current ? selected!.raw["current_bins"].array : []
+        let effectiveBin = binNumber ?? station.raw["default_current_bin"].integer
+            ?? (harmonicBins.isEmpty ? currentOffsets : harmonicBins).compactMap { $0["bin"].integer }.min()
+        let ownHarmonicBin = harmonicBins.contains { $0["bin"].integer == effectiveBin }
+        let mixedCurrentPath = quantity == .current && setId == nil && !ownHarmonicBin
+            && currentOffsets.contains { $0["bin"].integer == effectiveBin }
+        if (setId == nil && !usable && station.type == .subordinate && ((!tideOffsets.isNull && !blockedBetter) || !currentOffsets.isEmpty)) || mixedCurrentPath {
             if !tideOffsets.isNull {
                 guard quantity == .waterLevel else { throw OpenTideConstantsError.quantityMismatch("tide offsets need water_level") }
                 let kind = tideOffsets["height_adjusted_type"].string
