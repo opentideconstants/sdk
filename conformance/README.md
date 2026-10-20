@@ -40,6 +40,8 @@ Exit status. The driver exits 0 only when at least one case ran and every case t
 
 **Prediction units.** Python, Ruby, TypeScript (Node and browser), Swift, and the Python/Ruby no-tz profiles must claim `prediction_units`. It implies `predict`; C profiles do not require it. Missing capability, SKIP and XFAIL do not establish units acceptance. The `units-*` families derive selected values from the existing pinned SI expectations without rerunning the science oracle. They retain the original prediction provenance and identify the source case in `units_provenance`.
 
+**Bounding-box discovery.** The same active profiles must claim `station_bbox`; C profiles do not require it. `bbox` takes `query_options` with required finite numeric `south`, `west`, `north`, and `east` bounds, plus the existing discovery filters and optional positive-integer `limit`. Latitude bounds are in [-90, 90], longitude bounds in [-180, 180], and south must not exceed north. Bounds are inclusive. When west exceeds east, longitude membership is `lon >= west || lon <= east`, across the antimeridian. Invalid inputs use `invalid_argument`. Both inclusion flags default to false; omitted or null limit means unlimited. The public output `ordered_station_results` is the existing Station array, sorted by station ID after spatial and discovery filtering, then limited. The runner calls the real Client or held Release `bbox` method and encodes `{station_ids: [...]}`. Missing capability, SKIP and XFAIL do not establish bbox acceptance. `bbox-browser` uses HTTP opening in eager and stream modes, without filesystem capabilities or a cache directory.
+
 **Swift.** The `swift` profile requires `fs`, `fetch`, `json`, `eager`, `stream`, `predict`, `localtime_module` and `localtime`. The public module is `OpenTideConstants`; operations, labels, fields and enum cases use lowerCamelCase. Runner JSON retains canonical snake_case keys and object/null/array shapes. In-memory methods, iterator closures and `verify()` throw synchronously; managed I/O methods, including `prune(keep:)`, use `async throws`. `DatumsResult` preserves the one/all-set union without a JSON tag. Native acceptance currently covers macOS 26 with Swift 6.4.
 
 Build the distinct runner package with `swift build --package-path conformance/runners/otc-swift`. Its API checker requires `OTC_CORE_NATIVE_JSON` to name the frozen native fixture accepted for the SDK. Set `OTC_SWIFT_VECTOR_JSON=conformance/vectors/1.0/vectors-release.json` for the unchanged vector fixture, then run `swift run --package-path conformance/runners/otc-swift CheckAPI`. Missing native fixture input fails the checker; it does not skip value checks. Run conformance with `--runner 'conformance/runners/otc-swift/.build/debug/Runner' --profile swift --all-steps --no-expected-failures` after the build. The driver includes Swift in cross-cache writer and reader roles. It also includes Swift in the existing fractional-instant case.
@@ -167,6 +169,7 @@ The driver skips a case whose `requires` names a feature that the runner lacks. 
 | `stations` / `iter_stations` | filters | R | `{station_ids: [...]}` in the order returned |
 | `search` | `name`, `limit`, `match`, filters | R | `{station_ids: [...]}` |
 | `near` | `lat`, `lon`, `radius_km`, `limit`, filters | R | `{station_ids: [...], distance_km: [...]}` |
+| `bbox` | `south`, `west`, `north`, `east`, `limit`, filters | R | `{station_ids: [...]}` |
 | `nearest` | `lat`, `lon`, `max_km`, filters | R | `{station_id, distance_km}` (both null if none) |
 | `reference_station` | `station_id`, `station_on` | R | `{station_id}` (null if none) |
 | `subordinates_of` | `station_id`, `station_on` | R | `{station_ids: [...]}` |
@@ -277,6 +280,7 @@ The fields of every driver step are checked, by `--check-cases` and again when t
 | `sets` | every set's encoding, constituents, provenance (with extra fields), validation by window, constituent lookup |
 | `search` | the fold table and the four ranks (§4.4.1), `limit`, `match: exact`, filters |
 | `geo` | `near` and `nearest`: antimeridian, poles, equator, filters, limits, argument errors |
+| `bbox`, `bbox-browser` | Inclusive rectangles and antimeridian discovery, filters, limits and argument errors; browser HTTP opening in eager and stream modes |
 | `tolerant` | a higher format minor loads and keeps unknown fields in `raw` (§7.3) |
 | `network` | the pointer, ETag/304, retries (500, 429 + `Retry-After`), 404, timeouts, short and truncated bodies, offline, `use_cache` / `raise`, env variables, proxies, User-Agent, bad releases over HTTP, `releases`, `latest`, `check_for_update` |
 | `update` | `update` (pinned, file, swap with a held release, no update), `auto_update` |

@@ -1311,6 +1311,79 @@
      ]
     },
     {
+     "name": "bbox",
+     "kind": "method",
+     "args": [
+      {
+       "name": "south",
+       "type": "number",
+       "required": true,
+       "positional": false,
+       "swift": "south",
+       "swift_type": "Double",
+       "swift_default": null
+      },
+      {
+       "name": "west",
+       "type": "number",
+       "required": true,
+       "positional": false,
+       "swift": "west",
+       "swift_type": "Double",
+       "swift_default": null
+      },
+      {
+       "name": "north",
+       "type": "number",
+       "required": true,
+       "positional": false,
+       "swift": "north",
+       "swift_type": "Double",
+       "swift_default": null
+      },
+      {
+       "name": "east",
+       "type": "number",
+       "required": true,
+       "positional": false,
+       "swift": "east",
+       "swift_type": "Double",
+       "swift_default": null
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": false,
+       "positional": false,
+       "default": null,
+       "note": "an integer >= 1; null (or absent) = no limit; 0 or a negative value is invalid_argument",
+       "swift": "limit",
+       "swift_type": "Int64?",
+       "swift_default": "nil"
+      }
+     ],
+     "filters": true,
+     "returns": "Station[]",
+     "errors": [
+      "invalid_argument",
+      "invalid_release"
+     ],
+     "languages": [
+      "ruby",
+      "python",
+      "typescript",
+      "swift"
+     ],
+     "forwarded_to_client": true,
+     "note": "Inclusive finite bounds: latitude in [-90,90], longitude in [-180,180], south <= north; west > east crosses the antimeridian. Discovery filters precede station_id ordering and limit.",
+     "swift": "bbox",
+     "swift_returns": "[Station]",
+     "swift_async": false,
+     "swift_declarations": [
+      "func bbox(south: Double, west: Double, north: Double, east: Double, limit: Int64? = nil, country: String? = nil, type: String? = nil, kind: String? = nil, source: String? = nil, sourceType: String? = nil, includeFlagged: Bool = false, includeFallback: Bool = false) throws -> [Station]"
+     ]
+    },
+    {
      "name": "near",
      "kind": "method",
      "args": [

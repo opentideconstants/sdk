@@ -47,7 +47,16 @@ The other options:
 
 Environment variables: `OPENTIDECONSTANTS_CACHE_DIR` and `OPENTIDECONSTANTS_BASE_URL` are the defaults of `cache_dir` and `base_url` (an option wins over them). `OPENTIDECONSTANTS_OFFLINE` set to `1`, `true`, `yes` or `on` makes every client offline, also one opened with `offline: false`; if a client fails with `offline_unavailable` when you did not ask for offline, check this variable.
 
-Queries: `station`, `require_station`, `tombstone`, `station_by_alias`, `stations(**filters)`, `each_station`, `search(name:)`, `near(lat:, lon:, radius_km:)`, `nearest(lat:, lon:)`, `reference_station`, `subordinates_of`, `attribution`. Release management: `release`, `loaded_from`, `releases`, `latest`, `check_for_update`, `update!`, `download(to:)`, `verify`, `cached_releases`, `prune(keep:)`.
+Queries: `station`, `require_station`, `tombstone`, `station_by_alias`, `stations(**filters)`, `each_station`, `search(name:)`, `bbox(south:, west:, north:, east:)`, `near(lat:, lon:, radius_km:)`, `nearest(lat:, lon:)`, `reference_station`, `subordinates_of`, `attribution`. Release management: `release`, `loaded_from`, `releases`, `latest`, `check_for_update`, `update!`, `download(to:)`, `verify`, `cached_releases`, `prune(keep:)`.
+
+Use `bbox` on the client or a held release to find stations inside inclusive latitude and longitude bounds. Results use station-ID order and the usual discovery filters. `limit: nil` returns all matches; a positive integer limits the filtered results before station loading. When west exceeds east, the box crosses the date line.
+
+```ruby
+OpenTideConstants.open do |otc|
+    boston = otc.bbox(south: 42.2, west: -71.2, north: 42.5, east: -70.7, limit: 3)
+    pacific = otc.release.bbox(south: -25, west: 170, north: -10, east: -170)
+end
+```
 
 Every error that the SDK raises is a subclass of `OpenTideConstants::Error` and has a stable `code`. A lookup that finds nothing (`station`, `station_by_alias`, `tombstone`, `constituent`) returns `nil`; `require_station` raises instead. Ruby's own errors, such as an `ArgumentError` for an unknown keyword, are not SDK errors.
 

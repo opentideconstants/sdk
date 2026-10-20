@@ -373,7 +373,7 @@ class OpenTideConstants
 
     # ---- queries, forwarded to the current release (spec §4.4–§4.7)
 
-    %i[station require_station tombstone station_by_alias stations iter_stations each_station search near nearest
+    %i[station require_station tombstone station_by_alias stations iter_stations each_station search bbox near nearest
        reference_station subordinates_of attribution].each do |name|
         define_method(name) do |*args, **kw, &blk|
             check_open!

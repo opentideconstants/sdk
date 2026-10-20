@@ -43,6 +43,7 @@ internal enum CanonicalMemberID: String, CaseIterable {
     case ReleaseStations = "Release.stations"
     case ReleaseIterStations = "Release.iter_stations"
     case ReleaseSearch = "Release.search"
+    case ReleaseBbox = "Release.bbox"
     case ReleaseNear = "Release.near"
     case ReleaseNearest = "Release.nearest"
     case ReleaseReferenceStation = "Release.reference_station"
@@ -468,6 +469,7 @@ internal enum CanonicalMemberResult {
     case ReleaseStations([Station])
     case ReleaseIterStations((() throws -> Station?))
     case ReleaseSearch([Station])
+    case ReleaseBbox([Station])
     case ReleaseNear([Nearby])
     case ReleaseNearest(Nearby?)
     case ReleaseReferenceStation(Station?)
@@ -1012,6 +1014,21 @@ internal struct CanonicalReleaseSearchArguments {
     let includeFallback: Bool
 }
 
+internal struct CanonicalReleaseBboxArguments {
+    let south: Double
+    let west: Double
+    let north: Double
+    let east: Double
+    let limit: Int64?
+    let country: String?
+    let type: String?
+    let kind: String?
+    let source: String?
+    let sourceType: String?
+    let includeFlagged: Bool
+    let includeFallback: Bool
+}
+
 internal struct CanonicalReleaseNearArguments {
     let lat: Double
     let lon: Double
@@ -1239,6 +1256,7 @@ internal enum CanonicalArguments {
     case ReleaseStations(CanonicalReleaseStationsArguments)
     case ReleaseIterStations(CanonicalReleaseIterStationsArguments)
     case ReleaseSearch(CanonicalReleaseSearchArguments)
+    case ReleaseBbox(CanonicalReleaseBboxArguments)
     case ReleaseNear(CanonicalReleaseNearArguments)
     case ReleaseNearest(CanonicalReleaseNearestArguments)
     case ReleaseReferenceStation(CanonicalReleaseReferenceStationArguments)
@@ -1284,6 +1302,7 @@ internal enum CanonicalQueryArguments {
     case ReleaseStations(CanonicalReleaseStationsArguments)
     case ReleaseIterStations(CanonicalReleaseIterStationsArguments)
     case ReleaseSearch(CanonicalReleaseSearchArguments)
+    case ReleaseBbox(CanonicalReleaseBboxArguments)
     case ReleaseNear(CanonicalReleaseNearArguments)
     case ReleaseNearest(CanonicalReleaseNearestArguments)
 }
@@ -1983,6 +2002,7 @@ internal enum CanonicalOperation: String, CaseIterable {
     case licence = "licence"
     case licences = "licences"
     case loadedFrom = "loaded_from"
+    case bbox = "bbox"
     case near = "near"
     case nearest = "nearest"
     case newerFormatMajor = "newer_format_major"
@@ -2077,6 +2097,7 @@ internal enum CanonicalQueryKind: String, CaseIterable {
     case stations = "stations"
     case iterStations = "iter_stations"
     case search = "search"
+    case bbox = "bbox"
     case near = "near"
     case nearest = "nearest"
 }
@@ -2664,6 +2685,7 @@ internal enum CanonicalAuxiliaryMemberId: String, CaseIterable {
     case ReleaseStations = "Release.stations"
     case ReleaseIterStations = "Release.iter_stations"
     case ReleaseSearch = "Release.search"
+    case ReleaseBbox = "Release.bbox"
     case ReleaseNear = "Release.near"
     case ReleaseNearest = "Release.nearest"
     case ReleaseReferenceStation = "Release.reference_station"

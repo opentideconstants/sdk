@@ -23,7 +23,7 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-FEATURES = ["fs", "fetch", "json", "eager", "stream", "https_proxy", "predict", "prediction_units", "localtime_module"]
+FEATURES = ["fs", "fetch", "json", "eager", "stream", "https_proxy", "predict", "prediction_units", "station_bbox", "localtime_module"]
 try:
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 except ImportError:
@@ -331,6 +331,9 @@ class Runner:
         if op == "search":
             kw = {k: a[k] for k in ("limit", "match") if k in a}
             return {"station_ids": [s.station_id for s in self.target(req).search(name=a["name"], **kw, **filters)]}
+        if op == "bbox":
+            kw = {k: a[k] for k in ("south", "west", "north", "east", "limit") if k in a}
+            return {"station_ids": [s.station_id for s in self.target(req).bbox(**kw, **filters)]}
         if op == "near":
             kw = {k: a[k] for k in ("lat", "lon", "radius_km", "limit") if k in a}
             hits = self.target(req).near(**kw, **filters)

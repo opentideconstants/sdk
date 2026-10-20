@@ -33,7 +33,7 @@ const pascal = (s) => camel(s).replace(/^./, (c) => c.toUpperCase());
 const forTs = (m) => !m.languages || m.languages.includes("typescript");
 const tsName = (m) => (m.kind === "field" ? m.name : camel(m.name));
 const filterNames = API.filters.map((f) => camel(f.name));
-const FILTER_OPS = new Set(["stations", "iter_stations", "search", "near", "nearest"]);
+const FILTER_OPS = new Set(["stations", "iter_stations", "search", "bbox", "near", "nearest"]);
 
 /** The names pending_port.typescript lists, and a problem for each that is not a manifest name for TypeScript. */
 function pendingNames(api, fail) {

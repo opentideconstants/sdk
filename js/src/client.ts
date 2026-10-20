@@ -22,7 +22,7 @@ import { isNode, type Platform } from "./platform.js";
 import type { ConstantSet, Release, Station } from "./release.js";
 import { noteReleaseVersionDoi } from "./release.js";
 import type {
-    DownloadOptions, FileInfo, Format, LoadedFrom, Mode, NearOptions, NearestOptions, Nearby, OnNetworkError, OpenOptions,
+    BboxOptions, DownloadOptions, FileInfo, Format, LoadedFrom, Mode, NearOptions, NearestOptions, Nearby, OnNetworkError, OpenOptions,
     PruneOptions, ReleaseInfo, SearchOptions, StationFilters, Tombstone, UpdateResult,
 } from "./types.js";
 
@@ -1165,6 +1165,10 @@ get release(): Release {
 
     search(options: SearchOptions): readonly Station[] {
         return this.#current().search(options);
+    }
+
+    bbox(options: BboxOptions): readonly Station[] {
+        return this.#current().bbox(options);
     }
 
     near(options: NearOptions): readonly Nearby<Station>[] {

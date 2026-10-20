@@ -339,6 +339,7 @@ const ops = {
         stations: (a, msg) => ({ station_ids: target(msg).stations(opts(a, FILTERS)).map((s) => s.station_id) }),
         iter_stations: (a, msg) => ({ station_ids: [...target(msg).iterStations(opts(a, FILTERS))].map((s) => s.station_id) }),
         search: (a, msg) => ({ station_ids: target(msg).search(opts(a, ["name", "limit", "match", ...FILTERS])).map((s) => s.station_id) }),
+        bbox: (a, msg) => ({ station_ids: target(msg).bbox(opts(a, ["south", "west", "north", "east", "limit", ...FILTERS])).map((s) => s.station_id) }),
         near(a, msg) {
             const hits = target(msg).near(opts(a, ["lat", "lon", "radius_km", "limit", ...FILTERS]));
             return { station_ids: hits.map((h) => h.station.station_id), distance_km: hits.map((h) => h.distance_km) };

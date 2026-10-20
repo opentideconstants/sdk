@@ -200,7 +200,7 @@ def _validate_operation_arguments(
     elif isinstance(arguments, T._Arguments3):
         _client._validate_prune_arguments(_specified(arguments.keep, 3))
     elif isinstance(
-        arguments, (T._Arguments8, T._Arguments9, T._Arguments10, T._Arguments11)
+        arguments, (T._Arguments8, T._Arguments9, T._BboxArguments, T._Arguments10, T._Arguments11)
     ):
         if isinstance(arguments, T._Arguments9):
             _release._validate_search_arguments(
@@ -208,6 +208,12 @@ def _validate_operation_arguments(
                 _specified(arguments.limit, None),
                 _specified(arguments.match, None),
             )
+        elif isinstance(arguments, T._BboxArguments):
+            south, west, north, east, _ = _release._validate_bbox_arguments(
+                arguments.south, arguments.west, arguments.north, arguments.east,
+                _specified(arguments.limit, None),
+            )
+            arguments = replace(arguments, south=south, west=west, north=north, east=east)
         elif isinstance(arguments, T._Arguments10):
             arguments = replace(
                 arguments,

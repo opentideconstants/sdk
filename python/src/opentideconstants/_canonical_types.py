@@ -128,6 +128,7 @@ _AuxiliaryMemberId: TypeAlias = Literal[
     "Release.stations",
     "Release.iter_stations",
     "Release.search",
+    "Release.bbox",
     "Release.near",
     "Release.nearest",
     "Release.reference_station",
@@ -971,6 +972,23 @@ class _Arguments9:
 
 
 @dataclass(frozen=True, slots=True)
+class _BboxArguments:
+    member_id: Literal["Release.bbox"]
+    south: float
+    west: float
+    north: float
+    east: float
+    limit: int | None | _Omitted
+    country: str | None | _Omitted
+    type: E.StationType | None | _Omitted
+    kind: E.Kind | None | _Omitted
+    source: str | None | _Omitted
+    source_type: E.SourceType | None | _Omitted
+    include_flagged: bool | _Omitted
+    include_fallback: bool | _Omitted
+
+
+@dataclass(frozen=True, slots=True)
 class _Arguments10:
     member_id: Literal["Release.near"]
     lat: float
@@ -1149,6 +1167,7 @@ _MemberArguments: TypeAlias = (
     | _Arguments7
     | _Arguments8
     | _Arguments9
+    | _BboxArguments
     | _Arguments10
     | _Arguments11
     | _Arguments12
@@ -1551,7 +1570,7 @@ class _MemberValue24:
 
 @dataclass(frozen=True, slots=True)
 class _MemberValue25:
-    member_id: Literal["Release.stations", "Release.search", "Release.subordinates_of"]
+    member_id: Literal["Release.stations", "Release.search", "Release.bbox", "Release.subordinates_of"]
     value: tuple[Station, ...]
 
 
@@ -2853,7 +2872,7 @@ class _QualityAdmission:
     reason: str | None
 
 
-_QueryOptions: TypeAlias = _Arguments8 | _Arguments9 | _Arguments10 | _Arguments11
+_QueryOptions: TypeAlias = _Arguments8 | _Arguments9 | _BboxArguments | _Arguments10 | _Arguments11
 
 
 @dataclass(frozen=True, slots=True)
@@ -4212,6 +4231,7 @@ _COffsetTideResult: TypeAlias = HeightSeries | ExtremeList
 _COperation: TypeAlias = Literal[
     "astro_table",
     "attribution",
+    "bbox",
     "cached_releases",
     "check_for_update",
     "citation",
@@ -4337,7 +4357,7 @@ _CQueryClientState: TypeAlias = _ClientState
 
 
 _CQueryKind: TypeAlias = Literal[
-    "stations", "iter_stations", "search", "near", "nearest"
+    "stations", "iter_stations", "search", "bbox", "near", "nearest"
 ]
 
 
@@ -4644,6 +4664,7 @@ _CAuxiliaryMemberId: TypeAlias = Literal[
     "Release.stations",
     "Release.iter_stations",
     "Release.search",
+    "Release.bbox",
     "Release.near",
     "Release.nearest",
     "Release.reference_station",

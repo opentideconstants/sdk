@@ -1460,6 +1460,12 @@ class OpenTideConstants:
         return self._r().search(name=name, limit=limit, match=match, country=country, type=type, kind=kind,
                                 source=source, source_type=source_type, include_flagged=include_flagged, include_fallback=include_fallback)
 
+    def bbox(self, *, south, west, north, east, limit=None, country=None, type=None, kind=None,  # noqa: A002
+             source=None, source_type=None, include_flagged=False, include_fallback=False) -> Tuple[Station, ...]:
+        return self._r().bbox(south=south, west=west, north=north, east=east, limit=limit,
+                              country=country, type=type, kind=kind, source=source, source_type=source_type,
+                              include_flagged=include_flagged, include_fallback=include_fallback)
+
     def near(self, *, lat, lon, radius_km, limit=None, country=None, type=None, kind=None, source=None,  # noqa: A002
              source_type=None, include_flagged=False, include_fallback=False) -> Tuple[Nearby, ...]:
         return self._r().near(lat=lat, lon=lon, radius_km=radius_km, limit=limit, country=country, type=type,

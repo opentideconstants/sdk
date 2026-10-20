@@ -281,6 +281,15 @@ export interface SearchOptions extends StationFilters {
     match?: Match | null;
 }
 
+/** Inclusive bbox bounds. West > east selects a box across the date line. */
+export interface BboxOptions extends StationFilters {
+    south: number;
+    west: number;
+    north: number;
+    east: number;
+    limit?: number | null;
+}
+
 /** Options of `near`. */
 export interface NearOptions extends StationFilters {
     lat: number;
