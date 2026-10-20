@@ -133,7 +133,7 @@ def test_new_profiles_are_expected_failure_runners():
 
 
 def test_accepted_prediction_profiles_require_native_features():
-    base = ["fs", "fetch", "json", "eager", "stream", "https_proxy"]
+    base = ["fs", "fetch", "json", "eager", "stream", "https_proxy", "station_bbox"]
     assert "predict" in driver.profile_problem("python", base)
     assert "predict" in driver.profile_problem("python-no-tz", base)
     assert "stream" in driver.profile_problem("python", ["fs", "fetch", "json", "eager", "https_proxy"])
