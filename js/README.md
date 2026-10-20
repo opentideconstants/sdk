@@ -51,6 +51,15 @@ try {
 
 Method and option names are camelCase; data fields keep the schema's snake_case (`amplitude_m`, `qc_flags`). Errors are subclasses of `OpenTideConstantsError` and carry a stable `code`.
 
+## Bounding-box discovery
+
+```js
+const boston = otc.bbox({ south: 42.2, west: -71.2, north: 42.5, east: -70.7 });
+const dateLine = otc.release.bbox({ south: -25, west: 170, north: -10, east: -170, limit: 3 });
+```
+
+`bbox` returns stations in station-ID order. Bounds are inclusive; `west > east` crosses the date line. All four bounds must be finite numbers, with latitudes in [-90, 90], longitudes in [-180, 180], and `south <= north`. The method accepts the existing discovery filters: `country`, `type`, `kind`, `source`, `sourceType`, `includeFlagged` and `includeFallback`. Both inclusion flags default to false. Filtering precedes the optional positive-integer `limit`; an omitted or null limit returns all matches. Invalid bounds, filters or limits raise `InvalidArgumentError`. Client and held Release queries work in eager and stream modes.
+
 ## Predictions
 
 ```js

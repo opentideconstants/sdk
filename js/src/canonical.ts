@@ -1,7 +1,7 @@
 import type * as C from './canonical-types.js';
 import { deepFreeze, isObject, arr, str, num, type JsonObject } from './json.js';
 import { encodeCacheJson } from './cache-json.js';
-import { Release, Station, ConstantSet, indexDoc, parseHeader, indexStations, checkShape, releaseSourceReceiver, constituentOf, timeBaseOf, buildOf, validationOf, fallbackOf, qcFlagOf, sourceRecordOf, checkFilters, validateSearchOptions, validateNearOptions, validateNearestOptions, validateConstantSetsOptions,
+import { Release, Station, ConstantSet, indexDoc, parseHeader, indexStations, checkShape, releaseSourceReceiver, constituentOf, timeBaseOf, buildOf, validationOf, fallbackOf, qcFlagOf, sourceRecordOf, checkFilters, validateSearchOptions, validateBboxOptions, validateNearOptions, validateNearestOptions, validateConstantSetsOptions,
     recordSpanOf, datumOf, droppedConstituentOf, provenanceOf, conventionOf, licenceOf, tombstoneOf, subordinateOffsetsOf, historicalVintageOf, historicalProvenanceOf, nearbyOf, statsOf, releaseFromPrepared, predictionOptions, validateAllSets, validateAttributionList } from './release.js';
 import * as X from './errors.js';
 import { AstroTable, instant, utc, validateUtcYear } from './predict/astro.js';
@@ -34,7 +34,7 @@ export function validate_operation_arguments(operation: C.operation, operation_a
         if (receiver?.kind !== 'client') throw new CanonicalUnimplementedError('B01 requires its native Client receiver');
         capability = clientArgumentReceiver(receiver.owner);
     }
-    if (['Release.stations', 'Release.iter_stations', 'Release.search', 'Release.near', 'Release.nearest', 'Release.heights', 'Release.heights_at', 'Release.extremes', 'Release.currents', 'Release.current_events', 'Release.datums', 'Release.ranges', 'Release.convention', 'Release.licence', 'Release.station', 'Release.require_station', 'Release.tombstone', 'Release.station_by_alias', 'Release.astro_table', 'Release.reference_station', 'Release.subordinates_of', 'Release.attribution'].includes(operation_arguments.member_id)) {
+    if (['Release.stations', 'Release.iter_stations', 'Release.search', 'Release.bbox', 'Release.near', 'Release.nearest', 'Release.heights', 'Release.heights_at', 'Release.extremes', 'Release.currents', 'Release.current_events', 'Release.datums', 'Release.ranges', 'Release.convention', 'Release.licence', 'Release.station', 'Release.require_station', 'Release.tombstone', 'Release.station_by_alias', 'Release.astro_table', 'Release.reference_station', 'Release.subordinates_of', 'Release.attribution'].includes(operation_arguments.member_id)) {
         if (receiver?.kind !== 'release') throw new CanonicalUnimplementedError('B01 requires its native Release receiver');
         void receiver.owner._header;
     }
@@ -74,6 +74,7 @@ export function validate_operation_arguments(operation: C.operation, operation_a
             return operation_arguments;
         case 'Release.stations': case 'Release.iter_stations': checkFilters(nativeFilters(operation_arguments.arguments)); return operation_arguments;
         case 'Release.search': validateSearchOptions({ ...nativeFilters(operation_arguments.arguments), ...operation_arguments.arguments }); return operation_arguments;
+        case 'Release.bbox': validateBboxOptions({ ...nativeFilters(operation_arguments.arguments), ...operation_arguments.arguments }); return operation_arguments;
         case 'Release.near': validateNearOptions({ ...nativeFilters(operation_arguments.arguments), ...operation_arguments.arguments, radiusKm: operation_arguments.arguments.radius_km }); return operation_arguments;
         case 'Release.nearest': validateNearestOptions({ ...nativeFilters(operation_arguments.arguments), ...operation_arguments.arguments, maxKm: operation_arguments.arguments.max_km }); return operation_arguments;
         case 'Release.heights': case 'Release.extremes': {
