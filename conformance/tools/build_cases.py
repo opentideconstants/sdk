@@ -884,6 +884,55 @@ def group_geo(R2):
     return out + [discovery_case("geo", rel)]
 
 
+def group_bbox(rel):
+    """Common bbox cases using discovery eligibility and an independent inclusive predicate."""
+    runners = ["python", "ruby", "typescript", "swift", "python-no-tz", "ruby-no-tz"]
+    rectangle = dict(south=37.665, west=-122.4659, north=37.8063, east=-122.3)
+    queries = [
+        ("rectangle", rectangle),
+        ("filtered-limit", dict(rectangle, type="subordinate", limit=1)),
+        ("include-flagged", dict(rectangle, include_flagged=True)),
+        ("antimeridian", dict(south=-1, west=179.8, north=1, east=-179.8)),
+        ("empty", dict(south=-46, west=-31, north=-44, east=-29)),
+    ]
+    out = []
+    for label, args in queries:
+        hits = []
+        for station in discovery_filters(rel, rel.active, args):
+            lat, lon = station["lat"], station["lon"]
+            inside_lon = (args["west"] <= lon <= args["east"] if args["west"] <= args["east"]
+                          else lon >= args["west"] or lon <= args["east"])
+            if args["south"] <= lat <= args["north"] and inside_lon:
+                hits.append(station["station_id"])
+        expected = {"station_ids": sorted(hits)[:args.get("limit")]}
+        out.append(mcase(f"bbox/{label}", f"bbox {label}: ordered inclusive discovery", "SDK-BBOX",
+                         [step("bbox", expected, **args), step("hold_release", name="held"),
+                          step("bbox", expected, on="held", **args)],
+                         requires=["station_bbox"], runners=runners))
+    invalid = [dict(rectangle, south=-91), dict(rectangle, north=91),
+               dict(rectangle, south=38), dict(rectangle, limit=0)]
+    out.append(mcase("bbox/invalid-arguments", "bbox rejects invalid latitudes, reversed latitude bounds and zero limit",
+                     "SDK-BBOX", [step("bbox", err("invalid_argument"), **args) for args in invalid],
+                     requires=["station_bbox"], runners=runners))
+    return out
+
+
+def group_bbox_browser(rel):
+    """HTTP cases that execute in browsers without a filesystem or cache directory."""
+    out = []
+    for source in group_bbox(rel):
+        for mode in ("eager", "stream"):
+            ready = copy.deepcopy(source)
+            matrix = ready.pop("matrix")
+            ready["id"] = ready["id"].replace("bbox/", "bbox-browser/", 1) + f"-{mode}"
+            ready["runners"] = ["typescript-browser"]
+            ready["requires"] = ["station_bbox", "fetch", mode]
+            ready["steps"].insert(0, step("open", {"datestamp": matrix["release"]},
+                                         release=matrix["release"], base_url=f"{SRV}/{matrix['root']}/", mode=mode))
+            out.append(ready)
+    return out
+
+
 def group_tolerant():
     rel = Rel("bad/format-minor", "20991231")
     s = rel.by_id["OTC-T-0001"]
@@ -3563,6 +3612,8 @@ GROUPS = {
     "sets": lambda R2, R1: group_sets(R2),
     "search": lambda R2, R1: group_search(R2),
     "geo": lambda R2, R1: group_geo(R2),
+    "bbox": lambda R2, R1: group_bbox(R2),
+    "bbox-browser": lambda R2, R1: group_bbox_browser(R2),
     "tolerant": lambda R2, R1: group_tolerant(),
     "network": lambda R2, R1: group_network() + group_network_cr2_pk11(),
     "update": lambda R2, R1: group_update(),

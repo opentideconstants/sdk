@@ -53,10 +53,10 @@ CASES_DIR = HERE / "cases"
 CROSS_DIR = HERE / "cross"
 DEFAULT_TOL = 1e-9
 FEATURES = ["fs", "fetch", "json", "eager", "stream", "require_checksum", "https_proxy",
-            "predict", "prediction_units", "localtime_module", "localtime", "tzdir_env"]
+            "predict", "prediction_units", "station_bbox", "localtime_module", "localtime", "tzdir_env"]
 # The features of Python, Ruby and TypeScript on Node. require_checksum is the C open option (otc_open_options), which
 # no other SDK has (CR2 DR34). https_proxy: a proxy reached over TLS (CR2 DR39); Ruby's Net::HTTP has none.
-LANG_FEATURES = ["fs", "fetch", "json", "eager", "stream"]
+LANG_FEATURES = ["fs", "fetch", "json", "eager", "stream", "station_bbox"]
 # Prediction (prediction spec 6.5): predict (prediction is built), localtime_module (the local-time module is built),
 # localtime (zone rules are usable at run time); tzdir_env (C only: otc_tz_open reads TZDIR).
 PREDICT_FEATURES = ["predict", "localtime_module", "localtime"]
@@ -127,6 +127,7 @@ OPS = {
     "station": ["station_id"], "require_station": ["station_id"], "tombstone": ["station_id"],
     "station_by_alias": ["system", "alias_id"], "stations": FILTERS, "iter_stations": FILTERS,
     "search": ["name", "limit", "match"] + FILTERS, "near": ["lat", "lon", "radius_km", "limit"] + FILTERS,
+    "bbox": ["south", "west", "north", "east", "limit"] + FILTERS,
     "nearest": ["lat", "lon", "max_km"] + FILTERS, "reference_station": ["station_id", "station_on"], "subordinates_of": ["station_id", "station_on"],
     "station_validation": ["station_id"], "subordinate_offsets": ["station_id"], "recommended_set": ["station_id"],
     "constant_sets": ["station_id", "include_no_constants"], "constant_set": ["station_id", "set_id"],
@@ -189,7 +190,7 @@ PROFILES = {
     "ruby": LANG_FEATURES + ["prediction_units"] + PREDICT_FEATURES,
     "typescript": LANG_FEATURES + ["https_proxy", "prediction_units"] + PREDICT_FEATURES,
     "swift": LANG_FEATURES + ["prediction_units"] + PREDICT_FEATURES,
-    "typescript-browser": ["fetch", "json", "eager", "stream", "prediction_units"] + PREDICT_FEATURES,
+    "typescript-browser": ["fetch", "json", "eager", "stream", "prediction_units", "station_bbox"] + PREDICT_FEATURES,
     "c": _C + PREDICT_FEATURES + ["tzdir_env"],
     "c-fetch": ["fs", "fetch", "stream", "require_checksum", "https_proxy"] + PREDICT_FEATURES + ["tzdir_env"],
     "python-no-tz": LANG_FEATURES + ["https_proxy", "predict", "prediction_units", "localtime_module"],
