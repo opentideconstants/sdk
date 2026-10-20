@@ -30,7 +30,7 @@
     "build": "node scripts/clean.mjs && tsc -p tsconfig.json && tsc -p tsconfig.browser.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.browser.json",
     "check:api": "node scripts/check-api.mjs",
-    "test:unit": "node --test test/unit.test.mjs test/file-origin-doi.test.mjs test/catalog-session-doi.test.mjs test/node-auto-update-doi.test.mjs test/units.test.mjs",
+    "test:unit": "node --test test/unit.test.mjs test/file-origin-doi.test.mjs test/catalog-session-doi.test.mjs test/node-auto-update-doi.test.mjs test/units.test.mjs test/bbox.test.mjs",
     "test:native": "node --test test/core-native.test.mjs test/predict.test.mjs test/noaa-historical.test.mjs",
     "conformance": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/runner.mjs\"",
     "conformance:browser": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/browser-runner.mjs\"",

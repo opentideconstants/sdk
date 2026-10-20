@@ -11,7 +11,7 @@ import {
 import { arr, deepFreeze, en, isObject, num, obj, str, time, val, type Json, type JsonObject } from "./json.js";
 import type {
     SourceRecord, Fallback, HistoricalOffsetVintage, HistoricalOffsetProvenance, ConstantSetsOptions, Constituent, Convention, Datum, DroppedConstituent, FileInfo, HeightAdjustedType, Kind,
-    Licence, NearOptions, NearestOptions, Nearby, Other, Provenance, ProvenanceBuild, QcFlag, QcStatus, Quantity,
+    BboxOptions, Licence, NearOptions, NearestOptions, Nearby, Other, Provenance, ProvenanceBuild, QcFlag, QcStatus, Quantity,
     RecordSpan, SearchOptions, SourceType, StationFilters, StationStatus, StationType, Stats, SubordinateOffsets,
     TimeBase, TimeBaseEvidence, Tombstone, Validation,
 } from "./types.js";
@@ -1612,6 +1612,21 @@ get historicalOffsetsPolicy()
         return Object.freeze(hits.map((h) => this.#station(h[2])));
     }
 
+    /** Stations inside inclusive bounds, ordered by station_id. West > east crosses the date line. */
+    bbox(options: BboxOptions): readonly Station[] {
+        this.#open();
+        const { south, west, north, east, limit, f } = validateBboxOptions(options);
+        const hits: IndexEntry[] = [];
+        for (const e of this.#active) {
+            if (e.lat === null || e.lon === null || e.lat < south || e.lat > north) continue;
+            if (west <= east ? e.lon < west || e.lon > east : e.lon < west && e.lon > east) continue;
+            if (!this.#matches(e, f)) continue;
+            hits.push(e);
+            if (limit !== null && hits.length === limit) break;
+        }
+        return Object.freeze(hits.map((e) => this.#station(e)));
+    }
+
     #distances(lat: number, lon: number, maxKm: number | null, f: CheckedFilters): [number, IndexEntry][] {
         const band = maxKm === null ? Infinity : maxKm / (EARTH_R_KM * DEG) + 1e-9;
         const hits: [number, IndexEntry][] = [];
@@ -2107,6 +2122,17 @@ export function validateSearchOptions(options: SearchOptions) {
     const q = foldName(options.name);
     if (q === "") throw new InvalidArgumentError("the query is empty");
     return { f, limit, match, q };
+}
+
+/** @internal Exact existing validation-only phase. */
+export function validateBboxOptions(options: BboxOptions) {
+    if (options === null || typeof options !== "object") throw new InvalidArgumentError("bbox needs an options object");
+    const south = checkNumber(options.south, "south", -90, 90);
+    const west = checkNumber(options.west, "west", -180, 180);
+    const north = checkNumber(options.north, "north", -90, 90);
+    const east = checkNumber(options.east, "east", -180, 180);
+    if (south > north) throw new InvalidArgumentError("south must not exceed north");
+    return { south, west, north, east, limit: checkLimit(options.limit), f: checkFilters(options) };
 }
 
 /** @internal Exact existing validation-only phase. */
