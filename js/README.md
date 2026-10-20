@@ -51,6 +51,41 @@ try {
 
 Method and option names are camelCase; data fields keep the schema's snake_case (`amplitude_m`, `qc_flags`). Errors are subclasses of `OpenTideConstantsError` and carry a stable `code`.
 
+## Station commands
+
+The npm package provides the `otc` executable. In a project with the package installed, run it with `npx otc`.
+
+```sh
+npx otc stations --file data/OTC_20261011.jsonl --mode stream
+npx otc stations --file data/OTC_20261011.jsonl --query "SAN FRANCISCO" --json
+npx otc search "SAN FRANCISCO" --file data/OTC_20261011.jsonl --limit 3
+npx otc search "SAN FRANCISCO" --release 20261011 --cache-dir data/cache --offline --json
+```
+
+`stations` lists the SDK's discovery-eligible stations in station-ID order. `--query` uses the SDK's name search and preserves its ranking. `search <name>` is an alias for that query. Quote names that contain spaces. `--limit` applies to name searches.
+
+Text output is a tab-separated table. `--json` writes an object with a `stations` array containing `station_id`, `name`, `lat`, `lon`, `country`, `type` and `kind`. Both formats contain the same stations. Errors go to standard error and return a nonzero exit status.
+
+`--file`, `--release`, `--cache-dir`, `--offline`, `--base-url` and `--mode` forward to the existing SDK open options. A pinned offline release must already be in the SDK cache. Use `otc --help` for the options. These commands do not change discovery filters or data permissions.
+
+For the real-data CLI check, set `OTC_CLI_NATIVE_JSONL` to a native release and `OTC_CLI_EVIDENCE` to an output directory, then run `npm run test:cli`. The check compares the commands with the SDK runner and checks cached offline operation.
+
+## Prediction commands
+
+`extremes` returns high and low tides. `timeline` returns sampled heights through the SDK's `heights` method. `currents` returns sampled current vectors. Each command accepts a station ID, `--from` and `--to`. Use timestamps with explicit offsets. The interval includes the start and excludes the end.
+
+```sh
+npx otc extremes OTC-873d5222 --file data/OTC_20261011.jsonl --from '2010-02-28T16:00:00-08:00' --to '2010-03-31T17:00:00-07:00' --datum mean_level --units meters --json
+npx otc timeline OTC-873d5222 --file data/OTC_20261011.jsonl --from '2010-02-28T16:00:00-08:00' --to '2010-03-31T17:00:00-07:00' --step 10800 --datum mean_level --units feet
+npx otc currents OTC-f2ecceab --file data/OTC_20261011.jsonl --from '2010-02-28T16:00:00-08:00' --to '2010-03-31T17:00:00-07:00' --step 10800 --bin 15 --units knots --json
+```
+
+`--step` is in seconds and is required for `timeline`. `currents` uses the SDK's default step when omitted. Height commands accept `--datum` and `--units meters|feet`. Currents accepts `--bin` and `--units m/s|knots`. The SDK validates these values and computes the results.
+
+`--json` writes an object with a `prediction` member containing native metadata and ordered `items`. Items retain their SI fields and selected-unit values, such as `height` or `speed`. Text output contains the same metadata and values in a table, with timestamps displayed in the system's local timezone. The existing file, pinned release, cache and offline options also apply to predictions.
+
+Run `ruby conformance/cli/predictions.rb` from the repository root with `OTC_CLI_NATIVE_JSONL`, `OTC_CLI_EVIDENCE` and `OTC_CLI_CACHE` set. The cache must already contain that release, loaded by the SDK. This check compares the three commands with native SDK results and checks station search, text output and offline prediction.
+
 ## Bounding-box discovery
 
 ```js

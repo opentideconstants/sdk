@@ -10,6 +10,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": { "otc": "./bin/otc.js" },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,7 +22,7 @@
   "imports": {
     "#node": { "node": "./dist/node.js", "default": "./dist/no-node.js" }
   },
-  "files": ["dist", "README.md", "LICENSE", "supported-formats.json"],
+  "files": ["dist", "bin", "README.md", "LICENSE", "supported-formats.json"],
   "sideEffects": false,
   "engines": { "node": ">=22.12" },
   "scripts": {
@@ -32,6 +33,7 @@
     "check:api": "node scripts/check-api.mjs",
     "test:unit": "node --test test/unit.test.mjs test/file-origin-doi.test.mjs test/catalog-session-doi.test.mjs test/node-auto-update-doi.test.mjs test/units.test.mjs test/bbox.test.mjs",
     "test:native": "node --test test/core-native.test.mjs test/predict.test.mjs test/noaa-historical.test.mjs",
+    "test:cli": "ruby ../conformance/cli/stations.rb",
     "conformance": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/runner.mjs\"",
     "conformance:browser": "cd .. && uv run conformance/driver.py --runner \"node conformance/runners/node/browser-runner.mjs\"",
     "prepack": "npm run gen:check && npm run build"
