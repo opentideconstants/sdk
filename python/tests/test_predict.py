@@ -102,6 +102,91 @@ class PredictionTest(unittest.TestCase):
         self.client = otc.OpenTideConstants(file=PREDICT / 'OTC_20991231.7.json')
         self.addCleanup(self.client.close)
 
+    def test_mixed_current_bins_select_offsets_and_preserve_harmonics(self):
+        document = json.loads((PREDICT / 'OTC_20991231.7.json').read_bytes())
+        template = next(row for row in document['stations'] if row['station_id'] == 'OTC-P-0016')
+        # Exact NOAA ACT8851/ACT8856 offset tuples, paired with the existing
+        # synthetic harmonic fixture. Full source predictions have separate real-data proof.
+        targets = {
+            'OTC-7c4e4c70': [(1, 15, 2, 5, 17, 1.0, 1.1, 272, 91),
+                             (3, -1, -3, -13, -18, 0.8, 0.9, 274, 94)],
+            'OTC-14e250fa': [(1, 7, -16, -1, 9, 1.0, 1.1, 295, 125),
+                             (3, -11, 17, -8, -32, 0.8, 0.6, 306, 115)],
+        }
+        stations = []
+        for sid, values in targets.items():
+            station = copy.deepcopy(template)
+            station['station_id'] = sid
+            station['recommended_set_id'] = sid + '/noaa'
+            constants = station['constant_sets'][0]
+            constants['set_id'] = station['recommended_set_id']
+            constants['current_bins'] = [row for row in constants['current_bins'] if row['bin'] == 2]
+            station['current_offsets'] = [dict(zip(
+                ('bin', 'time_adj_max_flood_min', 'time_adj_slack_before_ebb_min',
+                 'time_adj_max_ebb_min', 'time_adj_slack_before_flood_min',
+                 'flood_amp_ratio', 'ebb_amp_ratio', 'mean_flood_dir_deg', 'mean_ebb_dir_deg'), value),
+                reference_station_id=sid, reference_bin=2, licence_id='noaa') for value in values]
+            # A matching offset must never displace an available harmonic bin.
+            station['current_offsets'].append(dict(station['current_offsets'][0], bin=2))
+            stations.append(station)
+        document['stations'] = stations
+        start = dt.datetime(2010, 3, 1, tzinfo=UTC)
+        stop = start + dt.timedelta(days=2)
+        for mode in ('eager', 'stream'):
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / ('OTC_20991231.7.json' if mode == 'eager' else 'OTC_20991231.7.jsonl')
+                if mode == 'eager':
+                    path.write_text(json.dumps(document))
+                else:
+                    path.write_text(''.join(json.dumps(row) + '\n' for row in stations))
+                    path.with_name('OTC_20991231.7.meta.json').write_text(json.dumps(
+                        {key: value for key, value in document.items() if key != 'stations'}))
+                with otc.OpenTideConstants(file=path, mode=mode) as client:
+                    for sid in targets:
+                        for operation in ('current_events', 'currents'):
+                            harmonic = getattr(client, operation)(sid, start=start, stop=stop, bin_number=2)
+                            default = getattr(client, operation)(sid, start=start, stop=stop)
+                            original = getattr(self.client, operation)('OTC-P-0016', start=start, stop=stop, bin_number=2)
+                            self.assertEqual(harmonic.method, 'harmonic')
+                            self.assertEqual(harmonic, default)
+                            self.assertEqual(harmonic.items, original.items)
+                        reference = client.current_events(sid, start=start - dt.timedelta(hours=1),
+                            stop=stop + dt.timedelta(hours=1), bin_number=2)
+                        for bin_number in (1, 3):
+                            with self.subTest(mode=mode, station=sid, bin_number=bin_number):
+                                result = client.current_events(sid, start=start, stop=stop, bin_number=bin_number)
+                                self.assertEqual(result.method, 'offsets')
+                                self.assertEqual(result.reference_station_id, sid)
+                                self.assertEqual(result.reference_bin, 2)
+                                self.assertEqual(result.bin_number, bin_number)
+                                self.assertEqual(result.set_id, sid + '/noaa')
+                                offset = next(row for row in client.require_station(sid).raw['current_offsets']
+                                              if row['bin'] == bin_number)
+                                expected = []
+                                for item in reference.items:
+                                    shifted = item.time + dt.timedelta(minutes=offset['time_adj_' + item.type + '_min'])
+                                    if not start <= shifted < stop:
+                                        continue
+                                    flood = item.type == 'max_flood'
+                                    peak = item.type in ('max_flood', 'max_ebb')
+                                    expected.append((shifted, item.type,
+                                        item.velocity_ms * offset['flood_amp_ratio' if flood else 'ebb_amp_ratio'] if peak else 0.0,
+                                        offset['mean_flood_dir_deg' if flood else 'mean_ebb_dir_deg'] if peak else None))
+                                expected.sort()
+                                self.assertTrue(result.items)
+                                self.assertEqual({item.type for item in result.items},
+                                    {'max_flood', 'max_ebb', 'slack_before_flood', 'slack_before_ebb'})
+                                self.assertEqual(len(result.items), len(expected))
+                                for actual, wanted in zip(result.items, expected):
+                                    self.assertEqual((actual.time, actual.type, actual.direction_deg),
+                                                     (wanted[0], wanted[1], wanted[3]))
+                                    self.assertAlmostEqual(actual.velocity_ms, wanted[2], places=9)
+                                with self.assertRaises(otc.ExtremesOnlyError):
+                                    client.currents(sid, start=start, stop=stop, bin_number=bin_number)
+                                with self.assertRaises(otc.BinNotFoundError):
+                                    client.current_events(sid, start=start, stop=stop,
+                                        bin_number=bin_number, set_id=sid + '/noaa')
+
     def test_native_height_and_repeat_order(self):
         times = [dt.datetime(2010, 3, 1, tzinfo=UTC)] * 2
         result = self.client.heights_at('OTC-P-0001', times)
