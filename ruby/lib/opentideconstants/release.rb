@@ -320,6 +320,13 @@ class OpenTideConstants
                 q
             end
 
+            def validate_bbox_arguments(south, west, north, east, limit)
+                check_point!(south, west)
+                check_point!(north, east)
+                raise InvalidArgumentError, "south must not exceed north" if south > north
+                check_limit!(limit)
+            end
+
             def validate_near_arguments(lat, lon, radius_km, limit)
                 check_point!(lat, lon)
                 unless real?(radius_km) && radius_km >= 0
@@ -453,6 +460,17 @@ class OpenTideConstants
             ranked.sort_by! { |r| r[0, 3] }
             ranked = ranked.first(limit) if limit
             ranked.map { |r| materialize(r[3]) }.freeze
+        end
+
+        def bbox(south: nil, west: nil, north: nil, east: nil, limit: nil, **filters)
+            check_open!
+            validate_bbox_arguments(south, west, north, east, limit)
+            hits = filter(filters).select do |e|
+                e.lat >= south && e.lat <= north &&
+                    (west <= east ? e.lon >= west && e.lon <= east : e.lon >= west || e.lon <= east)
+            end
+            hits = hits.first(limit) if limit
+            hits.map { |e| materialize(e) }.freeze
         end
 
         def near(lat: nil, lon: nil, radius_km: nil, limit: nil, **filters)

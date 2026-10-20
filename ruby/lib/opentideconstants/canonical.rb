@@ -121,6 +121,9 @@ class OpenTideConstants
             when "Release.search"
                 validate_search_arguments(arguments.name, argument_value(arguments, :limit, nil), argument_value(arguments, :match, nil))
                 validate_filter_arguments(argument_value(arguments, :filters, {}))
+            when "Release.bbox"
+                validate_bbox_arguments(arguments.south, arguments.west, arguments.north, arguments.east, argument_value(arguments, :limit, nil))
+                validate_filter_arguments(argument_value(arguments, :filters, {}))
             when "Release.near"
                 validate_near_arguments(arguments.lat, arguments.lon, arguments.radius_km, argument_value(arguments, :limit, nil))
                 validate_filter_arguments(argument_value(arguments, :filters, {}))

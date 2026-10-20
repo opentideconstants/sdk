@@ -35,7 +35,7 @@ class Runner
 
     def hello
         { "hello" => { "runner" => "ruby", "version" => OpenTideConstants::VERSION,
-                       "features" => %w[fs fetch json eager stream predict prediction_units localtime_module] + localtime_features } }
+                       "features" => %w[fs fetch json eager stream predict prediction_units station_bbox localtime_module] + localtime_features } }
     end
 
     def localtime_features
@@ -201,6 +201,8 @@ class Runner
             { "station_ids" => ids }
         when "search"
             { "station_ids" => q(target).search(**sym_kw(args, %w[name limit match]), **filters(args)).map(&:station_id) }
+        when "bbox"
+            { "station_ids" => q(target).bbox(**sym_kw(args, %w[south west north east limit]), **filters(args)).map(&:station_id) }
         when "near"
             hits = q(target).near(**sym_kw(args, %w[lat lon radius_km limit]), **filters(args))
             { "station_ids" => hits.map { |h| h.station.station_id }, "distance_km" => hits.map(&:distance_km) }
