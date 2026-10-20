@@ -37,7 +37,7 @@ jobs:
       RUBY_YJIT_ENABLE: "1"
     name: ${{ matrix.os }} / Ruby ${{ matrix.ruby }}${{ matrix.os == 'windows-latest' && ' / non-YJIT compatibility' || '' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 45 || 30 }}
     strategy:
       fail-fast: false
       matrix:
