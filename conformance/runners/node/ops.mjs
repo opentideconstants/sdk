@@ -328,6 +328,25 @@ const ops = {
         },
         station: (a, msg) => ({ station: encStation(target(msg).station(a.station_id)) }),
         require_station: (a, msg) => ({ station: encStation(target(msg).requireStation(a.station_id)) }),
+        station_attribution_links(a, msg) {
+            const st = target(msg).requireStation(a.station_id);
+            return {
+                station_id: st.station_id,
+                sources: need(st, "source_records").map((source) => {
+                    const licence = need(source, "licence");
+                    const upstream = need(source, "upstreamLicence");
+                    return {
+                        ...pick(source, ["source", "source_version", "source_record_id", "licence_id", "upstream_licence_id"]),
+                        licence: licence === null ? null : pick(licence, LICENCE),
+                        upstream_licence: upstream === null ? null : pick(upstream, LICENCE),
+                    };
+                }),
+                sets: st.constantSets({ includeNoConstants: true }).map((cs) => {
+                    const licence = need(cs, "licence");
+                    return { set_id: cs.set_id, licence_id: need(licence, "licence_id"), licence: pick(licence, LICENCE) };
+                }),
+            };
+        },
         tombstone(a, msg) {
             const t = target(msg).tombstone(a.station_id);
             return { tombstone: t ? pick(t, TOMBSTONE) : null };

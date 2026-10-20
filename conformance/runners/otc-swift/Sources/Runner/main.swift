@@ -242,6 +242,25 @@ private enum HeldPrediction {
                         if q["on"].string == nil { value = op == "require_station" ? try client.requireStation(stationId: id) : try client.station(stationId: id) }
                         else { value = op == "require_station" ? try r.requireStation(stationId: id) : try r.station(stationId: id) }
                         result = .object(["station": station(value)])
+                    case "station_attribution_links":
+                        let value = try q["on"].string == nil ? client.requireStation(stationId: id) : r.requireStation(stationId: id)
+                        result = .object([
+                            "station_id": plain(value.stationId),
+                            "sources": .array(value.sourceRecords.map { source in
+                                .object([
+                                    "source": plain(source.source),
+                                    "source_version": plain(source.sourceVersion),
+                                    "source_record_id": plain(source.sourceRecordId),
+                                    "licence_id": plain(source.licenceId),
+                                    "upstream_licence_id": plain(source.upstreamLicenceId),
+                                    "licence": source.licence.map(licence) ?? .null,
+                                    "upstream_licence": source.upstreamLicence.map(licence) ?? .null
+                                ])
+                            }),
+                            "sets": .array(value.constantSets(includeNoConstants: true).map { set in
+                                .object(["set_id": plain(set.setId), "licence_id": plain(set.licence.licenceId), "licence": licence(set.licence)])
+                            })
+                        ])
                     case "tombstone": result = .object(["tombstone": try r.tombstone(stationId: id).map(tombstone) ?? .null])
                     case "station_by_alias": result = .object(["station_id": try r.stationByAlias(system: args["system"].string ?? "", aliasId: args["alias_id"].string ?? "").map { .string($0.stationId) } ?? .null])
                     case "station_count": result = .object([op: .integer(Int64(try r.stationCount))])

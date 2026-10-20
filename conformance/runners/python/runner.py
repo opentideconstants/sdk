@@ -319,6 +319,21 @@ class Runner:
             return {"attribution": t.attribution()}
         if op in ("station", "require_station"):
             return {"station": enc_station(getattr(self.target(req), op)(a["station_id"]))}
+        if op == "station_attribution_links":
+            st = self.target(req).require_station(a["station_id"])
+            return {
+                "station_id": st.station_id,
+                "sources": [
+                    {**pick(source, ["source", "source_version", "source_record_id", "licence_id", "upstream_licence_id"]),
+                     "licence": None if source.licence_id is None else pick(source.licence, LICENCE),
+                     "upstream_licence": None if source.upstream_licence_id is None else pick(source.upstream_licence, LICENCE)}
+                    for source in st.source_records
+                ],
+                "sets": [
+                    {"set_id": cs.set_id, "licence_id": cs.licence.licence_id, "licence": pick(cs.licence, LICENCE)}
+                    for cs in st.constant_sets(include_no_constants=True)
+                ],
+            }
         if op == "tombstone":
             return {"tombstone": enc_tombstone(self.target(req).tombstone(a["station_id"]))}
         if op == "station_by_alias":
