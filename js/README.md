@@ -51,6 +51,25 @@ try {
 
 Method and option names are camelCase; data fields keep the schema's snake_case (`amplitude_m`, `qc_flags`). Errors are subclasses of `OpenTideConstantsError` and carry a stable `code`.
 
+## Station commands
+
+The npm package provides the `otc` executable. In a project with the package installed, run it with `npx otc`.
+
+```sh
+npx otc stations --file data/OTC_20261011.jsonl --mode stream
+npx otc stations --file data/OTC_20261011.jsonl --query "SAN FRANCISCO" --json
+npx otc search "SAN FRANCISCO" --file data/OTC_20261011.jsonl --limit 3
+npx otc search "SAN FRANCISCO" --release 20261011 --cache-dir data/cache --offline --json
+```
+
+`stations` lists the SDK's discovery-eligible stations in station-ID order. `--query` uses the SDK's name search and preserves its ranking. `search <name>` is an alias for that query. Quote names that contain spaces. `--limit` applies to name searches.
+
+Text output is a tab-separated table. `--json` writes an object with a `stations` array containing `station_id`, `name`, `lat`, `lon`, `country`, `type` and `kind`. Both formats contain the same stations. Errors go to standard error and return a nonzero exit status.
+
+`--file`, `--release`, `--cache-dir`, `--offline`, `--base-url` and `--mode` forward to the existing SDK open options. A pinned offline release must already be in the SDK cache. Use `otc --help` for the options. These commands do not change discovery filters or data permissions.
+
+For the real-data CLI check, set `OTC_CLI_NATIVE_JSONL` to a native release and `OTC_CLI_EVIDENCE` to an output directory, then run `npm run test:cli`. The check compares the commands with the SDK runner and checks cached offline operation.
+
 ## Bounding-box discovery
 
 ```js
