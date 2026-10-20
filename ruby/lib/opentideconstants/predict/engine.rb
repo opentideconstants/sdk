@@ -130,7 +130,13 @@ class OpenTideConstants
             end
             e = release.instance_variable_get(:@by_id)[station.station_id]
             better = historical && offset_id.nil? && (e.sets.any? { |cs| cs["set_id"] == e.eff_id && %w[ok flagged].include?(cs["qc_status"]) } || !release.send(:eligible_paths, e, false, false, historical: false).empty?)
-            if set_id.nil? && !usable && station.type == :subordinate && (tide && !better || currents && !currents.empty?)
+            mixed_current = false
+            if quantity == "current" && set_id.nil? && currents && !currents.empty?
+                harmonic_bins = usable && constants.quantity == :current ? constants.raw["current_bins"] || [] : []
+                effective_bin = bin_number || station.raw["default_current_bin"] || (harmonic_bins.empty? ? currents : harmonic_bins).map { |row| row["bin"] }.min
+                mixed_current = !harmonic_bins.any? { |row| row["bin"] == effective_bin } && currents.any? { |row| row["bin"] == effective_bin }
+            end
+            if mixed_current || set_id.nil? && !usable && station.type == :subordinate && (tide && !better || currents && !currents.empty?)
                 if tide
                     raise QuantityMismatchError, "tide offsets need water_level" unless quantity == "water_level"
                     kind = tide["height_adjusted_type"]

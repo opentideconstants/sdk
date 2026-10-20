@@ -5,6 +5,104 @@ class PredictNativeTest < Minitest::Test
     def native_client
         OpenTideConstants.new(file: fixture("predict", "OTC_20991231.7.json"))
     end
+    # Saved NOAA ACT8851/ACT8856 offsets on the existing harmonic fixture.
+    # This bounded CI model checks dispatch; full-release numerical parity is
+    # checked separately against the untouched producer output.
+    MIXED_CURRENT_ROWS = [
+        ["OTC-7c4e4c70", "ACT8851",
+         [[1, 15, 2, 5, 17, 1.0, 1.1, 272.0, 91.0], [3, -1, -3, -13, -18, 0.8, 0.9, 274.0, 94.0]]],
+        ["OTC-14e250fa", "ACT8856",
+         [[1, 7, -16, -1, 9, 1.0, 1.1, 295.0, 125.0], [3, -11, 17, -8, -32, 0.8, 0.6, 306.0, 115.0]]]
+    ].freeze
+    def mixed_current_client(mode:, offsets: true)
+        datum_fallback_client(mode: mode) do |document|
+            template = station_in(document, "OTC-P-0016")
+            document["stations"] = MIXED_CURRENT_ROWS.map do |id, source_id, rows|
+                station = Marshal.load(Marshal.dump(template))
+                station.merge!("station_id" => id, "name" => source_id, "recommended_set_id" => "#{id}/noaa")
+                constants = station["constant_sets"].first
+                constants["set_id"] = "#{id}/noaa"
+                bin = constants["current_bins"].find { |item| item["bin"] == 2 }
+                constants["current_bins"] = [bin]
+                if offsets
+                    station["current_offsets"] = rows.map do |number, max_flood, slack_ebb, max_ebb, slack_flood, flood_ratio, ebb_ratio, flood_dir, ebb_dir|
+                        { "bin" => number, "reference_station_id" => id, "reference_bin" => 2, "licence_id" => "noaa",
+                          "time_adj_max_flood_min" => max_flood, "time_adj_slack_before_ebb_min" => slack_ebb,
+                          "time_adj_max_ebb_min" => max_ebb, "time_adj_slack_before_flood_min" => slack_flood,
+                          "flood_amp_ratio" => flood_ratio, "ebb_amp_ratio" => ebb_ratio,
+                          "mean_flood_dir_deg" => flood_dir, "mean_ebb_dir_deg" => ebb_dir }
+                    end
+                end
+                station
+            end
+        end
+    end
+    MIXED_CURRENT_ROWS.each do |id, source_id, rows|
+        rows.each do |bin, *|
+            define_method("test_mixed_current_#{source_id.downcase}_bin_#{bin}") do
+                c = nil
+                %i[eager stream].each do |mode|
+                    c = mixed_current_client(mode: mode)
+                    start = Time.new(2027, 1, 1, 0, 0, 0, "-08:00")
+                    stop = start + 172_800
+                    result = c.current_events(id, start: start, stop: stop, bin_number: bin)
+                    assert_equal :offsets, result.method
+                    assert_equal bin, result.bin_number
+                    assert_equal id, result.reference_station_id
+                    assert_equal 2, result.reference_bin
+                    assert_equal "#{id}/noaa", result.set_id
+                    assert_equal %i[max_ebb max_flood slack_before_ebb slack_before_flood], result.items.map(&:type).uniq.sort
+                    entry = c.require_station(id).raw["current_offsets"].find { |item| item["bin"] == bin }
+                    harmonic = c.current_events(id, start: start - 7200, stop: stop + 7200, bin_number: 2)
+                    expected = harmonic.items.filter_map do |event|
+                        time = event.time + entry.fetch("time_adj_#{event.type}_min") * 60
+                        next unless time >= start && time < stop
+                        ratio = event.type == :max_flood ? entry["flood_amp_ratio"] : entry["ebb_amp_ratio"]
+                        direction = case event.type
+                                    when :max_flood then entry["mean_flood_dir_deg"]
+                                    when :max_ebb then entry["mean_ebb_dir_deg"]
+                                    end
+                        [time, event.type, event.velocity_ms * ratio, direction]
+                    end.sort_by(&:first)
+                    assert_equal expected.length, result.items.length
+                    expected.zip(result.items).each do |(time, kind, speed, direction), actual|
+                        assert_equal time, actual.time
+                        assert_equal kind, actual.type
+                        assert_in_delta speed, actual.velocity_ms, 1e-9
+                        direction.nil? ? assert_nil(actual.direction_deg) : assert_equal(direction, actual.direction_deg)
+                    end
+                    assert_raises(OpenTideConstants::ExtremesOnlyError) { c.currents(id, start: start, stop: stop, bin_number: bin) }
+                    assert_raises(OpenTideConstants::BinNotFoundError) { c.current_events(id, start: start, stop: stop, bin_number: bin, set_id: "#{id}/noaa") }
+                    c.close
+                end
+            ensure
+                c&.close
+            end
+        end
+    end
+    def test_mixed_current_preserves_harmonic_and_default_bin
+        c = control = nil
+        %i[eager stream].each do |mode|
+            c = mixed_current_client(mode: mode)
+            control = mixed_current_client(mode: mode, offsets: false)
+            window = { start: Time.new(2027, 1, 1, 0, 0, 0, "-08:00"), stop: Time.new(2027, 1, 3, 0, 0, 0, "-08:00") }
+            MIXED_CURRENT_ROWS.each do |id, *|
+                %i[current_events currents].each do |operation|
+                    expected = control.public_send(operation, id, **window, bin_number: 2)
+                    [nil, 2].each do |bin|
+                        actual = c.public_send(operation, id, **window, bin_number: bin)
+                        assert_equal :harmonic, actual.method
+                        assert_equal Marshal.dump(expected), Marshal.dump(actual)
+                    end
+                end
+            end
+            c.close
+            control.close
+        end
+    ensure
+        c&.close
+        control&.close
+    end
     def datum_fallback
         {
             "reason" => "datum_gate_failed",
