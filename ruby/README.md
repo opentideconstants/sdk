@@ -1,6 +1,6 @@
 # opentideconstants (Ruby)
 
-The Ruby SDK for [OpenTideConstants](https://opentideconstants.org), an open dataset of tidal harmonic constants. It downloads a release, checks its SHA-256, caches it, and gives you the stations and their constants. Pure Ruby, standard library only, Ruby 3.0 or later.
+The Ruby SDK for [OpenTideConstants](https://opentideconstants.org), an open dataset of tidal harmonic constants. It downloads a release, checks its SHA-256, caches it, and gives you the stations and their constants. Pure Ruby, standard library only, Ruby 3.3 or later.
 
 ```ruby
 require "opentideconstants"

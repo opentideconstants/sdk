@@ -22,7 +22,7 @@ Gem::Specification.new do |s|
     s.files       = ["README.md", "LICENSE", "supported-formats.json", "lib/opentideconstants.rb"] +
                     Dir.glob("lib/opentideconstants/**/*.{rb,json}", base: gem_dir).sort
     s.require_paths = ["lib"]
-    s.required_ruby_version = ">= 3.0"
+    s.required_ruby_version = ">= 3.3"
     s.metadata    = {
         "homepage_uri" => "https://opentideconstants.org",
         "source_code_uri" => "https://github.com/opentideconstants/sdk",
