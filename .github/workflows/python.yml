@@ -2,9 +2,7 @@ name: Python SDK
 
 on:
   push:
-    paths: ["python/**", "conformance/**", ".github/workflows/python.yml", ".gitattributes"]
   pull_request:
-    paths: ["python/**", "conformance/**", ".github/workflows/python.yml", ".gitattributes"]
   workflow_dispatch:
 
 permissions:
@@ -20,11 +18,26 @@ defaults:
 # A newer push to the same branch or pull request cancels the older run;
 # every run on main finishes.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      relevant: ${{ steps.paths.outputs.python }}
+      swift: ${{ steps.paths.outputs.swift }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - id: paths
+        run: ruby .github/ci_paths.rb
+
   conformance:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     name: conformance (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
@@ -62,6 +75,8 @@ jobs:
           if-no-files-found: error
 
   wheel:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     name: wheel and clean install
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -131,6 +146,8 @@ jobs:
           if-no-files-found: error
 
   no-tz:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     name: prediction without a timezone database
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -150,3 +167,26 @@ jobs:
         run: |
           /tmp/otc-no-tz/bin/python conformance/driver.py --runner "/tmp/otc-no-tz/bin/python conformance/runners/python/runner.py --installed" --profile python-no-tz --only 'predict-|not-built' --all-steps --no-expected-failures
           /tmp/otc-no-tz/bin/python conformance/tools/run_vectors.py --runner "/tmp/otc-no-tz/bin/python conformance/runners/python/runner.py --installed" --no-expected-failures
+
+  ci:
+    name: Python CI
+    if: always()
+    needs: [changes, conformance, wheel, no-tz]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every applicable job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          ruby -rjson <<'RUBY'
+          results = JSON.parse(ENV.fetch('RESULTS'))
+          changes = results.fetch('changes')
+          abort 'Changed-path detection failed' unless changes.fetch('result') == 'success'
+          [["conformance", "relevant"], ["wheel", "relevant"], ["no-tz", "relevant"]].each do |job, output|
+              relevant = changes.fetch('outputs').fetch(output)
+              abort 'Missing path decision' unless %w[true false].include?(relevant)
+              expected = relevant == 'true' ? 'success' : 'skipped'
+              abort "Required job failed: #{job}" unless results.fetch(job).fetch('result') == expected
+          end
+          RUBY
