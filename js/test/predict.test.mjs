@@ -13,6 +13,63 @@ const vectors=JSON.parse(fs.readFileSync(new URL('../../conformance/vectors/1.0/
 let client;
 before(async()=>{assert.ok(process.env.OTC_PREDICT_NATIVE_JSON,'actual pinned vector release required');client=await sdk.OpenTideConstants.open({file:process.env.OTC_PREDICT_NATIVE_JSON});});
 after(()=>client?.close());
+// Exact NOAA ACT8851/ACT8856 adjustments; use committed fixture harmonics for this selection regression.
+// Real-station scientific values are checked separately against the immutable producer candidate.
+for(const [source,binNumber,flood,slackEbb,ebb,slackFlood,floodRatio,ebbRatio,floodDir,ebbDir] of [
+    ['ACT8851',1,15,2,5,17,1.0,1.1,272,91],
+    ['ACT8851',3,-1,-3,-13,-18,0.8,0.9,274,94],
+    ['ACT8856',1,7,-16,-1,9,1.0,1.1,295,125],
+    ['ACT8856',3,-11,17,-8,-32,0.8,0.6,306,115],
+])test(`mixed current bin selects ${source} bin ${binNumber} offsets with harmonic precedence`,async()=>{
+    const original=JSON.parse(fs.readFileSync(new URL('../../conformance/vectors/1.0/vectors-release.json',import.meta.url),'utf8'));
+    const target=original.stations.find(s=>s.station_id==='OTC-V-NOAA-ACT1616');
+    const constants=target.constant_sets.find(s=>s.set_id===target.recommended_set_id);
+    constants.current_bins[0].bin=2;target.default_current_bin=2;
+    const entry={bin:binNumber,reference_station_id:target.station_id,reference_bin:2,licence_id:constants.licence_id,
+        time_adj_max_flood_min:flood,time_adj_slack_before_ebb_min:slackEbb,time_adj_max_ebb_min:ebb,time_adj_slack_before_flood_min:slackFlood,
+        flood_amp_ratio:floodRatio,ebb_amp_ratio:ebbRatio,mean_flood_dir_deg:floodDir,mean_ebb_dir_deg:ebbDir};
+    // A competing offset on bin 2 must not displace its own usable harmonics.
+    target.current_offsets=[entry,{...entry,bin:2}];
+    const directory=fs.mkdtempSync(path.join(os.tmpdir(),'otc-mixed-current-bin-'));
+    const start=new Date('2027-01-01T00:00:00-08:00'),stop=new Date('2027-01-03T00:00:00-08:00');
+    try {
+        for(const mode of ['eager','stream']) {
+            const document=structuredClone(original),file=path.join(directory,`OTC_20261011.${mode==='eager'?'json':'jsonl'}`);
+            if(mode==='eager')fs.writeFileSync(file,JSON.stringify(document));
+            else {
+                const stations=document.stations;delete document.stations;
+                fs.writeFileSync(file,stations.map(s=>JSON.stringify(s)+'\n').join(''));
+                fs.writeFileSync(path.join(directory,'OTC_20261011.meta.json'),JSON.stringify(document));
+            }
+            const opened=await sdk.OpenTideConstants.open({file,mode});
+            try {
+                const harmonic=await opened.currentEvents(target.station_id,{start,stop,binNumber:2});
+                assert.equal(harmonic.method,'harmonic');
+                assert.deepEqual(await opened.currentEvents(target.station_id,{start,stop}),harmonic);
+                const series=await opened.currents(target.station_id,{start,stop,stepS:600,binNumber:2});
+                assert.equal(series.method,'harmonic');
+                assert.deepEqual(await opened.currents(target.station_id,{start,stop,stepS:600}),series);
+                const expanded=await opened.currentEvents(target.station_id,{start:new Date(start.getTime()-7200000),stop:new Date(stop.getTime()+7200000),binNumber:2});
+                const shifts={max_flood:flood,slack_before_ebb:slackEbb,max_ebb:ebb,slack_before_flood:slackFlood};
+                const expected=expanded.items.map(item=>({
+                    ...item,time:new Date(item.time.getTime()+shifts[item.type]*60000),
+                    velocity_ms:item.type==='max_flood'?item.velocity_ms*floodRatio:item.type==='max_ebb'?item.velocity_ms*ebbRatio:0,
+                    direction_deg:item.type==='max_flood'?floodDir:item.type==='max_ebb'?ebbDir:null,
+                })).filter(item=>start<=item.time&&item.time<stop).sort((a,b)=>a.time-b.time);
+                const result=await opened.currentEvents(target.station_id,{start,stop,binNumber});
+                assert.equal(result.method,'offsets');assert.equal(result.bin_number,binNumber);
+                assert.equal(result.reference_station_id,target.station_id);assert.equal(result.reference_bin,2);assert.equal(result.set_id,constants.set_id);
+                assert.ok(expected.length>0);assert.equal(result.items.length,expected.length);
+                result.items.forEach((item,i)=>{
+                    assert.equal(item.time.getTime(),expected[i].time.getTime());assert.equal(item.type,expected[i].type);
+                    assert.equal(item.direction_deg,expected[i].direction_deg);assert.ok(Math.abs(item.velocity_ms-expected[i].velocity_ms)<=1e-9);
+                });
+                await assert.rejects(opened.currents(target.station_id,{start,stop,stepS:600,binNumber}),e=>e.code==='extremes_only');
+                await assert.rejects(opened.currentEvents(target.station_id,{start,stop,binNumber,setId:constants.set_id}),e=>e.code==='bin_not_found');
+            } finally {opened.close();}
+        }
+    } finally {fs.rmSync(directory,{recursive:true,force:true});}
+});
 test('native historical reference table model/hash compatibility and validation precedence', {skip:process.env.OTC_HISTORY_BROWSER_JSON?false:'OTC_HISTORY_BROWSER_JSON is not set: actual H4 historical input required'}, async()=>{
     const original=JSON.parse(fs.readFileSync(process.env.OTC_HISTORY_BROWSER_JSON,'utf8'));
     const directory=fs.mkdtempSync(path.join(os.tmpdir(),'otc-historical-table-'));

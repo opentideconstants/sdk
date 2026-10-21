@@ -79,7 +79,10 @@ function context(release:Release,input:Station|string,quantity:string,setId:stri
     const tideOffsets=obj(station.raw,'subordinate_offsets'),currentOffsets=objects(station.raw,'current_offsets'),historical=tideOffsets!==null&&str(tideOffsets,'offset_id')!==null;
     if(offsetId!=null){if(!historical||tideOffsets?.['offset_id']!==offsetId)throw new X.InvalidArgumentError(`offsetId ${offsetId} is not a profile of ${station.station_id}`);usable=false;}
     const blockedBetter=historical&&offsetId==null&&release._betterHistoricalPath(station);
-    if(setId==null&&!usable&&station.type==='subordinate'&&(tideOffsets&&!blockedBetter||currentOffsets.length)){
+    const harmonicBins=usable&&constants?.quantity==='current'?objects(constants.raw,'current_bins'):[];
+    const effectiveBin=binNumber??num(station.raw,'default_current_bin')??Math.min(...(harmonicBins.length?harmonicBins:currentOffsets).map(b=>num(b,'bin')??Infinity));
+    const mixedCurrent=quantity==='current'&&setId==null&&!harmonicBins.some(b=>b['bin']===effectiveBin)&&currentOffsets.some(b=>b['bin']===effectiveBin);
+    if(setId==null&&!usable&&station.type==='subordinate'&&(tideOffsets&&!blockedBetter||currentOffsets.length)||mixedCurrent){
         if(tideOffsets){
             if(quantity!=='water_level')throw new X.QuantityMismatchError('tide offsets need water_level');
             const kind=str(tideOffsets,'height_adjusted_type');if(kind!=='R'&&kind!=='A')throw new X.InvalidArgumentError(`height_adjusted_type ${kind} is not R or A`);

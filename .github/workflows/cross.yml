@@ -205,6 +205,9 @@ jobs:
         run: |
           swift build --package-path swift -Xswiftc -warnings-as-errors
           swift build --package-path conformance/runners/otc-swift -Xswiftc -warnings-as-errors
+      - name: Check mixed current-bin prediction selection
+        working-directory: swift
+        run: swift test --filter PredictTests.testMixedCurrentBinsSelectOffsetsAndPreserveHarmonics
       - name: Check every API and its default mutation tests
         run: |
           python conformance/runners/python/check_api.py

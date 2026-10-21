@@ -221,7 +221,15 @@ def _context(release, station, quantity, set_id, datum=None, bin_number=None, se
             raise X.InvalidArgumentError(f'offset_id {offset_id!r} is not a profile of {station.station_id}')
         usable = False  # explicit selection chooses the historical path over an ordinary recommendation
     blocked_better = historical and offset_id is None and release._better_historical_path(release._by_id[station.station_id])
-    if set_id is None and not usable and station.type == 'subordinate' and ((tide_offsets and not blocked_better) or current_offsets):
+    mixed_current_path = False
+    if quantity == 'current' and set_id is None and current_offsets:
+        harmonic_bins = (constants.raw.get('current_bins') or ()) if usable and constants.quantity == 'current' else ()
+        effective_bin = bin_number if bin_number is not None else station.raw.get('default_current_bin')
+        if effective_bin is None:
+            effective_bin = min(row['bin'] for row in harmonic_bins or current_offsets)
+        mixed_current_path = (not any(row.get('bin') == effective_bin for row in harmonic_bins)
+                              and any(row.get('bin') == effective_bin for row in current_offsets))
+    if mixed_current_path or (set_id is None and not usable and station.type == 'subordinate' and ((tide_offsets and not blocked_better) or current_offsets)):
         if tide_offsets:
             if quantity != 'water_level':
                 raise X.QuantityMismatchError('tide offsets need water_level')
