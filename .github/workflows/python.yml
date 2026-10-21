@@ -15,11 +15,11 @@ defaults:
   run:
     shell: bash
 
-# A newer push to the same branch or pull request cancels the older run;
-# every run on main finishes.
+# Pull requests supersede older branch runs; branch pushes never cancel PRs.
+# Every run on main finishes. Late branch pushes can still run after a PR.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.ref != 'refs/heads/main' }}
 
 jobs:
   changes:
@@ -169,7 +169,7 @@ jobs:
           /tmp/otc-no-tz/bin/python conformance/tools/run_vectors.py --runner "/tmp/otc-no-tz/bin/python conformance/runners/python/runner.py --installed" --no-expected-failures
 
   ci:
-    name: Python CI
+    name: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && 'Python CI (branch push)' || 'Python CI' }}
     if: always()
     needs: [changes, conformance, wheel, no-tz]
     runs-on: ubuntu-24.04
