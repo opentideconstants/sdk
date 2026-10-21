@@ -7,25 +7,7 @@ name: Cross-SDK cases
 
 on:
   push:
-    paths:
-      - "python/**"
-      - "ruby/**"
-      - "js/**"
-      - "c/**"
-      - "swift/**"
-      - "conformance/**"
-      - ".github/workflows/cross.yml"
-      - ".gitattributes"
   pull_request:
-    paths:
-      - "python/**"
-      - "ruby/**"
-      - "js/**"
-      - "c/**"
-      - "swift/**"
-      - "conformance/**"
-      - ".github/workflows/cross.yml"
-      - ".gitattributes"
   workflow_dispatch:
 
 permissions:
@@ -38,19 +20,34 @@ defaults:
   run:
     shell: bash
 
-# A newer push to the same branch or pull request cancels the older run;
-# every run on main finishes.
+# Pull requests supersede older branch runs; branch pushes never cancel PRs.
+# Every run on main finishes. Late branch pushes can still run after a PR.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.ref != 'refs/heads/main' }}
 
 jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      relevant: ${{ steps.paths.outputs.cross }}
+      swift: ${{ steps.paths.outputs.swift }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - id: paths
+        run: ruby .github/ci_paths.rb
+
   # The suite's own checks: the fold table generator, the fold rules, and the
   # driver and server self-tests (conformance/tests). The self-tests of the C
   # runners (c/build, c/build-fetch), the Node runner (js/dist) and the browser
   # runner (Playwright) skip when those are not built, so they are built first,
   # and a skip for that reason fails the job (R2-360).
   suite:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     name: suite self-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -91,6 +88,8 @@ jobs:
   # The C SDK is paused, and its own workflow (c.yml) builds and tests it. The
   # cross-SDK cases here run Python, Ruby and TypeScript without building C.
   cross:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     env:
       RUBY_YJIT_ENABLE: "1"
     name: ${{ matrix.os }}${{ matrix.os == 'windows-2022' && ' / Ruby 3.3 non-YJIT compatibility' || '' }}
@@ -158,6 +157,8 @@ jobs:
   # The accepted Swift source requires Apple Security and SwiftPM 6.4.
   # This separate hosted gate qualifies macOS 26; it does not claim Linux/iOS support.
   swift-cross:
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
     env:
       RUBY_YJIT_ENABLE: "1"
     name: macOS 26 / Swift 6.4.0 / four SDKs
@@ -249,3 +250,26 @@ jobs:
             swift-io.json
             swift-cross.json
           if-no-files-found: error
+
+  ci:
+    name: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && 'Cross-SDK CI (branch push)' || 'Cross-SDK CI' }}
+    if: always()
+    needs: [changes, suite, cross, swift-cross]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every applicable job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          ruby -rjson <<'RUBY'
+          results = JSON.parse(ENV.fetch('RESULTS'))
+          changes = results.fetch('changes')
+          abort 'Changed-path detection failed' unless changes.fetch('result') == 'success'
+          [["suite", "relevant"], ["cross", "relevant"], ["swift-cross", "swift"]].each do |job, output|
+              relevant = changes.fetch('outputs').fetch(output)
+              abort 'Missing path decision' unless %w[true false].include?(relevant)
+              expected = relevant == 'true' ? 'success' : 'skipped'
+              abort "Required job failed: #{job}" unless results.fetch(job).fetch('result') == expected
+          end
+          RUBY

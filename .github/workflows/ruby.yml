@@ -2,17 +2,7 @@ name: Ruby SDK
 
 on:
   push:
-    paths:
-      - "ruby/**"
-      - "conformance/**"
-      - ".github/workflows/ruby.yml"
-      - ".gitattributes"
   pull_request:
-    paths:
-      - "ruby/**"
-      - "conformance/**"
-      - ".github/workflows/ruby.yml"
-      - ".gitattributes"
   workflow_dispatch:
 
 permissions:
@@ -25,14 +15,29 @@ defaults:
   run:
     shell: bash
 
-# A newer push to the same branch or pull request cancels the older run;
-# every run on main finishes.
+# Pull requests supersede older branch runs; branch pushes never cancel PRs.
+# Every run on main finishes. Late branch pushes can still run after a PR.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.ref != 'refs/heads/main' }}
 
 jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      relevant: ${{ steps.paths.outputs.ruby }}
+      swift: ${{ steps.paths.outputs.swift }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - id: paths
+        run: ruby .github/ci_paths.rb
+
   conformance:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     env:
       RUBY_YJIT_ENABLE: "1"
     name: ${{ matrix.os }} / Ruby ${{ matrix.ruby }}${{ matrix.os == 'windows-latest' && ' / non-YJIT compatibility' || '' }}
@@ -129,3 +134,26 @@ jobs:
             ruby-report.json
             ruby-vectors.json
           if-no-files-found: error
+
+  ci:
+    name: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && 'Ruby CI (branch push)' || 'Ruby CI' }}
+    if: always()
+    needs: [changes, conformance]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every applicable job
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          ruby -rjson <<'RUBY'
+          results = JSON.parse(ENV.fetch('RESULTS'))
+          changes = results.fetch('changes')
+          abort 'Changed-path detection failed' unless changes.fetch('result') == 'success'
+          [["conformance", "relevant"]].each do |job, output|
+              relevant = changes.fetch('outputs').fetch(output)
+              abort 'Missing path decision' unless %w[true false].include?(relevant)
+              expected = relevant == 'true' ? 'success' : 'skipped'
+              abort "Required job failed: #{job}" unless results.fetch(job).fetch('result') == expected
+          end
+          RUBY

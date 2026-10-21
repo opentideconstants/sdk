@@ -1,10 +1,7 @@
 name: C library
 
+# C qualification is paused; keep it available for explicit investigation only.
 on:
-  push:
-    paths: ["c/**", "conformance/**", ".github/workflows/c.yml", ".gitattributes"]
-  pull_request:
-    paths: ["c/**", "conformance/**", ".github/workflows/c.yml", ".gitattributes"]
   workflow_dispatch:
 
 permissions:
@@ -20,7 +17,7 @@ defaults:
 # A newer push to the same branch or pull request cancels the older run;
 # every run on main finishes.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
