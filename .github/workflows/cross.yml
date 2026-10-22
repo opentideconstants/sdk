@@ -239,6 +239,10 @@ jobs:
             --cross typescript="node conformance/runners/node/runner.mjs" \
             --cross swift="swift run --skip-build --package-path conformance/runners/otc-swift Runner" \
             --no-expected-failures --report swift-cross.json
+      - name: Build current-HEAD Release Swift runner for frozen current data
+        run: swift build --package-path conformance/runners/otc-swift --configuration release --product Runner -Xswiftc -warnings-as-errors --jobs 2
+      - name: Frozen current-native data agreement (seven complete station records)
+        run: ruby conformance/current-data/run.rb --report current-data.json
       - name: Upload the native qualification reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -249,6 +253,7 @@ jobs:
             swift-profile.json
             swift-io.json
             swift-cross.json
+            current-data.json
           if-no-files-found: error
 
   ci:

@@ -1,0 +1,2770 @@
+{
+  "kind": "test_subset_not_whole_release",
+  "limits": [
+    "Cross-SDK agreement is not scientific accuracy or datum acceptance.",
+    "Seven complete native station records; no population, memory, profile, C, CLI, publication, deployment or licence qualification.",
+    "Location metadata is join-only; this test makes no SDK display capability claim.",
+    "Explicit set_id retains existing fallback selection; Belfast LAT/HAT warnings and uncertainty must survive.",
+    "Subordinate instantaneous currents intentionally return extremes_only; current_events must resolve bin 1 through reference bin 13. No instantaneous subordinate vector support is claimed."
+  ],
+  "source": {
+    "repository": "https://github.com/opentideconstants/opentideconstants",
+    "commit": "b44640607071c49014e841363fdc20ae4d4711ba",
+    "name": "OTC_20261011.jsonl",
+    "bytes": 475953736,
+    "sha256": "7695d765a6787fb21c51d41cb6449b6699f019489c25e7a3dbbb6aa2aad7d1e5",
+    "metadata_sha256": "a4c949c15be3ed070a2f416353ee6e1cfdf8be3b5af7fa250b6ae105f6db70ba"
+  },
+  "sdk_base": "4b5390d2ce3b06b40230a6af54f1ca8dbd0fec0f",
+  "slice": {
+    "files": {
+      "OTC_20261011.jsonl": "58caefc7a17a3a2e6caadbe2a08d4772254baedbd3a537dc6a28b652a03396df",
+      "OTC_20261011.meta.json": "a4c949c15be3ed070a2f416353ee6e1cfdf8be3b5af7fa250b6ae105f6db70ba"
+    },
+    "stations": {
+      "OTC-0034ae14": {
+        "sha256": "382c3e1fc54e1bb7d6ef92e6d2c043495f900cdafca4edc802c8fa8858f1cc4f",
+        "bytes": 7436
+      },
+      "OTC-00bdf4b5": {
+        "sha256": "ea5020d4439ad6df646d6621016b405a20daafddff53764c8ad785c6b407684b",
+        "bytes": 29582
+      },
+      "OTC-01280de5": {
+        "sha256": "c11a6a08322c40096d904439e760ac96cbce49db5ae8f712e8ed6fe9756794c5",
+        "bytes": 55365
+      },
+      "OTC-0cfcf1db": {
+        "sha256": "c5e0d42ae865ae6ea2d1c5af079eeb1ac21a6b29f75bb0f7943e38c592949726",
+        "bytes": 31274
+      },
+      "OTC-342235fc": {
+        "sha256": "a5a5a861c936bd52e952ccf7a033ec13a4fbbc9c848c18361e9e0e949ee4dc97",
+        "bytes": 63533
+      },
+      "OTC-58e73c43": {
+        "sha256": "81c41b0c926001c234a6416a56bfe9b6667d7724b91612f01b83ea9ba030ae88",
+        "bytes": 288192
+      },
+      "OTC-e09cdff7": {
+        "sha256": "b1d25c6d3360d69dd80250adb725d6355b3de7b9036b7fcd3f3ed6ed0e08972a",
+        "bytes": 10021
+      }
+    }
+  },
+  "tolerances": {
+    "height_m": 1.0e-05,
+    "velocity_ms": 1.0e-05,
+    "time_s": 1,
+    "direction_deg": 0.01,
+    "direction_min_speed_ms": 0.01
+  },
+  "requests": [
+    {
+      "id": "noaa-datums",
+      "request": {
+        "op": "datums",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/noaa/8665530"
+        }
+      }
+    },
+    {
+      "id": "noaa-heights-mean_level",
+      "request": {
+        "op": "heights_at",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "datum": "mean_level",
+          "times": [
+            "2027-01-01T00:00:00-08:00",
+            "2027-01-01T06:00:00-08:00",
+            "2027-01-01T12:00:00-08:00"
+          ]
+        }
+      }
+    },
+    {
+      "id": "noaa-events-mean_level",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "datum": "mean_level"
+        }
+      }
+    },
+    {
+      "id": "noaa-heights-lat",
+      "request": {
+        "op": "heights_at",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "datum": "lat",
+          "times": [
+            "2027-01-01T00:00:00-08:00",
+            "2027-01-01T06:00:00-08:00",
+            "2027-01-01T12:00:00-08:00"
+          ]
+        }
+      }
+    },
+    {
+      "id": "noaa-events-lat",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "datum": "lat"
+        }
+      }
+    },
+    {
+      "id": "noaa-heights-hat",
+      "request": {
+        "op": "heights_at",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "datum": "hat",
+          "times": [
+            "2027-01-01T00:00:00-08:00",
+            "2027-01-01T06:00:00-08:00",
+            "2027-01-01T12:00:00-08:00"
+          ]
+        }
+      }
+    },
+    {
+      "id": "noaa-events-hat",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "datum": "hat"
+        }
+      }
+    },
+    {
+      "id": "ticon-datums",
+      "request": {
+        "op": "datums",
+        "args": {
+          "station_id": "OTC-01280de5",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom"
+        }
+      }
+    },
+    {
+      "id": "ticon-heights-mean_level",
+      "request": {
+        "op": "heights_at",
+        "args": {
+          "station_id": "OTC-01280de5",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "datum": "mean_level",
+          "times": [
+            "2027-01-01T00:00:00-08:00",
+            "2027-01-01T06:00:00-08:00",
+            "2027-01-01T12:00:00-08:00"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ticon-events-mean_level",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "station_id": "OTC-01280de5",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "datum": "mean_level"
+        }
+      }
+    },
+    {
+      "id": "ticon-heights-lat",
+      "request": {
+        "op": "heights_at",
+        "args": {
+          "station_id": "OTC-01280de5",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "datum": "lat",
+          "times": [
+            "2027-01-01T00:00:00-08:00",
+            "2027-01-01T06:00:00-08:00",
+            "2027-01-01T12:00:00-08:00"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ticon-events-lat",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "station_id": "OTC-01280de5",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "datum": "lat"
+        }
+      }
+    },
+    {
+      "id": "ticon-heights-hat",
+      "request": {
+        "op": "heights_at",
+        "args": {
+          "station_id": "OTC-01280de5",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "datum": "hat",
+          "times": [
+            "2027-01-01T00:00:00-08:00",
+            "2027-01-01T06:00:00-08:00",
+            "2027-01-01T12:00:00-08:00"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ticon-events-hat",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "station_id": "OTC-01280de5",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "datum": "hat"
+        }
+      }
+    },
+    {
+      "id": "fes-constituents",
+      "request": {
+        "op": "constituents",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/fes2022"
+        }
+      }
+    },
+    {
+      "id": "fes-heights",
+      "request": {
+        "op": "heights_at",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/fes2022",
+          "datum": "mean_level",
+          "times": [
+            "2027-01-01T00:00:00-08:00",
+            "2027-01-01T06:00:00-08:00",
+            "2027-01-01T12:00:00-08:00"
+          ]
+        }
+      }
+    },
+    {
+      "id": "fes-events",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "station_id": "OTC-58e73c43",
+          "set_id": "OTC-58e73c43/fes2022",
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "datum": "mean_level"
+        }
+      }
+    },
+    {
+      "id": "belfast-datums",
+      "request": {
+        "op": "datums",
+        "args": {
+          "station_id": "OTC-e09cdff7"
+        }
+      }
+    },
+    {
+      "id": "belfast-events-mllw",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "station_id": "OTC-e09cdff7",
+          "datum": "mllw"
+        }
+      }
+    },
+    {
+      "id": "belfast-events-lat",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "station_id": "OTC-e09cdff7",
+          "datum": "lat"
+        }
+      }
+    },
+    {
+      "id": "belfast-events-hat",
+      "request": {
+        "op": "extremes",
+        "args": {
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "station_id": "OTC-e09cdff7",
+          "datum": "hat"
+        }
+      }
+    },
+    {
+      "id": "current-series",
+      "request": {
+        "op": "currents",
+        "args": {
+          "station_id": "OTC-00bdf4b5",
+          "set_id": "OTC-00bdf4b5/noaa-currents/PUG1523",
+          "bin_number": 14,
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "step_s": 21600
+        }
+      }
+    },
+    {
+      "id": "current-events",
+      "request": {
+        "op": "current_events",
+        "args": {
+          "station_id": "OTC-00bdf4b5",
+          "set_id": "OTC-00bdf4b5/noaa-currents/PUG1523",
+          "bin_number": 14,
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00"
+        }
+      }
+    },
+    {
+      "id": "subordinate-series-refusal",
+      "request": {
+        "op": "currents",
+        "args": {
+          "station_id": "OTC-0034ae14",
+          "bin_number": 1,
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00",
+          "step_s": 21600
+        }
+      },
+      "expected_error": "extremes_only"
+    },
+    {
+      "id": "subordinate-events",
+      "request": {
+        "op": "current_events",
+        "args": {
+          "station_id": "OTC-0034ae14",
+          "bin_number": 1,
+          "start": "2027-01-01T00:00:00-08:00",
+          "stop": "2027-01-03T00:00:00-08:00"
+        }
+      }
+    }
+  ],
+  "python_reference": {
+    "noaa-datums": {
+      "ok": true,
+      "result": {
+        "datums": {
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "zero": "chart_datum",
+          "zero_name": "MLLW",
+          "chart_datum": "mllw",
+          "msl_offset_m": 0.89,
+          "levels": [
+            {
+              "key": "dtl",
+              "value_m": 0.878,
+              "above_chart_m": 0.878,
+              "kind": "published",
+              "method": "source",
+              "source_name": "DTL",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "hat",
+              "value_m": 2.211223,
+              "above_chart_m": 2.211223,
+              "kind": "published",
+              "method": "source",
+              "source_name": "HAT",
+              "epoch": null,
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "lat",
+              "value_m": -0.475777,
+              "above_chart_m": -0.475777,
+              "kind": "published",
+              "method": "source",
+              "source_name": "LAT",
+              "epoch": null,
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mhhw",
+              "value_m": 1.757,
+              "above_chart_m": 1.757,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MHHW",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mhw",
+              "value_m": 1.648,
+              "above_chart_m": 1.648,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MHW",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mllw",
+              "value_m": 0.0,
+              "above_chart_m": 0.0,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MLLW",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mlw",
+              "value_m": 0.057,
+              "above_chart_m": 0.057,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MLW",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "msl",
+              "value_m": 0.89,
+              "above_chart_m": 0.89,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MSL",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mtl",
+              "value_m": 0.852,
+              "above_chart_m": 0.852,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MTL",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "navd88",
+              "value_m": 0.957,
+              "above_chart_m": 0.957,
+              "kind": "published",
+              "method": "source",
+              "source_name": "NAVD88",
+              "epoch": null,
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "stnd",
+              "value_m": -0.843,
+              "above_chart_m": -0.843,
+              "kind": "published",
+              "method": "source",
+              "source_name": "STND",
+              "epoch": null,
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            }
+          ]
+        }
+      }
+    },
+    "noaa-heights-mean_level": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-58e73c43",
+          "timezone": "America/New_York",
+          "method": "harmonic",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "mean_level",
+          "datum_name": "mean_level",
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:00:00Z",
+              "height_m": 0.6740009934853886,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T14:00:00Z",
+              "height_m": -0.7723847742897532,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:00:00Z",
+              "height_m": 0.44485068406178613,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "noaa-events-mean_level": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-58e73c43",
+          "timezone": "America/New_York",
+          "method": "harmonic",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "mean_level",
+          "datum_name": "mean_level",
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T14:00:28Z",
+              "type": "low",
+              "height_m": -0.7723916698477667,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T19:50:04Z",
+              "type": "high",
+              "height_m": 0.4469735717323747,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T02:07:06Z",
+              "type": "low",
+              "height_m": -0.86673028682572,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T08:43:48Z",
+              "type": "high",
+              "height_m": 0.6808639223217765,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T14:58:18Z",
+              "type": "low",
+              "height_m": -0.7622370974930599,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T20:44:10Z",
+              "type": "high",
+              "height_m": 0.4032346358038026,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T02:58:24Z",
+              "type": "low",
+              "height_m": -0.8546995459293141,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "noaa-heights-lat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-58e73c43",
+          "timezone": "America/New_York",
+          "method": "harmonic",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "lat",
+          "datum_name": "lat",
+          "datum_kind": "published",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:00:00Z",
+              "height_m": 2.0397779934853886,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T14:00:00Z",
+              "height_m": 0.5933922257102469,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:00:00Z",
+              "height_m": 1.810627684061786,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "noaa-events-lat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-58e73c43",
+          "timezone": "America/New_York",
+          "method": "harmonic",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "lat",
+          "datum_name": "lat",
+          "datum_kind": "published",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T14:00:28Z",
+              "type": "low",
+              "height_m": 0.5933853301522333,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T19:50:04Z",
+              "type": "high",
+              "height_m": 1.8127505717323746,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T02:07:06Z",
+              "type": "low",
+              "height_m": 0.49904671317428007,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T08:43:48Z",
+              "type": "high",
+              "height_m": 2.0466409223217763,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T14:58:18Z",
+              "type": "low",
+              "height_m": 0.6035399025069401,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T20:44:10Z",
+              "type": "high",
+              "height_m": 1.7690116358038026,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T02:58:24Z",
+              "type": "low",
+              "height_m": 0.5110774540706859,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "noaa-heights-hat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-58e73c43",
+          "timezone": "America/New_York",
+          "method": "harmonic",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "hat",
+          "datum_name": "hat",
+          "datum_kind": "published",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:00:00Z",
+              "height_m": -0.6472220065146113,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T14:00:00Z",
+              "height_m": -2.0936077742897528,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:00:00Z",
+              "height_m": -0.8763723159382137,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "noaa-events-hat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-58e73c43",
+          "timezone": "America/New_York",
+          "method": "harmonic",
+          "set_id": "OTC-58e73c43/noaa/8665530",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "hat",
+          "datum_name": "hat",
+          "datum_kind": "published",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T14:00:28Z",
+              "type": "low",
+              "height_m": -2.0936146698477667,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T19:50:04Z",
+              "type": "high",
+              "height_m": -0.8742494282676252,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T02:07:06Z",
+              "type": "low",
+              "height_m": -2.18795328682572,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T08:43:48Z",
+              "type": "high",
+              "height_m": -0.6403590776782233,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T14:58:18Z",
+              "type": "low",
+              "height_m": -2.0834600974930595,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T20:44:10Z",
+              "type": "high",
+              "height_m": -0.9179883641961972,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T02:58:24Z",
+              "type": "low",
+              "height_m": -2.175922545929314,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "ticon-datums": {
+      "ok": true,
+      "result": {
+        "datums": {
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "zero": "harmonic_mean",
+          "zero_name": null,
+          "chart_datum": "lat",
+          "msl_offset_m": null,
+          "levels": [
+            {
+              "key": "hat",
+              "value_m": 1.7564280365287603,
+              "above_chart_m": 3.3812361507765756,
+              "kind": "computed",
+              "method": "harmonic_extremes",
+              "source_name": null,
+              "epoch": {
+                "end": "2038-12-31",
+                "name": "OTC LAT 2020-2038",
+                "start": "2020-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": [
+                "time_base_unverified"
+              ],
+              "fallback": {
+                "basis": "Same-set harmonic sum relative to its computational harmonic mean; all carried constituents, OTC LAT 2020-2038",
+                "otc_finding": "Approximate harmonic-mean-relative astronomical HAT; no published MSL or absolute datum tie. Uncertainty is unestablished; normal datum acceptance false. Existing source findings and rights remain unchanged.",
+                "reason": "datum_gate_failed"
+              }
+            },
+            {
+              "key": "lat",
+              "value_m": -1.6248081142478155,
+              "above_chart_m": 0.0,
+              "kind": "computed",
+              "method": "harmonic_extremes",
+              "source_name": null,
+              "epoch": {
+                "end": "2038-12-31",
+                "name": "OTC LAT 2020-2038",
+                "start": "2020-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": [
+                "time_base_unverified"
+              ],
+              "fallback": {
+                "basis": "Same-set harmonic sum relative to its computational harmonic mean; all carried constituents, OTC LAT 2020-2038",
+                "otc_finding": "Approximate harmonic-mean-relative astronomical LAT; no published MSL or absolute datum tie. Uncertainty is unestablished; normal datum acceptance false. Existing source findings and rights remain unchanged.",
+                "reason": "datum_gate_failed"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ticon-heights-mean_level": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-01280de5",
+          "timezone": "Australia/Adelaide",
+          "method": "harmonic",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "convention_id": "ticon4-greenwich-schureman-v1",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "mean_level",
+          "datum_name": "mean_level",
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:00:00Z",
+              "height_m": -0.6310899580866298,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T14:00:00Z",
+              "height_m": 0.7080167782452189,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:00:00Z",
+              "height_m": -0.05946522227649021,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "ticon-events-mean_level": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-01280de5",
+          "timezone": "Australia/Adelaide",
+          "method": "harmonic",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "convention_id": "ticon4-greenwich-schureman-v1",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "mean_level",
+          "datum_name": "mean_level",
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T14:48:05Z",
+              "type": "high",
+              "height_m": 0.7472821149764506,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T06:19:45Z",
+              "type": "low",
+              "height_m": -0.5748293623585176,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T15:59:00Z",
+              "type": "high",
+              "height_m": 0.7325214346909519,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T03:37:09Z",
+              "type": "low",
+              "height_m": -0.6460142983525652,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "ticon-heights-lat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-01280de5",
+          "timezone": "Australia/Adelaide",
+          "method": "harmonic",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "convention_id": "ticon4-greenwich-schureman-v1",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "lat",
+          "datum_name": "lat",
+          "datum_kind": "computed",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:00:00Z",
+              "height_m": 0.9937181561611856,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T14:00:00Z",
+              "height_m": 2.3328248924930346,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:00:00Z",
+              "height_m": 1.5653428919713253,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "ticon-events-lat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-01280de5",
+          "timezone": "Australia/Adelaide",
+          "method": "harmonic",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "convention_id": "ticon4-greenwich-schureman-v1",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "lat",
+          "datum_name": "lat",
+          "datum_kind": "computed",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T14:48:05Z",
+              "type": "high",
+              "height_m": 2.3720902292242663,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T06:19:45Z",
+              "type": "low",
+              "height_m": 1.0499787518892978,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T15:59:00Z",
+              "type": "high",
+              "height_m": 2.3573295489387673,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T03:37:09Z",
+              "type": "low",
+              "height_m": 0.9787938158952503,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "ticon-heights-hat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-01280de5",
+          "timezone": "Australia/Adelaide",
+          "method": "harmonic",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "convention_id": "ticon4-greenwich-schureman-v1",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "hat",
+          "datum_name": "hat",
+          "datum_kind": "computed",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:00:00Z",
+              "height_m": -2.38751799461539,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T14:00:00Z",
+              "height_m": -1.0484112582835414,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:00:00Z",
+              "height_m": -1.8158932588052505,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "ticon-events-hat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-01280de5",
+          "timezone": "Australia/Adelaide",
+          "method": "harmonic",
+          "set_id": "OTC-01280de5/ticon-4/port_pirie-61800-aus-bom",
+          "convention_id": "ticon4-greenwich-schureman-v1",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "hat",
+          "datum_name": "hat",
+          "datum_kind": "computed",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T14:48:05Z",
+              "type": "high",
+              "height_m": -1.0091459215523098,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T06:19:45Z",
+              "type": "low",
+              "height_m": -2.331257398887278,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T15:59:00Z",
+              "type": "high",
+              "height_m": -1.0239066018378085,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T03:37:09Z",
+              "type": "low",
+              "height_m": -2.4024423348813255,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "fes-constituents": {
+      "ok": true,
+      "result": {
+        "constituents": [
+          {
+            "name": "2N2",
+            "source_name": "2n2",
+            "doodson": null,
+            "speed_deg_per_hour": 27.8953548,
+            "amplitude_m": 0.02048316240310669,
+            "phase_deg": 323.2552909851074,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "EPS2",
+            "source_name": "eps2",
+            "doodson": null,
+            "speed_deg_per_hour": 27.4238337,
+            "amplitude_m": 0.006706883907318115,
+            "phase_deg": 309.61163330078125,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "J1",
+            "source_name": "j1",
+            "doodson": null,
+            "speed_deg_per_hour": 15.5854433,
+            "amplitude_m": 0.006172324419021606,
+            "phase_deg": 185.22366333007812,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "K1",
+            "source_name": "k1",
+            "doodson": null,
+            "speed_deg_per_hour": 15.0410686,
+            "amplitude_m": 0.10082550048828125,
+            "phase_deg": 191.04290771484375,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "K2",
+            "source_name": "k2",
+            "doodson": null,
+            "speed_deg_per_hour": 30.0821373,
+            "amplitude_m": 0.03294505834579468,
+            "phase_deg": 21.16753005981445,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "L2",
+            "source_name": "l2",
+            "doodson": null,
+            "speed_deg_per_hour": 29.5284789,
+            "amplitude_m": 0.021613030433654784,
+            "phase_deg": 7.896070957183836,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "LAM2",
+            "source_name": "lambda2",
+            "doodson": null,
+            "speed_deg_per_hour": 29.4556253,
+            "amplitude_m": 0.0055065441131591794,
+            "phase_deg": 27.89668083190918,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "M2",
+            "source_name": "m2",
+            "doodson": null,
+            "speed_deg_per_hour": 28.9841042,
+            "amplitude_m": 0.7605332183837891,
+            "phase_deg": 8.520163536071776,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "M3",
+            "source_name": "m3",
+            "doodson": null,
+            "speed_deg_per_hour": 43.4761563,
+            "amplitude_m": 0.0007029322534799576,
+            "phase_deg": 268.9726257324219,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "M4",
+            "source_name": "m4",
+            "doodson": null,
+            "speed_deg_per_hour": 57.9682084,
+            "amplitude_m": 0.00833160400390625,
+            "phase_deg": 218.03781127929688,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "M6",
+            "source_name": "m6",
+            "doodson": null,
+            "speed_deg_per_hour": 86.9523126,
+            "amplitude_m": 0.001385442763566971,
+            "phase_deg": 110.41837310791016,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "M8",
+            "source_name": "m8",
+            "doodson": null,
+            "speed_deg_per_hour": 115.9364169,
+            "amplitude_m": 0.0005390432104468347,
+            "phase_deg": 104.9703140258789,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MF",
+            "source_name": "mf",
+            "doodson": null,
+            "speed_deg_per_hour": 1.0980331,
+            "amplitude_m": 0.00704808235168457,
+            "phase_deg": 340.0078430175781,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MKS2",
+            "source_name": "mks2",
+            "doodson": null,
+            "speed_deg_per_hour": 29.0662415,
+            "amplitude_m": 0.002311333566904068,
+            "phase_deg": 197.9104461669922,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MM",
+            "source_name": "mm",
+            "doodson": null,
+            "speed_deg_per_hour": 0.5443747,
+            "amplitude_m": 0.002195842117071152,
+            "phase_deg": 322.0948181152344,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MN4",
+            "source_name": "mn4",
+            "doodson": null,
+            "speed_deg_per_hour": 57.4238337,
+            "amplitude_m": 0.0054829764366149895,
+            "phase_deg": 268.03106689453125,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MS4",
+            "source_name": "ms4",
+            "doodson": null,
+            "speed_deg_per_hour": 58.9841042,
+            "amplitude_m": 0.0022900021076202393,
+            "phase_deg": 326.51043701171875,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MSF",
+            "source_name": "msf",
+            "doodson": null,
+            "speed_deg_per_hour": 1.0158958,
+            "amplitude_m": 0.000367346778512001,
+            "phase_deg": 115.45069885253906,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MU2",
+            "source_name": "mu2",
+            "doodson": null,
+            "speed_deg_per_hour": 27.9682084,
+            "amplitude_m": 0.021998188495635985,
+            "phase_deg": 342.3688735961914,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "N2",
+            "source_name": "n2",
+            "doodson": null,
+            "speed_deg_per_hour": 28.4397295,
+            "amplitude_m": 0.16810226440429688,
+            "phase_deg": 346.2229471206665,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "N4",
+            "source_name": "n4",
+            "doodson": null,
+            "speed_deg_per_hour": 56.879459,
+            "amplitude_m": 0.0005687900260090829,
+            "phase_deg": 215.50123596191406,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "NU2",
+            "source_name": "nu2",
+            "doodson": null,
+            "speed_deg_per_hour": 28.5125831,
+            "amplitude_m": 0.03135293006896973,
+            "phase_deg": 336.7022476196289,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "O1",
+            "source_name": "o1",
+            "doodson": null,
+            "speed_deg_per_hour": 13.9430356,
+            "amplitude_m": 0.07626508235931397,
+            "phase_deg": 194.71275329589844,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "P1",
+            "source_name": "p1",
+            "doodson": null,
+            "speed_deg_per_hour": 14.9589314,
+            "amplitude_m": 0.03190261125564575,
+            "phase_deg": 191.06459045410156,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "Q1",
+            "source_name": "q1",
+            "doodson": null,
+            "speed_deg_per_hour": 13.3986609,
+            "amplitude_m": 0.015450173616409303,
+            "phase_deg": 186.06639099121094,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "R2",
+            "source_name": "r2",
+            "doodson": null,
+            "speed_deg_per_hour": 30.0410667,
+            "amplitude_m": 0.0012131823599338533,
+            "phase_deg": 356.29925537109375,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "S1",
+            "source_name": "s1",
+            "doodson": null,
+            "speed_deg_per_hour": 15.0,
+            "amplitude_m": 0.012162830829620361,
+            "phase_deg": 168.7591552734375,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "S2",
+            "source_name": "s2",
+            "doodson": null,
+            "speed_deg_per_hour": 30.0,
+            "amplitude_m": 0.11882403373718262,
+            "phase_deg": 28.451025009155277,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "S4",
+            "source_name": "s4",
+            "doodson": null,
+            "speed_deg_per_hour": 60.0,
+            "amplitude_m": 0.0014409542083740235,
+            "phase_deg": 13.070630073547365,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "SA",
+            "source_name": "sa",
+            "doodson": null,
+            "speed_deg_per_hour": 0.0410686,
+            "amplitude_m": 0.00031091464683413505,
+            "phase_deg": 156.78140258789062,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "SSA",
+            "source_name": "ssa",
+            "doodson": null,
+            "speed_deg_per_hour": 0.0821373,
+            "amplitude_m": 0.0006855974346399307,
+            "phase_deg": 326.3694152832031,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "T2",
+            "source_name": "t2",
+            "doodson": null,
+            "speed_deg_per_hour": 29.9589333,
+            "amplitude_m": 0.008439944386482238,
+            "phase_deg": 351.8100280761719,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MTM",
+            "source_name": "mtm",
+            "doodson": null,
+            "speed_deg_per_hour": 1.6424078,
+            "amplitude_m": 0.0017458708584308625,
+            "phase_deg": 356.9918518066406,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          },
+          {
+            "name": "MSQM",
+            "source_name": "msqm",
+            "doodson": null,
+            "speed_deg_per_hour": 2.1139289,
+            "amplitude_m": 0.00012817564420402052,
+            "phase_deg": 358.6829833984375,
+            "amp_uncertainty_m": null,
+            "phase_uncertainty_deg": null,
+            "kept_reason": null
+          }
+        ]
+      }
+    },
+    "fes-heights": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-58e73c43",
+          "timezone": "America/New_York",
+          "method": "harmonic",
+          "set_id": "OTC-58e73c43/fes2022",
+          "convention_id": "fes2022b-ocean-greenwich",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2-fes34",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "mean_level",
+          "datum_name": "mean_level",
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:00:00Z",
+              "height_m": 0.7819158496038228,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T14:00:00Z",
+              "height_m": -0.6436262594542662,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:00:00Z",
+              "height_m": 0.5428250182472502,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "fes-events": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-58e73c43",
+          "timezone": "America/New_York",
+          "method": "harmonic",
+          "set_id": "OTC-58e73c43/fes2022",
+          "convention_id": "fes2022b-ocean-greenwich",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2-fes34",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": "mean_level",
+          "datum_name": "mean_level",
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T13:55:01Z",
+              "type": "low",
+              "height_m": -0.6442188485256978,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T19:53:22Z",
+              "type": "high",
+              "height_m": 0.5438360242361042,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T02:00:55Z",
+              "type": "low",
+              "height_m": -0.7311983650924223,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T08:30:49Z",
+              "type": "high",
+              "height_m": 0.8022619022623778,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T14:54:04Z",
+              "type": "low",
+              "height_m": -0.6297569464480756,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T20:49:45Z",
+              "type": "high",
+              "height_m": 0.49438012259445013,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T02:52:35Z",
+              "type": "low",
+              "height_m": -0.7214529144143703,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "belfast-datums": {
+      "ok": true,
+      "result": {
+        "datums": {
+          "set_id": null,
+          "zero": "chart_datum",
+          "zero_name": "MLLW",
+          "chart_datum": "mllw",
+          "msl_offset_m": null,
+          "levels": [
+            {
+              "key": "dtl",
+              "value_m": 1.681,
+              "above_chart_m": 1.681,
+              "kind": "published",
+              "method": "source",
+              "source_name": "DTL",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": "8415490",
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "hat",
+              "value_m": 4.046442639669566,
+              "above_chart_m": 4.046442639669566,
+              "kind": "computed",
+              "method": "subordinate_offsets",
+              "source_name": null,
+              "epoch": {
+                "end": "2038-12-31",
+                "name": "OTC LAT 2020-2038",
+                "start": "2020-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": 0.0767335201129778,
+              "uncertainty_basis": "calibrated",
+              "flags": [],
+              "fallback": {
+                "basis": "NOAA offsets on the published reference chart origin; empirical six-case tuning spread only",
+                "otc_finding": "UNRELIABLE approximate derived-from-offsets HAT. T5s FAILED: median/max absolute residual 0.10275720611039024/0.20507243572722722 m exceed fixed 0.03/0.08 m limits. Empirical tuning sample SD 0.0767335201129778 m, signed bias 0.10100646751777703 m, n=6. Not independently validated station accuracy or a confidence bound. Normal datum gate not accepted.",
+                "reason": "datum_gate_failed"
+              }
+            },
+            {
+              "key": "lat",
+              "value_m": -0.6905954799521256,
+              "above_chart_m": -0.6905954799521256,
+              "kind": "computed",
+              "method": "subordinate_offsets",
+              "source_name": null,
+              "epoch": {
+                "end": "2038-12-31",
+                "name": "OTC LAT 2020-2038",
+                "start": "2020-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": 0.14998228801430324,
+              "uncertainty_basis": "calibrated",
+              "flags": [],
+              "fallback": {
+                "basis": "NOAA offsets on the published reference chart origin; empirical six-case tuning spread only",
+                "otc_finding": "UNRELIABLE approximate derived-from-offsets LAT. T5s FAILED: median/max absolute residual 0.1097529184971559/0.22891407683435155 m exceed fixed 0.03/0.08 m limits. Empirical tuning sample SD 0.14998228801430324 m, signed bias -0.05126672680096169 m, n=6. Not independently validated station accuracy or a confidence bound. Normal datum gate not accepted.",
+                "reason": "datum_gate_failed"
+              }
+            },
+            {
+              "key": "mhhw",
+              "value_m": 3.362,
+              "above_chart_m": 3.362,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MHHW",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": "8415490",
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mhw",
+              "value_m": 3.238,
+              "above_chart_m": 3.238,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MHW",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": "8415490",
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mllw",
+              "value_m": 0.0,
+              "above_chart_m": 0.0,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MLLW",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": "8415490",
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mlw",
+              "value_m": 0.12,
+              "above_chart_m": 0.12,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MLW",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": "8415490",
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "msl",
+              "value_m": 1.695,
+              "above_chart_m": 1.695,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MSL",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": "8415490",
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "mtl",
+              "value_m": 1.679,
+              "above_chart_m": 1.679,
+              "kind": "published",
+              "method": "source",
+              "source_name": "MTL",
+              "epoch": {
+                "end": "2001-12-31",
+                "name": "NTDE 1983-2001",
+                "start": "1983-01-01"
+              },
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": "8415490",
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "navd88",
+              "value_m": 1.776,
+              "above_chart_m": 1.776,
+              "kind": "published",
+              "method": "source",
+              "source_name": "NAVD88",
+              "epoch": null,
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            },
+            {
+              "key": "stnd",
+              "value_m": -0.879,
+              "above_chart_m": -0.879,
+              "kind": "published",
+              "method": "source",
+              "source_name": "STND",
+              "epoch": null,
+              "data_span": null,
+              "control_station_id": null,
+              "control_set_id": null,
+              "control_source_id": null,
+              "uncertainty_m": null,
+              "uncertainty_basis": null,
+              "flags": []
+            }
+          ]
+        }
+      }
+    },
+    "belfast-events-mllw": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-e09cdff7",
+          "timezone": "America/New_York",
+          "method": "offsets",
+          "set_id": "OTC-342235fc/noaa/8413320",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": "OTC-342235fc",
+          "reference_bin": null,
+          "datum": "mllw",
+          "datum_name": "mllw",
+          "datum_kind": "published",
+          "datum_uncertainty_m": null,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T10:32:53Z",
+              "type": "high",
+              "height_m": 3.207490995111115,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T16:53:06Z",
+              "type": "low",
+              "height_m": 0.1948826763666698,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T23:07:44Z",
+              "type": "high",
+              "height_m": 2.8874257110579618,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T05:09:25Z",
+              "type": "low",
+              "height_m": 0.3528308639801114,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T11:30:33Z",
+              "type": "high",
+              "height_m": 3.1805211038415027,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T17:53:36Z",
+              "type": "low",
+              "height_m": 0.18794032605793498,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T00:08:57Z",
+              "type": "high",
+              "height_m": 2.8222508949492724,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T06:06:20Z",
+              "type": "low",
+              "height_m": 0.42656289512705814,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "belfast-events-lat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-e09cdff7",
+          "timezone": "America/New_York",
+          "method": "offsets",
+          "set_id": "OTC-342235fc/noaa/8413320",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": "OTC-342235fc",
+          "reference_bin": null,
+          "datum": "lat",
+          "datum_name": "lat",
+          "datum_kind": "computed",
+          "datum_uncertainty_m": 0.14998228801430324,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T10:32:53Z",
+              "type": "high",
+              "height_m": 3.8980864750632405,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T16:53:06Z",
+              "type": "low",
+              "height_m": 0.8854781563187953,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T23:07:44Z",
+              "type": "high",
+              "height_m": 3.5780211910100874,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T05:09:25Z",
+              "type": "low",
+              "height_m": 1.0434263439322369,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T11:30:33Z",
+              "type": "high",
+              "height_m": 3.8711165837936283,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T17:53:36Z",
+              "type": "low",
+              "height_m": 0.8785358060100605,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T00:08:57Z",
+              "type": "high",
+              "height_m": 3.512846374901398,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T06:06:20Z",
+              "type": "low",
+              "height_m": 1.1171583750791836,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "belfast-events-hat": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-e09cdff7",
+          "timezone": "America/New_York",
+          "method": "offsets",
+          "set_id": "OTC-342235fc/noaa/8413320",
+          "convention_id": "noaa-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": "OTC-342235fc",
+          "reference_bin": null,
+          "datum": "hat",
+          "datum_name": "hat",
+          "datum_kind": "computed",
+          "datum_uncertainty_m": 0.0767335201129778,
+          "bin_number": null,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T10:32:53Z",
+              "type": "high",
+              "height_m": -0.8389516445584513,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T16:53:06Z",
+              "type": "low",
+              "height_m": -3.851559963302896,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T23:07:44Z",
+              "type": "high",
+              "height_m": -1.1590169286116043,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T05:09:25Z",
+              "type": "low",
+              "height_m": -3.6936117756894546,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T11:30:33Z",
+              "type": "high",
+              "height_m": -0.8659215358280634,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T17:53:36Z",
+              "type": "low",
+              "height_m": -3.858502313611631,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T00:08:57Z",
+              "type": "high",
+              "height_m": -1.2241917447202937,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T06:06:20Z",
+              "type": "low",
+              "height_m": -3.6198797445425077,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "current-series": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-00bdf4b5",
+          "timezone": "America/Los_Angeles",
+          "method": "harmonic",
+          "set_id": "OTC-00bdf4b5/noaa-currents/PUG1523",
+          "convention_id": "noaa-currents-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": null,
+          "datum_name": null,
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": 14,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:00:00Z",
+              "velocity_major_ms": 0.12255034749444835,
+              "velocity_minor_ms": 0.002404163725982865,
+              "speed_ms": 0.12257392738356464,
+              "direction_deg": 192.72387088669444,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T14:00:00Z",
+              "velocity_major_ms": 0.03543332812124898,
+              "velocity_minor_ms": 0.0644289671299161,
+              "speed_ms": 0.0735296712026914,
+              "direction_deg": 252.79098404023324,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:00:00Z",
+              "velocity_major_ms": 0.025574796943391626,
+              "velocity_minor_ms": 0.021764119905468955,
+              "speed_ms": 0.03358194684581797,
+              "direction_deg": 231.99774135519465,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T02:00:00Z",
+              "velocity_major_ms": 0.10639923121982439,
+              "velocity_minor_ms": 0.0687782684271318,
+              "speed_ms": 0.12669351448280314,
+              "direction_deg": 224.47931300565665,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T08:00:00Z",
+              "velocity_major_ms": 0.3671602428646128,
+              "velocity_minor_ms": 0.011410074241504104,
+              "speed_ms": 0.36733749296062623,
+              "direction_deg": 193.37998239012455,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T14:00:00Z",
+              "velocity_major_ms": -0.01667560934155736,
+              "velocity_minor_ms": 0.060646797681866246,
+              "speed_ms": 0.06289761534412455,
+              "direction_deg": 296.97426620328633,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T20:00:00Z",
+              "velocity_major_ms": 0.098486093066435,
+              "velocity_minor_ms": 0.019007607108630187,
+              "speed_ms": 0.10030353760205342,
+              "direction_deg": 202.52365667425352,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T02:00:00Z",
+              "velocity_major_ms": 0.06288748921589049,
+              "velocity_minor_ms": 0.05463727749116433,
+              "speed_ms": 0.08330707287814905,
+              "direction_deg": 232.584436987559,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "current-events": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-00bdf4b5",
+          "timezone": "America/Los_Angeles",
+          "method": "harmonic",
+          "set_id": "OTC-00bdf4b5/noaa-currents/PUG1523",
+          "convention_id": "noaa-currents-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": null,
+          "reference_bin": null,
+          "datum": null,
+          "datum_name": null,
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": 14,
+          "omitted_event_types": null,
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T08:32:52Z",
+              "type": "slack_before_ebb",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T10:32:28Z",
+              "type": "max_ebb",
+              "velocity_ms": -0.19346881918939146,
+              "direction_deg": 7.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T13:22:29Z",
+              "type": "slack_before_flood",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T17:11:25Z",
+              "type": "max_flood",
+              "velocity_ms": 0.30652011105881155,
+              "direction_deg": 198.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T20:08:06Z",
+              "type": "slack_before_ebb",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T21:57:54Z",
+              "type": "max_ebb",
+              "velocity_ms": -0.24230329518973692,
+              "direction_deg": 7.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T00:42:57Z",
+              "type": "slack_before_flood",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T02:15:45Z",
+              "type": "max_flood",
+              "velocity_ms": 0.10925165429376521,
+              "direction_deg": 198.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T06:49:25Z",
+              "type": "max_flood",
+              "velocity_ms": 0.42807189944160995,
+              "direction_deg": 198.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T09:41:32Z",
+              "type": "slack_before_ebb",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T11:46:00Z",
+              "type": "max_ebb",
+              "velocity_ms": -0.19570972622197869,
+              "direction_deg": 7.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T14:10:32Z",
+              "type": "slack_before_flood",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T17:59:17Z",
+              "type": "max_flood",
+              "velocity_ms": 0.24479848653185887,
+              "direction_deg": 198.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T20:40:58Z",
+              "type": "slack_before_ebb",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T22:47:57Z",
+              "type": "max_ebb",
+              "velocity_ms": -0.2972809290798668,
+              "direction_deg": 7.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T01:34:12Z",
+              "type": "slack_before_flood",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T03:13:17Z",
+              "type": "max_flood",
+              "velocity_ms": 0.1454019665368546,
+              "direction_deg": 198.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T07:51:33Z",
+              "type": "max_flood",
+              "velocity_ms": 0.4942570702802497,
+              "direction_deg": 198.0,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    },
+    "subordinate-series-refusal": {
+      "ok": false,
+      "error": {
+        "code": "extremes_only",
+        "message": "subordinate currents provide events only",
+        "fields": {}
+      }
+    },
+    "subordinate-events": {
+      "ok": true,
+      "result": {
+        "prediction": {
+          "station_id": "OTC-0034ae14",
+          "timezone": "America/New_York",
+          "method": "offsets",
+          "set_id": "OTC-0cfcf1db/noaa-currents/LIS1001",
+          "convention_id": "noaa-currents-harcon-gmt",
+          "astro_table_id": "otc-tcd-20251228-ma2mb2",
+          "reference_station_id": "OTC-0cfcf1db",
+          "reference_bin": 13,
+          "datum": null,
+          "datum_name": null,
+          "datum_kind": null,
+          "datum_uncertainty_m": null,
+          "bin_number": 1,
+          "omitted_event_types": [],
+          "tz": null,
+          "tz_version": null,
+          "release": "20261011",
+          "algorithm": "otc-predict-1",
+          "items": [
+            {
+              "time": "2027-01-01T10:15:51Z",
+              "type": "slack_before_ebb",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T12:01:15Z",
+              "type": "max_ebb",
+              "velocity_ms": -0.6361527871454714,
+              "direction_deg": 140.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T16:42:49Z",
+              "type": "slack_before_flood",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T18:58:23Z",
+              "type": "max_flood",
+              "velocity_ms": 0.5527017957455282,
+              "direction_deg": 345.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-01T22:55:58Z",
+              "type": "slack_before_ebb",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T00:28:04Z",
+              "type": "max_ebb",
+              "velocity_ms": -0.5066241278954257,
+              "direction_deg": 140.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T04:45:07Z",
+              "type": "slack_before_flood",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T07:09:29Z",
+              "type": "max_flood",
+              "velocity_ms": 0.6203088275458273,
+              "direction_deg": 345.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T11:12:01Z",
+              "type": "slack_before_ebb",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T13:01:05Z",
+              "type": "max_ebb",
+              "velocity_ms": -0.632857166197897,
+              "direction_deg": 140.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T17:40:42Z",
+              "type": "slack_before_flood",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T19:58:23Z",
+              "type": "max_flood",
+              "velocity_ms": 0.5542617508031941,
+              "direction_deg": 345.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-02T23:55:19Z",
+              "type": "slack_before_ebb",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T01:26:31Z",
+              "type": "max_ebb",
+              "velocity_ms": -0.5018379794326224,
+              "direction_deg": 140.0,
+              "local_time": null,
+              "utc_offset_s": null
+            },
+            {
+              "time": "2027-01-03T05:40:25Z",
+              "type": "slack_before_flood",
+              "velocity_ms": 0.0,
+              "direction_deg": null,
+              "local_time": null,
+              "utc_offset_s": null
+            }
+          ]
+        }
+      }
+    }
+  },
+  "retained_full_native": {
+    "source_sha256": "7695d765a6787fb21c51d41cb6449b6699f019489c25e7a3dbbb6aa2aad7d1e5",
+    "metadata_sha256": "a4c949c15be3ed070a2f416353ee6e1cfdf8be3b5af7fa250b6ae105f6db70ba",
+    "sdk_base": "4b5390d2ce3b06b40230a6af54f1ca8dbd0fec0f",
+    "requests_sha256": "db132959a4875c6559ad584959de7fb9a0f4fb4af427eb97150336a655524d4a",
+    "reference_sha256": "7fc5b95f11477aff6facdc946850e2be028b472c6d6dd045bea2a383002d0782",
+    "outputs": {
+      "python": "3caf6e8f83a7847aa23d26b04f869430d7440f2a5d78818e9742989ff0be573e",
+      "ruby": "3caf6e8f83a7847aa23d26b04f869430d7440f2a5d78818e9742989ff0be573e",
+      "typescript": "cbbeb67d6ace04b22f776078b8beb621190d7558fa96f8260f18a9858b053e62"
+    }
+  }
+}
