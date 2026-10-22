@@ -4,6 +4,11 @@ import type { CacheStore, HttpOptions, HttpResponse, Platform, Unlock } from "./
 
 const CACHE_NAME = "opentideconstants-v1";
 const KEY_BASE = "https://opentideconstants-cache.invalid/v1/";
+// Outside the payload prefix, so native enumeration never exposes this bookkeeping.
+const DIRECTORY_KEY = "https://opentideconstants-cache.invalid/directory";
+// Workers honors HTTP freshness for Cache.put; release verification still belongs to the SDK.
+const WORKER_CACHE_HEADERS = { "Cache-Control": "public, max-age=31536000" };
+const cacheWrites = new Map<string, Promise<void>>();
 
 function hex(buf: ArrayBuffer): string {
     return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -17,6 +22,7 @@ function copy(b: Uint8Array): Uint8Array<ArrayBuffer> {
 
 class BrowserCache implements CacheStore {
     readonly #name: string;
+    #indexed = false;
 
     constructor(name: string) {
         this.#name = name;
@@ -42,6 +48,47 @@ class BrowserCache implements CacheStore {
         }
     }
 
+    async #keys(c: Cache): Promise<string[]> {
+        if (!this.#indexed) {
+            try {
+                return (await c.keys()).map((key) => key.url);
+            } catch (error) {
+                if (!(error instanceof Error) || !error.message.includes("'keys'") ||
+                    !error.message.includes("not implemented")) throw error;
+                this.#indexed = true;
+            }
+        }
+        const response = await c.match(DIRECTORY_KEY);
+        const keys: unknown = response ? await response.json() : [];
+        if (!Array.isArray(keys) || !keys.every((key): key is string =>
+            typeof key === "string" && key.startsWith(KEY_BASE))) throw new Error("invalid cache directory index");
+        const present: string[] = [];
+        for (const key of keys) {
+            const entry = await c.match(key);
+            if (entry) {
+                present.push(key);
+            }
+        }
+        return present;
+    }
+
+    async #change(c: Cache, change: (keys: Set<string>) => Promise<void>): Promise<void> {
+        // Serialize read/modify/write across clients sharing this cache in the runtime.
+        const previous = cacheWrites.get(this.#name) ?? Promise.resolve();
+        const operation = previous.then(async () => {
+            const keys = new Set(await this.#keys(c));
+            await change(keys);
+            if (this.#indexed) await c.put(DIRECTORY_KEY, Response.json([...keys], { headers: WORKER_CACHE_HEADERS }));
+        });
+        const tail = operation.then(() => undefined, () => undefined);
+        cacheWrites.set(this.#name, tail);
+        try {
+            await operation;
+        } finally {
+            if (cacheWrites.get(this.#name) === tail) cacheWrites.delete(this.#name);
+        }
+    }
+
     describe(rel: string): string {
         return `cache-storage:${this.#name}/${rel}`;
     }
@@ -59,27 +106,36 @@ class BrowserCache implements CacheStore {
 
     async write(rel: string, bytes: Uint8Array): Promise<void> {
         // Cache.put replaces an entry in one step, so a reader never sees half a file.
-        await this.#do(rel, "write", (c) => c.put(KEY_BASE + rel, new Response(copy(bytes))));
+        await this.#do(rel, "write", (c) => this.#change(c, async (keys) => {
+            await c.put(KEY_BASE + rel, new Response(copy(bytes), this.#indexed ? { headers: WORKER_CACHE_HEADERS } : undefined));
+            keys.add(KEY_BASE + rel);
+        }));
     }
 
     async remove(rel: string): Promise<void> {
-        await this.#do(rel, "remove", (c) => c.delete(KEY_BASE + rel));
+        await this.#do(rel, "remove", (c) => this.#change(c, async (keys) => {
+            await c.delete(KEY_BASE + rel);
+            keys.delete(KEY_BASE + rel);
+        }));
     }
 
     async removeDir(rel: string): Promise<void> {
         const prefix = KEY_BASE + rel.replace(/\/?$/, "/");
-        await this.#do(rel, "remove", async (c) => {
-            for (const k of await c.keys()) if (k.url.startsWith(prefix)) await c.delete(k);
-        });
+        await this.#do(rel, "remove", (c) => this.#change(c, async (keys) => {
+            for (const key of keys) if (key.startsWith(prefix)) {
+                await c.delete(key);
+                keys.delete(key);
+            }
+        }));
     }
 
     async list(rel: string): Promise<string[]> {
         const prefix = KEY_BASE + rel.replace(/\/?$/, "/");
         return this.#do(rel, "list", async (c) => {
             const names = new Set<string>();
-            for (const k of await c.keys()) {
-                if (k.url.startsWith(prefix)) {
-                    const first = k.url.slice(prefix.length).split("/")[0];
+            for (const key of await this.#keys(c)) {
+                if (key.startsWith(prefix)) {
+                    const first = key.slice(prefix.length).split("/")[0];
                     if (first) names.add(decodeURIComponent(first));
                 }
             }
