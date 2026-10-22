@@ -7,6 +7,7 @@ import { Session } from "node:inspector";
 import { createHash } from "node:crypto";
 import { releaseFromJsonl } from "../dist/loader.js";
 import { parseVerified } from "../dist/core.js";
+import { browserPlatform } from "../dist/browser.js";
 
 test("datestamps order by date, then counter", async () => {
     const { compareDatestamps } = await import("../dist/constants.js");
@@ -698,7 +699,6 @@ test("T34: a cache directory that cannot be read is a cache error, not an empty 
 });
 
 test("T30/T31: no Cache Storage and no DecompressionStream are unsupported, not raw errors or a corrupt file", async () => {
-    const { browserPlatform } = await import("../dist/browser.js");
     const p = browserPlatform();
     const store = await p.cache(null);
     await assert.rejects(store.read("pointer/OTC_index.json"), isCode("unsupported"));
@@ -709,6 +709,71 @@ test("T30/T31: no Cache Storage and no DecompressionStream are unsupported, not 
     } finally {
         globalThis.DecompressionStream = saved;
     }
+});
+
+function browserCacheStorage(t, keysError, requiresFreshness = false) {
+    const saved = Object.getOwnPropertyDescriptor(globalThis, "caches");
+    const entries = new Map();
+    const cache = {
+        async match(key) { return entries.get(typeof key === "string" ? key : key.url)?.clone(); },
+        async put(key, response) {
+            if (requiresFreshness && !/max-age=[1-9]\d*/.test(response.headers.get("cache-control") ?? "")) return;
+            entries.set(typeof key === "string" ? key : key.url, response.clone());
+        },
+        async delete(key) { return entries.delete(typeof key === "string" ? key : key.url); },
+        async keys() {
+            if (keysError) throw keysError;
+            return [...entries.keys()].map((url) => new Request(url));
+        },
+    };
+    Object.defineProperty(globalThis, "caches", { configurable: true, value: { open: async () => cache } });
+    t.after(() => {
+        if (saved) Object.defineProperty(globalThis, "caches", saved);
+        else delete globalThis.caches;
+    });
+    return entries;
+}
+
+test("Workers cache enumeration survives reopening and preserves directory removal", async (t) => {
+    const entries = browserCacheStorage(t, new Error("Failed to execute 'keys' on 'Cache': the method is not implemented."), true);
+    const first = await browserPlatform().cache("worker-test");
+    assert.deepEqual(await first.list("releases"), []);
+    const second = await browserPlatform().cache("worker-test");
+    await Promise.all([
+        first.write("releases/20261011/data", new Uint8Array([1])),
+        second.write("releases/20261011/meta", new Uint8Array([2])),
+        first.write("releases/20261011-other/data", new Uint8Array([3])),
+    ]);
+    const reopened = await browserPlatform().cache("worker-test");
+    assert.deepEqual((await reopened.list("releases")).sort(), ["20261011", "20261011-other"]);
+    assert.deepEqual((await reopened.list("releases/20261011")).sort(), ["data", "meta"]);
+    assert.deepEqual(await reopened.read("releases/20261011/data"), new Uint8Array([1]));
+    await reopened.remove("releases/20261011/meta");
+    assert.deepEqual(await second.list("releases/20261011"), ["data"]);
+    await reopened.removeDir("releases/20261011");
+    assert.deepEqual(await first.list("releases"), ["20261011-other"]);
+    assert.equal(await reopened.read("releases/20261011/data"), null);
+    entries.delete("https://opentideconstants-cache.invalid/v1/releases/20261011-other/data");
+    assert.deepEqual(await reopened.list("releases"), []);
+});
+
+test("ordinary browsers retain native enumeration and discover existing cache entries", async (t) => {
+    const entries = browserCacheStorage(t);
+    const prefix = "https://opentideconstants-cache.invalid/v1/";
+    entries.set(prefix + "releases/20261011/old", new Response("old"));
+    const store = await browserPlatform().cache("browser-test");
+    assert.deepEqual(await store.list("releases/20261011"), ["old"]);
+    await store.write("releases/20261011/new", new Uint8Array([1]));
+    assert.equal(entries.size, 2); // No fallback metadata is introduced in ordinary browsers.
+    await store.removeDir("releases/20261011");
+    assert.equal(entries.size, 0);
+});
+
+test("cache enumeration failures other than unsupported keys remain cache errors", async (t) => {
+    const failure = new Error("Cache Storage access denied");
+    browserCacheStorage(t, failure);
+    const store = await browserPlatform().cache("denied-test");
+    await assert.rejects(store.list("releases"), (e) => isCode("cache")(e) && e.cause === failure);
 });
 
 import * as http from "node:http";
