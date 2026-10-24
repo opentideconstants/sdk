@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from typing import Any, NoReturn, TypeVar, Callable
 from .. import _errors as X
 from .._enums import ExtremeType, CurrentEventType, PredictionMethod
-from .._models import Station, freeze
+from .._models import Station, freeze, _subordinate_offset_id
 from ._astro import AstroTable, instant, utc, angle
 from ._harmonic import Sum, events, RAD, _unrounded_events
 from ._results import HeightPoint, Extreme, CurrentPoint, CurrentEvent, HeightSeries, ExtremeList, CurrentSeries, CurrentEventList, DatumInfo, DatumLevel, Ranges
@@ -42,6 +42,7 @@ class _Context:
     reference_bin: Any = None
     bin_number: Any = None
     offsets: Any = None
+    selected_offset_id: Any = None
     total: Any = None
     minor: Any = None
     current_bin: Any = None
@@ -438,9 +439,9 @@ def _context(release, station, quantity, set_id, datum=None, bin_number=None, se
     tide_offsets, current_offsets = station.raw.get('subordinate_offsets'), station.raw.get('current_offsets')
     historical = tide_offsets is not None and tide_offsets.get('offset_id') is not None
     if offset_id is not None:
-        if not historical or tide_offsets['offset_id'] != offset_id:
+        if tide_offsets is None or _subordinate_offset_id(station.station_id, tide_offsets) != offset_id:
             raise X.InvalidArgumentError(f'offset_id {offset_id!r} is not a profile of {station.station_id}')
-        usable = False  # explicit selection chooses the historical path over an ordinary recommendation
+        usable = False  # explicit selection chooses the held profile over an ordinary recommendation
     blocked_better = historical and offset_id is None and release._better_historical_path(release._by_id[station.station_id])
     mixed_current_path = False
     if quantity == 'current' and set_id is None and current_offsets:
@@ -466,12 +467,19 @@ def _context(release, station, quantity, set_id, datum=None, bin_number=None, se
                     licences=release._lic_by_id, selected_reference=constants, better_path=blocked_better,
                     selection='explicit' if offset_id is not None else 'auto', commercial_only=release._commercial_only)
             table = _table(release, constants)
-            context = _Context(station, constants, table, reference=reference, offsets=tide_offsets)
+            context = _Context(station, constants, table, reference=reference, offsets=tide_offsets,
+                               selected_offset_id=offset_id)
             # Validate all constituents before datum checks.
             Sum(table, constants.raw.get('constituents') or ())
             reference_term = _datum(constants.raw.get('datum'), 'chart', _Context(reference, constants, table), published=True)
             subordinate_term = _subdatum(dict(tide_offsets, datum=_retained_datum(
                 release, station, offsets=tide_offsets)), datum, context)
+            if offset_id is not None and not historical:
+                basis = ((tide_offsets.get('datum') or {}).get('basis') or {}).get(context.datum_name) or {}
+                fallback = basis.get('fallback') or {}
+                if fallback.get('otc_finding'):
+                    context.datum_method = basis.get('method')
+                    context.datum_flags = (*context.datum_flags, fallback['otc_finding'])
             high_time, low_time = (tide_offsets.get('time_offset_' + k + '_min', 0.0) or 0.0 for k in ('high', 'low'))
             identity = 1.0 if kind == 'R' else 0.0
             high_height, low_height = (identity if tide_offsets.get('height_offset_' + k) is None else tide_offsets['height_offset_' + k] for k in ('high', 'low'))
@@ -533,6 +541,13 @@ def _result(release, context, cls: type[_ResultT], items, datum=None) -> _Result
     if cls in (HeightSeries, ExtremeList) and context.datum_method:
         fields['source_note'] = '; '.join((f'Retained datum method: {context.datum_method}',
                                           *context.datum_flags))
+    if cls in (HeightSeries, ExtremeList) and context.selected_offset_id is not None and context.offsets.get('offset_id') is None:
+        fields.update(set_id=None, offset_id=context.selected_offset_id,
+                      reference_set_id=context.constants.set_id,
+                      reference_source_version=context.constants.source_version)
+        fields['source_note'] = '; '.join(filter(None, (
+            fields.get('source_note'),
+            'OTC subordinate-offset calculation; explicitly selected preserved profile; no transfer to own harmonic model.')))
     if cls is CurrentEventList:
         fields['omitted_event_types'] = context.omitted
     if cls in (HeightSeries, ExtremeList) and context.offsets is not None and context.offsets.get('offset_id') is not None:
