@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import math
+import hashlib
+import json
 from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import Any, NoReturn, TypeVar, Callable
@@ -47,6 +49,8 @@ class _Context:
     datum_name: Any = None
     datum_kind: Any = None
     datum_uncertainty: Any = None
+    datum_method: Any = None
+    datum_flags: tuple[str, ...] = ()
     omitted: Any = None
 
 
@@ -131,6 +135,127 @@ def _unavailable(missing) -> NoReturn:
     raise X.DatumUnavailableError(f'datum is missing {missing}', missing=missing)
 
 
+def _retained_datum(release, station, constants=None, offsets=None):
+    """An effective named view; retained values never alter the release or its defaults."""
+    model = constants.raw if constants is not None else {}
+    raw = (offsets if offsets is not None else model).get('datum') or {}
+    named, basis = dict(raw.get('named') or {}), dict(raw.get('basis') or {})
+    additions = {}
+    for source in station.raw.get('source_records') or ():
+        for candidate in source.get('retained_datums') or ():
+            if candidate.get('kind') != 'computed' or candidate.get('units') != 'm':
+                continue
+            if candidate.get('source_record_id') != source.get('source_record_id'):
+                continue
+            frame = candidate.get('frame') or {}
+            binding = candidate.get('input_binding') or {}
+            if offsets is None:
+                source_name = {'ticon': 'ticon-4', 'gesla': 'gesla-fit'}.get(source.get('source'), source.get('source'))
+                if (not model or frame.get('kind') != 'harmonic_mean' or candidate.get('set_id') != model.get('set_id')
+                        or source_name != model.get('source')
+                        or any(source.get(key) != model.get(key) for key in
+                               ('source_record_id', 'source_version', 'source_model'))):
+                    continue
+                digest = hashlib.sha256(json.dumps(model, sort_keys=True, separators=(',', ':'),
+                                                    ensure_ascii=False, default=dict).encode()).hexdigest()
+                if binding.get('set_id') != model.get('set_id') or binding.get('constant_set_sha256') != digest:
+                    continue
+            else:
+                method = candidate.get('method')
+                if (method not in ('noaa_subordinate_reference_datums_v1', 'noaa_subordinate_mtl_msl_proxy_v1')
+                        or frame.get('kind') != 'unknown' or frame.get('name') != 'NOAA subordinate MLLW'
+                        or (offsets.get('datum') or {}).get('zero_name') != 'MLLW'):
+                    continue
+                native = (candidate.get('basis') or {}).get('native_offsets') or {}
+                keys = ('reference_station_id', 'height_adjusted_type', 'height_offset_high',
+                        'height_offset_low', 'time_offset_high_min', 'time_offset_low_min')
+                if any(key not in native or native[key] != offsets.get(key) for key in keys):
+                    continue
+                if offsets.get('source_record_id') is not None and any(
+                        offsets.get(key) != source.get(key) for key in ('source', 'source_record_id', 'source_version')):
+                    continue
+                own, reference = binding.get('published_offsets') or {}, binding.get('published_reference') or {}
+                if (any(own.get(key) != source.get(key) for key in ('source', 'source_record_id', 'source_version'))
+                        or reference.get('native_station_id') != offsets.get('reference_station_id')):
+                    continue
+                reference_station = release.station(reference['native_station_id'])
+                if reference_station is None or not any(
+                        record.get('source') == reference.get('source')
+                        and record.get('source_record_id') == reference.get('source_record_id')
+                        and any(datum.get('kind') == 'published'
+                                and (datum.get('input_binding') or {}).get('sha256') == reference.get('sha256')
+                                and (datum.get('input_binding') or {}).get('source_url') == reference.get('source_url')
+                                for datum in record.get('retained_datums') or ())
+                        for record in reference_station.raw.get('source_records') or ()):
+                    continue
+                if not all(isinstance(proof.get('response_json'), str)
+                           and hashlib.sha256(proof['response_json'].encode()).hexdigest() == proof.get('sha256')
+                           for proof in (own, reference)):
+                    continue
+                try:
+                    published = json.loads(own['response_json'])
+                    reference_body = json.loads(reference['response_json'])
+                except (ValueError, TypeError):
+                    continue
+                endpoint = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/'
+                if (not isinstance(published, dict) or not isinstance(reference_body, dict)
+                        or own.get('source_url') != endpoint + source['source_record_id'] + '/tidepredoffsets.json'
+                        or published.get('refStationId') != reference.get('source_record_id')
+                        or own.get('reference_source_record_id') != reference.get('source_record_id')
+                        or reference_body.get('self') != endpoint + reference['source_record_id'] + '/datums.json'
+                        or reference_body.get('units') != 'meters'
+                        or (candidate.get('basis') or {}).get('reference_epoch') != reference_body.get('epoch')):
+                    continue
+                operation = published.get('heightAdjustedType')
+                factor = 0.3048 if operation == 'F' else 1.0
+                adjustments = (('height_offset_high', 'heightOffsetHighTide', factor),
+                               ('height_offset_low', 'heightOffsetLowTide', factor),
+                               ('time_offset_high_min', 'timeOffsetHighTide', 1.0),
+                               ('time_offset_low_min', 'timeOffsetLowTide', 1.0))
+                if (operation not in ('R', 'F') or offsets.get('height_adjusted_type') != ('A' if operation == 'F' else 'R')
+                        or any(not isinstance(published.get(field), (int, float))
+                               or isinstance(published[field], bool)
+                               or not math.isclose(published[field] * scale, offsets[native_key], rel_tol=0, abs_tol=1e-12)
+                               for native_key, field, scale in adjustments)):
+                    continue
+                if method == 'noaa_subordinate_mtl_msl_proxy_v1':
+                    proof_basis = candidate.get('basis') or {}
+                    if (proof_basis.get('approximation') != 'approximation: MTL used as MSL proxy, subordinate-derived'
+                            or proof_basis.get('proxy_of') != 'derived_mtl' or proof_basis.get('never_default') is not True
+                            or (candidate.get('reliability') or {}).get('status') != 'low'):
+                        continue
+            for key, value in (candidate.get('values') or {}).items():
+                # Units and the proven computational frame admit named heights;
+                # tidal ranges and elapsed intervals are separate quantities.
+                if key in ('mn', 'gt', 'dhq', 'dlq', 'hwi', 'lwi'):
+                    continue
+                if key in named or not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+                    continue
+                additions.setdefault(key, []).append((value, candidate))
+    for key, candidates in additions.items():
+        # An unqualified named request cannot silently choose competing retained estimates.
+        if len(candidates) != 1:
+            continue
+        value, candidate = candidates[0]
+        reliability = candidate.get('reliability') or {}
+        limitations = tuple(reliability.get('limitations') or ())
+        label = (candidate.get('basis') or {}).get('approximation')
+        flags = tuple(filter(None, (reliability.get('status'), label))) + limitations
+        named[key] = value
+        basis[key] = {'kind': candidate['kind'], 'method': candidate.get('method'),
+                      'uncertainty_m': candidate.get('uncertainty_m'), 'flags': flags,
+                      'data_span': candidate.get('window'), '_retained': True,
+                      '_retained_mean': offsets is None}
+    return dict(raw, named=named, basis=basis)
+
+
+def _datum_metadata(context, key, basis):
+    context.datum_name, context.datum_kind, context.datum_uncertainty = key, basis.get('kind'), basis.get('uncertainty_m')
+    if basis.get('_retained'):
+        context.datum_method = basis.get('method')
+        context.datum_flags = tuple(basis.get('flags') or ())
+
+
 def _datum(raw, datum, context, *, published=False):
     datum = 'mean_level' if datum is None else datum
     if datum == 'mean_level' and not published:
@@ -138,6 +263,9 @@ def _datum(raw, datum, context, *, published=False):
         return 0.0
     d = raw or {}
     named, basis = d.get('named') or {}, d.get('basis') or {}
+    if not published and datum in named and (basis.get(datum) or {}).get('_retained_mean'):
+        _datum_metadata(context, datum, basis[datum])
+        return -named[datum]
     harmonic_mean = d.get('zero') == 'harmonic_mean' and not published
     if d.get('msl_offset_m') is None and not harmonic_mean:
         _unavailable('msl_offset_m')
@@ -153,7 +281,7 @@ def _datum(raw, datum, context, *, published=False):
     b = basis.get(key) or {}
     if published and b.get('kind') != 'published':
         _unavailable('published chart datum')
-    context.datum_name, context.datum_kind, context.datum_uncertainty = key, b.get('kind'), b.get('uncertainty_m')
+    _datum_metadata(context, key, b)
     return mean_term - named[key]
 
 
@@ -169,7 +297,7 @@ def _subdatum(offsets, datum, context):
     else:
         _unavailable(datum)
     b = basis.get(key) or {}
-    context.datum_name, context.datum_kind, context.datum_uncertainty = key, b.get('kind'), b.get('uncertainty_m')
+    _datum_metadata(context, key, b)
     return term
 
 
@@ -249,7 +377,8 @@ def _context(release, station, quantity, set_id, datum=None, bin_number=None, se
             # Validate all constituents before datum checks.
             Sum(table, constants.raw.get('constituents') or ())
             reference_term = _datum(constants.raw.get('datum'), 'chart', _Context(reference, constants, table), published=True)
-            subordinate_term = _subdatum(tide_offsets, datum, context)
+            subordinate_term = _subdatum(dict(tide_offsets, datum=_retained_datum(
+                release, station, offsets=tide_offsets)), datum, context)
             high_time, low_time = (tide_offsets.get('time_offset_' + k + '_min', 0.0) or 0.0 for k in ('high', 'low'))
             identity = 1.0 if kind == 'R' else 0.0
             high_height, low_height = (identity if tide_offsets.get('height_offset_' + k) is None else tide_offsets['height_offset_' + k] for k in ('high', 'low'))
@@ -287,7 +416,7 @@ def _context(release, station, quantity, set_id, datum=None, bin_number=None, se
     context = _Context(station, constants, table)
     if quantity == 'water_level':
         context.total = Sum(table, constants.raw.get('constituents') or ())
-        context.total.mean = _datum(constants.raw.get('datum'), datum, context)
+        context.total.mean = _datum(_retained_datum(release, station, constants), datum, context)
     else:
         row = _bin(station, constants.raw.get('current_bins') or (), bin_number)
         context.bin_number = row['bin']
@@ -308,6 +437,9 @@ def _result(release, context, cls: type[_ResultT], items, datum=None) -> _Result
     constructor: Callable[..., _ResultT] = cls
     if cls in (CurrentSeries, CurrentEventList):
         fields['bin_number'] = context.bin_number
+    if cls in (HeightSeries, ExtremeList) and context.datum_method:
+        fields['source_note'] = '; '.join((f'Retained datum method: {context.datum_method}',
+                                          *context.datum_flags))
     if cls is CurrentEventList:
         fields['omitted_event_types'] = context.omitted
     if cls in (HeightSeries, ExtremeList) and context.offsets is not None and context.offsets.get('offset_id') is not None:
@@ -439,12 +571,19 @@ def datums(release, station, set_id=None, all_sets=False) -> DatumInfo | tuple[D
     _options(set_id)
     _validate_all_sets(all_sets)
     if all_sets:
-        return tuple(_datum_info(s.set_id, s.raw.get('datum')) for s in station.constant_sets(include_no_constants=True))
+        infos = tuple(_datum_info(s.set_id, _retained_datum(release, station, s))
+                      for s in station.constant_sets(include_no_constants=True))
+        offsets = station.raw.get('subordinate_offsets')
+        if offsets:
+            effective = _retained_datum(release, station, offsets=offsets)
+            if any(b.get('_retained') for b in effective['basis'].values()):
+                return infos + (_datum_info(None, effective),)
+        return infos
     constants = _chosen(release, station, set_id)
     if constants is not None:
-        return _datum_info(constants.set_id, constants.raw.get('datum'))
+        return _datum_info(constants.set_id, _retained_datum(release, station, constants))
     offsets = station.raw.get('subordinate_offsets')
-    return _datum_info(None, offsets.get('datum')) if offsets else None
+    return _datum_info(None, _retained_datum(release, station, offsets=offsets)) if offsets else None
 
 
 def ranges(release, station, set_id=None) -> Ranges:

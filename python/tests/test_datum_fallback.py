@@ -3,6 +3,7 @@
 import copy
 import dataclasses
 import datetime as dt
+import hashlib
 import json
 import os
 import sys
@@ -34,7 +35,172 @@ def write_release(directory, document, mode, name="OTC_20991231.7"):
     return path
 
 
+def retained_source(constants, candidates):
+    return {
+        **{key: constants.get(key) for key in ("source", "source_record_id", "source_version")},
+        "role": "gauge_station", "disposition": "retained", "detail": "test retained datum",
+        "licence_id": constants["licence_id"], "published_set_ids": [constants["set_id"]],
+        "provenance": {"input_sha256": [], "inventory_sha256": "0" * 64},
+        "retained_datums": candidates,
+    }
+
+
 class DatumFallbackTest(unittest.TestCase):
+    def retained_model(self):
+        document = json.loads(PREDICT.read_text(encoding="utf-8"))
+        station = document["stations"][1]
+        constants = station["constant_sets"][0]
+        constants.pop("datum", None)
+        digest = hashlib.sha256(json.dumps(constants, sort_keys=True, separators=(",", ":"),
+                                           ensure_ascii=False).encode()).hexdigest()
+        candidate = {
+            "kind": "computed", "method": "sdk_harmonic_extremes_event_means_v1",
+            "source_record_id": constants["source_record_id"], "set_id": constants["set_id"],
+            "units": "m", "values": {"mhw": 0.4},
+            "frame": {"kind": "harmonic_mean", "tie_status": "unknown"},
+            "input_binding": {"set_id": constants["set_id"], "constant_set_sha256": digest},
+            "uncertainty_m": None,
+            "reliability": {"status": "accuracy_unverified", "limitations": ["not surveyed"]},
+        }
+        station["source_records"] = [retained_source(constants, [candidate])]
+        return document, station, constants, candidate
+
+    def test_retained_named_height_matches_own_model_without_changing_defaults(self):
+        document, station, constants, candidate = self.retained_model()
+        times = [dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)]
+        for mode in ("eager", "stream"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                with otc.OpenTideConstants(file=write_release(directory, document, mode), mode=mode) as client:
+                    sid, set_id = station["station_id"], constants["set_id"]
+                    mean = client.heights_at(sid, times, datum="mean_level", set_id=set_id)
+                    named = client.heights_at(sid, times, datum="mhw", set_id=set_id)
+                    self.assertAlmostEqual(named.items[0].height_m, mean.items[0].height_m - 0.4)
+                    self.assertEqual(client.heights_at(sid, times, set_id=set_id).items, mean.items)
+                    self.assertIn(candidate["method"], named.source_note)
+                    self.assertIsNone(named.datum_uncertainty_m)
+                    self.assertIn("accuracy_unverified", named.source_note)
+                    level = next(level for level in client.datums(sid, set_id=set_id).levels
+                                 if level.key == "mhw")
+                    self.assertEqual(level.method, candidate["method"])
+                    self.assertIn("not surveyed", level.flags)
+                    self.assertNotIn("datum", client.require_station(sid).constant_set(set_id).raw)
+
+    def test_retained_height_requires_exact_source_model_frame_and_unique_value(self):
+        for fault in ("source", "source_version", "set_id", "hash", "frame", "units", "duplicate"):
+            document, station, constants, candidate = self.retained_model()
+            if fault in ("source", "source_version"):
+                station["source_records"][0][fault] = "different"
+            elif fault == "set_id":
+                candidate["set_id"] = "another/model"
+            elif fault == "hash":
+                candidate["input_binding"]["constant_set_sha256"] = "0" * 64
+            elif fault == "frame":
+                candidate["frame"]["kind"] = "gauge_zero"
+            elif fault == "units":
+                candidate["units"] = "ft"
+            else:
+                station["source_records"][0]["retained_datums"].append(copy.deepcopy(candidate))
+            for mode in ("eager", "stream"):
+                with self.subTest(fault=fault, mode=mode), tempfile.TemporaryDirectory() as directory:
+                    with otc.OpenTideConstants(file=write_release(directory, document, mode), mode=mode) as client:
+                        self.assertFalse(client.datums(station["station_id"], set_id=constants["set_id"]).levels)
+                        with self.assertRaises(otc.DatumUnavailableError):
+                            client.heights_at(station["station_id"],
+                                [dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)],
+                                datum="mhw", set_id=constants["set_id"])
+
+    def test_existing_named_datum_takes_precedence(self):
+        document, station, constants, candidate = self.retained_model()
+        constants["datum"] = {"zero": "harmonic_mean", "named": {"mhw": 0.9},
+                              "basis": {"mhw": {"kind": "published", "method": "source"}}}
+        candidate["input_binding"]["constant_set_sha256"] = hashlib.sha256(json.dumps(
+            constants, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+        with tempfile.TemporaryDirectory() as directory:
+            with otc.OpenTideConstants(file=write_release(directory, document, "eager")) as client:
+                level = client.datums(station["station_id"], set_id=constants["set_id"]).levels[0]
+                self.assertEqual((level.value_m, level.method), (0.9, "source"))
+
+    def test_other_retained_heights_and_canonical_source_families(self):
+        for source, model_source, key in (("noaa", "noaa", "llwlt"), ("ticon", "ticon-4", "tlt"),
+                                          ("gesla", "gesla-fit", "nllw"), ("noaa", "noaa", "mhwn"),
+                                          ("noaa", "noaa", "mlwn")):
+            document, station, constants, candidate = self.retained_model()
+            constants["source"] = model_source
+            station["source_records"][0]["source"] = source
+            candidate["values"] = {key: 0.4, "mn": 0.8, "gt": 1.0, "hwi": 3.0, "lwi": 9.0}
+            candidate["input_binding"]["constant_set_sha256"] = hashlib.sha256(json.dumps(
+                constants, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest()
+            with self.subTest(source=source, key=key), tempfile.TemporaryDirectory() as directory:
+                with otc.OpenTideConstants(file=write_release(directory, document, "stream"), mode="stream") as client:
+                    times = [dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)]
+                    binding = {"set_id": constants["set_id"]}
+                    mean = client.heights_at(station["station_id"], times, datum="mean_level", **binding)
+                    selected = client.heights_at(station["station_id"], times, datum=key, **binding)
+                    self.assertAlmostEqual(mean.items[0].height_m - selected.items[0].height_m, 0.4)
+                    self.assertEqual([level.key for level in client.datums(station["station_id"], **binding).levels], [key])
+
+    def test_low_proxy_keeps_labels_and_requires_actual_subordinate_binding(self):
+        for fault in (None, "offset", "reference", "source", "body", "label"):
+            document = json.loads(PREDICT.read_text(encoding="utf-8"))
+            station = next(row for row in document["stations"] if row["station_id"] == "OTC-P-0030")
+            reference = document["stations"][0]
+            model = reference["constant_sets"][0]
+            own_model = dict(model, source_record_id="noaa:P-0030", set_id="fixture-own-source")
+            offsets = station["subordinate_offsets"]
+            offsets.update(height_offset_high=1.05, height_offset_low=1.05,
+                           time_offset_high_min=20, time_offset_low_min=20,
+                           datum={"zero": "chart_datum", "zero_name": "MLLW", "chart_datum": "mllw",
+                                  "named": {"mllw": 0}, "basis": {}})
+            endpoint = "https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/"
+            reference_url = endpoint + model["source_record_id"] + "/datums.json?units=metric"
+            body = json.dumps({"self": reference_url.split("?")[0], "units": "meters", "epoch": "fixture"})
+            reference_proof = {"source": "noaa", "source_record_id": model["source_record_id"],
+                               "native_station_id": reference["station_id"], "source_url": reference_url,
+                               "response_json": body, "sha256": hashlib.sha256(body.encode()).hexdigest()}
+            reference["source_records"] = [retained_source(model, [{"kind": "published", "input_binding": reference_proof}])]
+            body = json.dumps({"refStationId": model["source_record_id"], "heightAdjustedType": "R",
+                               "heightOffsetHighTide": 1.05, "heightOffsetLowTide": 1.05,
+                               "timeOffsetHighTide": 20, "timeOffsetLowTide": 20})
+            own_proof = {**{key: own_model[key] for key in ("source", "source_record_id", "source_version")},
+                         "source_url": endpoint + own_model["source_record_id"] + "/tidepredoffsets.json",
+                         "reference_source_record_id": model["source_record_id"],
+                         "response_json": body, "sha256": hashlib.sha256(body.encode()).hexdigest()}
+            label = "approximation: MTL used as MSL proxy, subordinate-derived"
+            candidate = {"kind": "computed", "method": "noaa_subordinate_mtl_msl_proxy_v1",
+                         "source_record_id": own_model["source_record_id"], "units": "m", "values": {"msl": 0.25},
+                         "frame": {"kind": "unknown", "name": "NOAA subordinate MLLW"},
+                         "basis": {"native_offsets": {key: offsets[key] for key in (
+                             "reference_station_id", "height_adjusted_type", "height_offset_high", "height_offset_low",
+                             "time_offset_high_min", "time_offset_low_min")}, "reference_epoch": "fixture",
+                             "approximation": label, "proxy_of": "derived_mtl", "never_default": True},
+                         "input_binding": {"published_offsets": own_proof, "published_reference": reference_proof},
+                         "uncertainty_m": None, "reliability": {"status": "low", "limitations": [label]}}
+            station["source_records"] = [retained_source(own_model, [candidate])]
+            if fault == "offset":
+                candidate["basis"]["native_offsets"]["height_offset_high"] = 2
+            elif fault == "reference":
+                reference_proof["native_station_id"] = station["station_id"]
+            elif fault == "source":
+                own_proof["source_version"] = "other"
+            elif fault == "body":
+                own_proof["response_json"] = "{}"
+                own_proof["sha256"] = hashlib.sha256(b"{}").hexdigest()
+            elif fault == "label":
+                candidate["basis"].pop("approximation")
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
+                with otc.OpenTideConstants(file=write_release(directory, document, "stream"), mode="stream") as client:
+                    times = [dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)]
+                    chart = client.heights_at(station["station_id"], times, datum="chart")
+                    if fault:
+                        with self.assertRaises(otc.DatumUnavailableError):
+                            client.heights_at(station["station_id"], times, datum="msl")
+                    else:
+                        selected = client.heights_at(station["station_id"], times, datum="msl")
+                        self.assertAlmostEqual(chart.items[0].height_m - selected.items[0].height_m, 0.25)
+                        self.assertIn(label, selected.source_note)
+                        self.assertIn("low", selected.source_note)
+                        self.assertIsNone(selected.datum_uncertainty_m)
+
     def test_public_datums_preserves_complete_frozen_fallback(self):
         original = json.loads(PREDICT.read_text(encoding="utf-8"))
         station = original["stations"][0]
@@ -135,6 +301,36 @@ class DatumFallbackTest(unittest.TestCase):
 
 
 class NativeDatumFallbackProof(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get("OTC_RETAINED_SELECTOR_NATIVE"), "actual retained native subset required")
+    def test_actual_retained_named_prediction_and_proxy_labels(self):
+        times = [dt.datetime(2026, 10, 23, 12, tzinfo=dt.timezone(dt.timedelta(hours=-7)))]
+        cases = (
+            ("OTC-c259b8a5", "OTC-c259b8a5/noaa/9465149", "mhw", -0.5881265027627832),
+            ("OTC-17013f42", None, "msl", -1.24581295604024),
+            ("OTC-28c56e20", "OTC-28c56e20/fes2022", "mhw", -0.6429366259334746),
+        )
+        with otc.OpenTideConstants(file=os.environ["OTC_RETAINED_SELECTOR_NATIVE"], mode="stream") as client:
+            for sid, set_id, key, expected in cases:
+                with self.subTest(station=sid):
+                    prediction = client.heights_at(sid, times, datum=key, set_id=set_id)
+                    self.assertAlmostEqual(prediction.items[0].height_m, expected, places=12)
+                    self.assertEqual(prediction.datum_kind, "computed")
+                    self.assertIsNone(prediction.datum_uncertainty_m)
+                    self.assertIn("Retained datum method:", prediction.source_note)
+                    self.assertTrue(any(level.key == key for info in client.datums(sid, all_sets=True)
+                                        for level in info.levels))
+            sid = "OTC-a883bf37"
+            chart = client.extremes(sid, start=times[0], stop=times[0] + dt.timedelta(days=1), datum="chart")
+            proxy = client.extremes(sid, start=times[0], stop=times[0] + dt.timedelta(days=1), datum="msl")
+            self.assertEqual(len(proxy.items), len(chart.items))
+            self.assertTrue(proxy.items)
+            for original, selected in zip(chart.items, proxy.items):
+                self.assertEqual(original.time, selected.time)
+                self.assertAlmostEqual(original.height_m - selected.height_m, 0.244755, places=12)
+            self.assertIn("approximation: MTL used as MSL proxy, subordinate-derived", proxy.source_note)
+            self.assertIn("low", proxy.source_note)
+            self.assertIsNone(proxy.datum_uncertainty_m)
+
     @unittest.skipUnless(
         os.environ.get("OTC_DATUM_FALLBACK_CONTRACT"), "native contract required"
     )
