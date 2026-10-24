@@ -135,6 +135,98 @@ def _unavailable(missing) -> NoReturn:
     raise X.DatumUnavailableError(f'datum is missing {missing}', missing=missing)
 
 
+def _published_msl_datums(station, constants, raw):
+    """Bind an authenticated publisher table to model mean, with the assumption explicit."""
+    if constants is None or constants.quantity != 'water_level':
+        return raw
+    named, basis = dict(raw.get('named') or {}), dict(raw.get('basis') or {})
+    additions = {}
+    endpoint = 'https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations/'
+    height_keys = {'stnd', 'navd88', 'vivd09', 'msl', 'mhhw', 'mhw', 'mtl', 'dtl',
+                   'mlw', 'mllw', 'hat', 'lat', 'mhwn', 'mlwn', 'mhws', 'mlws'}
+    for source in station.raw.get('source_records') or ():
+        ident = source.get('source_record_id')
+        if source.get('source') != 'noaa' or not isinstance(ident, str) or not ident.isdigit():
+            continue
+        metadata = source.get('original_metadata') or {}
+        for candidate in source.get('retained_datums') or ():
+            binding, frame = candidate.get('input_binding') or {}, candidate.get('frame') or {}
+            proof = candidate.get('basis') or {}
+            epoch, digest = proof.get('epoch'), binding.get('sha256')
+            if (candidate.get('kind') != 'published' or candidate.get('units') != 'm'
+                    or candidate.get('source_record_id') != ident
+                    or frame.get('kind') != 'gauge_zero' or frame.get('name') != 'STND'
+                    or frame.get('tie_status') != 'source_declared'
+                    or not isinstance(epoch, str) or not epoch
+                    or not isinstance(digest, str) or len(digest) != 64
+                    or any(c not in '0123456789abcdef' for c in digest)
+                    or binding.get('source_url') != endpoint + ident + '/datums.json?units=metric'):
+                continue
+            values, fields = candidate.get('values') or {}, proof.get('source_fields') or {}
+            table = values
+            response = metadata.get('datums_response_json')
+            # Original source provenance describes the older metadata capture;
+            # later published tables carry their own acquisition receipt binding.
+            if response is None:
+                receipt = binding.get('receipt_sha256')
+                if (not isinstance(receipt, str) or len(receipt) != 64
+                        or any(c not in '0123456789abcdef' for c in receipt)):
+                    continue
+            if response is not None:
+                if (not isinstance(response, str) or hashlib.sha256(response.encode()).hexdigest() != digest
+                        or metadata.get('datums_response_sha256') != digest):
+                    continue
+                try:
+                    body = json.loads(response)
+                except (ValueError, TypeError):
+                    continue
+                if (not isinstance(body, dict) or body.get('self') != endpoint + ident + '/datums.json'
+                        or body.get('units') != 'meters' or body.get('epoch') != epoch):
+                    continue
+                table = {row.get('name'): row.get('value') for row in body.get('datums') or ()
+                         if isinstance(row, dict)}
+            msl = table.get('MSL')
+            if (not isinstance(msl, (int, float)) or isinstance(msl, bool) or not math.isfinite(msl)
+                    or (response is None and (fields.get('MSL') or {}).get('value') != msl)):
+                continue
+            try:
+                identity = json.loads(metadata.get('identity_binding_json') or '{}')
+            except (ValueError, TypeError):
+                continue
+            model = constants.raw
+            same_gauge = (model.get('source') == 'noaa' and model.get('source_record_id') == ident)
+            original = identity.get('original_inventory_source_tuple') or {}
+            same_gauge = same_gauge or (identity.get('same_gauge_asserted') is True
+                and original.get('source') == 'gesla' and model.get('source') == 'gesla-fit'
+                and all(original.get(key) == model.get(key) for key in ('source_record_id', 'source_version')))
+            flags = ['medium' if same_gauge else 'low',
+                     f'bound via published MSL; assumes model mean = agency MSL (epoch {epoch})']
+            if not same_gauge:
+                flags.append('different-model binding; no same-gauge or surveyed frame tie asserted')
+            model_epoch = ((raw.get('basis') or {}).get('msl') or {}).get('epoch')
+            if model_epoch != epoch:
+                flags.append('model and agency MSL epochs differ or model epoch is unknown')
+            mean_in_zero = 0.0 if raw.get('zero') == 'harmonic_mean' else raw.get('msl_offset_m')
+            for key, value in values.items():
+                name = key.lower()
+                field = fields.get(key) or {}
+                if (name not in height_keys or name in named
+                        or not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value)
+                        or field.get('name') != key or field.get('value') != value or table.get(key) != value):
+                    continue
+                # Keep DatumLevel.value_m and above_chart_m in the selected
+                # model's existing zero whenever that zero is established.
+                level = value - msl + (mean_in_zero if mean_in_zero is not None else 0.0)
+                additions.setdefault(name, []).append((level, {
+                    'kind': 'published', 'method': 'published_msl_binding', 'source_name': 'NOAA ' + ident,
+                    'epoch': epoch, 'uncertainty_m': None, 'flags': tuple(flags),
+                    '_retained': True, '_retained_mean': mean_in_zero is None}))
+    for key, candidates in additions.items():
+        if len(candidates) == 1:
+            named[key], basis[key] = candidates[0]
+    return dict(raw, named=named, basis=basis)
+
+
 def _retained_datum(release, station, constants=None, offsets=None):
     """An effective named view; retained values never alter the release or its defaults."""
     model = constants.raw if constants is not None else {}
@@ -246,7 +338,8 @@ def _retained_datum(release, station, constants=None, offsets=None):
                       'uncertainty_m': candidate.get('uncertainty_m'), 'flags': flags,
                       'data_span': candidate.get('window'), '_retained': True,
                       '_retained_mean': offsets is None}
-    return dict(raw, named=named, basis=basis)
+    effective = dict(raw, named=named, basis=basis)
+    return _published_msl_datums(station, constants, effective) if offsets is None else effective
 
 
 def _datum_metadata(context, key, basis):
