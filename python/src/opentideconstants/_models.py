@@ -5,7 +5,7 @@ import datetime as _dt
 import json
 import math
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any, Mapping, NoReturn, Optional, Tuple
 
@@ -532,6 +532,16 @@ def _check_historical_offsets(d, what='subordinate_offsets'):
         fail('provenance.raw_values_json')
 
 
+def _subordinate_offset_id(station_id, offsets):
+    """An OTC routing handle for the station's one preserved native profile."""
+    if offsets is None:
+        return None
+    if offsets.get('offset_id') is not None:
+        return offsets['offset_id']
+    reference = offsets.get('reference_station_id')
+    return f'{station_id}/subordinate-offsets/{reference}' if reference else None
+
+
 @dataclass(frozen=True, slots=True)
 class SubordinateOffsets:
     reference_station_id: str
@@ -930,7 +940,8 @@ def build_station(d, conventions, licences, kind, recommended=_RELEASE_REC):
             sid, d.get("name"), d.get("country"), float(lat), float(lon),
             E.enum_or_raw(E.StationType, d.get("type")), None if kind is None else E.enum_or_raw(E.Kind, kind),
             d.get("timezone"), MappingProxyType(aliases), E.enum_or_raw(E.StationStatus, "active" if d.get("status") is None else d.get("status")),
-            None if off is None else SubordinateOffsets._parse(off), rows, rec[0] if rec else None, freeze(d),
+            None if off is None else replace(SubordinateOffsets._parse(off), offset_id=_subordinate_offset_id(sid, off)),
+            rows, rec[0] if rec else None, freeze(d),
             ordered, recommended_is_fallback=d.get("recommended_is_fallback"),
             source_records=tuple(SourceRecord._parse(source, licences) for source in d.get('source_records') or ()))
     except InvalidReleaseError:
