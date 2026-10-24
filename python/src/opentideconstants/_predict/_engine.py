@@ -4,8 +4,10 @@ from __future__ import annotations
 import math
 import hashlib
 import json
+from calendar import monthrange
+from datetime import date
 from dataclasses import dataclass
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, NoReturn, TypeVar, Callable
 from .. import _errors as X
 from .._enums import ExtremeType, CurrentEventType, PredictionMethod
@@ -228,6 +230,89 @@ def _published_msl_datums(station, constants, raw):
     return dict(raw, named=named, basis=basis)
 
 
+def _observed_datum_candidates(station, constants):
+    """Use only an exported binding to an unchanged original and this own gauge model."""
+    additions = {}
+    if constants is None:
+        return additions
+    model = constants.raw
+    datum, provenance = model.get('datum') or {}, model.get('provenance') or {}
+    zero = datum.get('msl_offset_m')
+    if (model.get('source') != 'gesla-fit' or model.get('quantity') != 'water_level'
+            or not isinstance(zero, (int, float)) or isinstance(zero, bool) or not math.isfinite(zero)
+            or not isinstance(model.get('time_base'), Mapping) or not model['time_base'].get('published')):
+        return additions
+    convention = constants.convention.raw
+    if (convention.get('phase_reference') != 'greenwich_utc' or convention.get('v0_model') != 'schureman_tcd'
+            or convention.get('nodal_handling') != 'f_u_at_prediction'):
+        return additions
+
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'),
+                                         ensure_ascii=False, default=dict).encode()).hexdigest()
+
+    model_sha = digest(model)
+    fields = ('constant_set_sha256', 'model_tcd_sha256', 'source_candidate_sha256')
+    for source in station.raw.get('source_records') or ():
+        if (source.get('source') != 'gesla' or model.get('set_id') not in (source.get('published_set_ids') or ())
+                or any(source.get(key) != model.get(key) for key in ('source_record_id', 'source_version', 'source_model'))):
+            continue
+        for candidate in source.get('retained_datums') or ():
+            proof = candidate.get('input_binding') or {}
+            frame = candidate.get('frame') or {}
+            if not isinstance(proof, Mapping) or not isinstance(frame, Mapping):
+                continue
+            if (candidate.get('kind') != 'observed' or candidate.get('method') != 'first_reduction'
+                    or candidate.get('units') != 'm' or frame.get('kind') != 'gauge_zero'
+                    or candidate.get('set_id') != model.get('set_id')
+                    or candidate.get('source_record_id') != source.get('source_record_id')
+                    or candidate.get('uncertainty_m') is not None
+                    or any(not isinstance(proof.get(key), str) or len(proof[key]) != 64
+                           for key in fields + ('fit_sha256', 'tcd_sha256', 'member_sha256'))
+                    or proof.get('constant_set_sha256') != model_sha):
+                continue
+            if (proof.get('station_id') != station.station_id or proof.get('set_id') != model.get('set_id')
+                    or proof.get('source_record_id') != source.get('source_record_id')
+                    or proof.get('member_sha256') not in (provenance.get('input_sha256') or ())
+                    or proof.get('model_tcd_sha256') != provenance.get('tcd_sha256')
+                    or proof.get('model_tcd_sha256') != convention.get('tables_sha256')
+                    or proof.get('time_base') != model.get('time_base')
+                    or proof.get('fit_segment') != model.get('fit_segment')):
+                continue
+            original_zero = proof.get('original_zero') or {}
+            if not isinstance(original_zero, Mapping) or any(
+                    key not in original_zero or original_zero[key] != datum.get(key)
+                    for key in ('zero', 'zero_name', 'msl_offset_m')):
+                continue
+            original = dict(candidate, input_binding={key: value for key, value in proof.items() if key not in fields})
+            if (digest(original) != proof['source_candidate_sha256']
+                    or not any(row == original for row in source.get('retained_datums') or ())):
+                continue
+            window = candidate.get('window') or {}
+            basis = candidate.get('basis') or {}
+            months = basis.get('counted_months') or () if isinstance(basis, Mapping) else ()
+            try:
+                if not months or tuple(months) != tuple(sorted(set(months))):
+                    continue
+                first, last = (date.fromisoformat(month + '-01') for month in (months[0], months[-1]))
+                if (date.fromisoformat(window['start']) != first
+                        or date.fromisoformat(window['end']) != last.replace(day=monthrange(last.year, last.month)[1])):
+                    continue
+            except (KeyError, TypeError, ValueError):
+                continue
+            reliability = candidate.get('reliability') or {}
+            flags = list(reliability.get('limitations') or ()) + [
+                'observed gauge_zero converted using authenticated own-model zero; no surveyed tie asserted',
+                f"observed window {window['start']} to {window['end']}",
+            ]
+            local = dict(candidate, _observed_bound=True,
+                         reliability=dict(reliability, limitations=flags))
+            for key, value in (candidate.get('values') or {}).items():
+                if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                    additions.setdefault(key, []).append((value, local))
+    return additions
+
+
 def _retained_datum(release, station, constants=None, offsets=None):
     """An effective named view; retained values never alter the release or its defaults."""
     model = constants.raw if constants is not None else {}
@@ -325,7 +410,12 @@ def _retained_datum(release, station, constants=None, offsets=None):
                 if key in named or not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
                     continue
                 additions.setdefault(key, []).append((value, candidate))
+    if offsets is None:
+        for key, candidates in _observed_datum_candidates(station, constants).items():
+            additions.setdefault(key, candidates)
     for key, candidates in additions.items():
+        if key in named or key in ('mn', 'gt', 'dhq', 'dlq', 'hwi', 'lwi'):
+            continue
         # An unqualified named request cannot silently choose competing retained estimates.
         if len(candidates) != 1:
             continue
@@ -338,7 +428,7 @@ def _retained_datum(release, station, constants=None, offsets=None):
         basis[key] = {'kind': candidate['kind'], 'method': candidate.get('method'),
                       'uncertainty_m': candidate.get('uncertainty_m'), 'flags': flags,
                       'data_span': candidate.get('window'), '_retained': True,
-                      '_retained_mean': offsets is None}
+                      '_retained_mean': offsets is None and not candidate.get('_observed_bound')}
     effective = dict(raw, named=named, basis=basis)
     return _published_msl_datums(station, constants, effective) if offsets is None else effective
 
