@@ -313,6 +313,60 @@ def _observed_datum_candidates(station, constants):
     return additions
 
 
+def _ticon_msl_datums(station, constants, raw):
+    """Expose the labelled same-table MSL assumption only for missing named heights."""
+    if constants is None or constants.source != 'ticon-4' or constants.quantity != 'water_level':
+        return raw
+    model = constants.raw
+    if ((model.get('datum') or {}).get('msl_offset_m') is not None
+            or not isinstance(model.get('time_base'), Mapping) or not model['time_base'].get('published')):
+        return raw
+    named, basis = dict(raw.get('named') or {}), dict(raw.get('basis') or {})
+    additions = {}
+    label = 'assumes model mean = observed MSL (TICON same-frame), not an exact tie'
+    for source in station.raw.get('source_records') or ():
+        if (source.get('source') != 'ticon' or model.get('set_id') not in (source.get('published_set_ids') or ())
+                or any(source.get(key) != model.get(key) for key in ('source_record_id', 'source_version', 'source_model'))):
+            continue
+        for candidate in source.get('retained_datums') or ():
+            proof, frame = candidate.get('input_binding') or {}, candidate.get('frame') or {}
+            original_zero = proof.get('original_zero') or {}
+            if (candidate.get('kind') != 'observed' or candidate.get('method') != 'first_reduction'
+                    or candidate.get('units') != 'm' or frame.get('kind') != 'gauge_zero'
+                    or candidate.get('set_id') != model.get('set_id')
+                    or candidate.get('source_record_id') != source.get('source_record_id')
+                    or candidate.get('uncertainty_m') is not None
+                    or proof.get('station_id') != station.station_id or proof.get('set_id') != model.get('set_id')
+                    or proof.get('source_record_id') != source.get('source_record_id')
+                    or proof.get('time_base') != model.get('time_base')
+                    or proof.get('fit_segment') != model.get('fit_segment')
+                    or any(key not in original_zero or original_zero[key] is not None
+                           for key in ('zero', 'zero_name', 'msl_offset_m'))
+                    or any(not isinstance(proof.get(key), str) or len(proof[key]) != 64
+                           or any(c not in '0123456789abcdef' for c in proof[key])
+                           for key in ('member_sha256', 'fit_sha256'))):
+                continue
+            values = candidate.get('values') or {}
+            msl = values.get('msl')
+            if not isinstance(msl, (int, float)) or isinstance(msl, bool) or not math.isfinite(msl):
+                continue
+            flags = ('low', label, 'never default; explicit named datum only') + tuple(
+                (candidate.get('reliability') or {}).get('limitations') or ())
+            for key in ('mhhw', 'mllw'):
+                value = values.get(key)
+                if (key not in named and isinstance(value, (int, float))
+                        and not isinstance(value, bool) and math.isfinite(value)):
+                    additions.setdefault(key, []).append((value - msl, {
+                        'kind': 'observed', 'method': 'ticon_observed_msl_binding',
+                        'source_name': 'TICON ' + source['source_record_id'],
+                        'data_span': candidate.get('window'), 'uncertainty_m': None, 'flags': flags,
+                        '_retained': True, '_retained_mean': True}))
+    for key, candidates in additions.items():
+        if len(candidates) == 1:
+            named[key], basis[key] = candidates[0]
+    return dict(raw, named=named, basis=basis)
+
+
 def _retained_datum(release, station, constants=None, offsets=None):
     """An effective named view; retained values never alter the release or its defaults."""
     model = constants.raw if constants is not None else {}
@@ -416,9 +470,25 @@ def _retained_datum(release, station, constants=None, offsets=None):
     for key, candidates in additions.items():
         if key in named or key in ('mn', 'gt', 'dhq', 'dlq', 'hwi', 'lwi'):
             continue
-        # An unqualified named request cannot silently choose competing retained estimates.
+        # Only provenance may differ between equivalent computed estimates.
         if len(candidates) != 1:
-            continue
+            semantic = lambda candidate: {field: value for field, value in candidate.items()
+                                           if field != 'input_binding'}
+            if (any(candidate.get('kind') != 'computed' for _, candidate in candidates)
+                    or any(value != candidates[0][0] or semantic(candidate) != semantic(candidates[0][1])
+                           for value, candidate in candidates)):
+                continue
+            encoded = sorted(json.dumps(candidate, sort_keys=True, separators=(',', ':'),
+                                        ensure_ascii=False, default=dict) for _, candidate in candidates)
+            provenance = tuple('retained source ' + candidates[0][1]['source_record_id']
+                               + '; candidate SHA256 ' + hashlib.sha256(value.encode()).hexdigest()
+                               for value in encoded)
+            value, candidate = min(candidates, key=lambda item: json.dumps(
+                item[1], sort_keys=True, separators=(',', ':'), ensure_ascii=False, default=dict))
+            reliability = candidate.get('reliability') or {}
+            candidate = dict(candidate, reliability=dict(reliability,
+                limitations=tuple(reliability.get('limitations') or ()) + provenance))
+            candidates = [(value, candidate)]
         value, candidate = candidates[0]
         reliability = candidate.get('reliability') or {}
         limitations = tuple(reliability.get('limitations') or ())
@@ -430,7 +500,9 @@ def _retained_datum(release, station, constants=None, offsets=None):
                       'data_span': candidate.get('window'), '_retained': True,
                       '_retained_mean': offsets is None and not candidate.get('_observed_bound')}
     effective = dict(raw, named=named, basis=basis)
-    return _published_msl_datums(station, constants, effective) if offsets is None else effective
+    if offsets is None:
+        return _ticon_msl_datums(station, constants, _published_msl_datums(station, constants, effective))
+    return effective
 
 
 def _datum_metadata(context, key, basis):

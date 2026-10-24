@@ -46,6 +46,11 @@ def retained_source(constants, candidates):
 
 
 class DatumFallbackTest(unittest.TestCase):
+    def selected_levels(self, client, station_id, set_id):
+        info = client.datums(station_id, set_id=set_id)
+        assert info is not None and not isinstance(info, tuple)
+        return info.levels
+
     def retained_model(self):
         document = json.loads(PREDICT.read_text(encoding="utf-8"))
         station = document["stations"][1]
@@ -86,7 +91,7 @@ class DatumFallbackTest(unittest.TestCase):
                     self.assertNotIn("datum", client.require_station(sid).constant_set(set_id).raw)
 
     def test_retained_height_requires_exact_source_model_frame_and_unique_value(self):
-        for fault in ("source", "source_version", "set_id", "hash", "frame", "units", "duplicate"):
+        for fault in ("source", "source_version", "set_id", "hash", "frame", "units", "competing_value"):
             document, station, constants, candidate = self.retained_model()
             if fault in ("source", "source_version"):
                 station["source_records"][0][fault] = "different"
@@ -99,7 +104,9 @@ class DatumFallbackTest(unittest.TestCase):
             elif fault == "units":
                 candidate["units"] = "ft"
             else:
-                station["source_records"][0]["retained_datums"].append(copy.deepcopy(candidate))
+                competing = copy.deepcopy(candidate)
+                competing["values"]["mhw"] = 0.5
+                station["source_records"][0]["retained_datums"].append(competing)
             for mode in ("eager", "stream"):
                 with self.subTest(fault=fault, mode=mode), tempfile.TemporaryDirectory() as directory:
                     with otc.OpenTideConstants(file=write_release(directory, document, mode), mode=mode) as client:
@@ -108,6 +115,140 @@ class DatumFallbackTest(unittest.TestCase):
                             client.heights_at(station["station_id"],
                                 [dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)],
                                 datum="mhw", set_id=constants["set_id"])
+
+    def test_equivalent_computed_candidates_preserve_all_provenance_deterministically(self):
+        document, station, constants, candidate = self.retained_model()
+        candidate["input_binding"]["results_sha256"] = "1" * 64
+        other = copy.deepcopy(candidate)
+        other["input_binding"]["results_sha256"] = "2" * 64
+        candidates = station["source_records"][0]["retained_datums"]
+        candidates.append(other)
+        hashes = [hashlib.sha256(json.dumps(row, sort_keys=True, separators=(",", ":"),
+                                           ensure_ascii=False).encode()).hexdigest() for row in candidates]
+        observed = []
+        for mode in ("eager", "stream"):
+            candidates.reverse()
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                with otc.OpenTideConstants(file=write_release(directory, document, mode), mode=mode) as client:
+                    sid, set_id = station["station_id"], constants["set_id"]
+                    times = [dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)]
+                    mean = client.heights_at(sid, times, set_id=set_id)
+                    named = client.heights_at(sid, times, datum="mhw", set_id=set_id)
+                    self.assertAlmostEqual(named.items[0].height_m, mean.items[0].height_m - 0.4)
+                    level = self.selected_levels(client, sid, set_id)[0]
+                    for digest in hashes:
+                        self.assertIn(digest, "; ".join(level.flags))
+                        self.assertIn(digest, named.source_note or "")
+                    observed.append(dataclasses.asdict(level))
+                    self.assertEqual(json.loads(json.dumps(client.require_station(sid).raw, default=dict)), station)
+        self.assertEqual(len(observed), 2)
+        self.assertEqual(observed[0], observed[1])
+
+    def test_computed_candidates_with_conflicting_semantics_remain_unavailable(self):
+        for field, value in (("method", "another_method"), ("frame", {"kind": "harmonic_mean", "name": "other"}),
+                             ("uncertainty_m", 0.1), ("window", {"start": "2000-01-01", "end": "2001-01-01"}),
+                             ("reliability", {"status": "low"})):
+            document, station, constants, candidate = self.retained_model()
+            other = copy.deepcopy(candidate)
+            other[field] = value
+            station["source_records"][0]["retained_datums"].append(other)
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                with otc.OpenTideConstants(file=write_release(directory, document, "eager")) as client:
+                    self.assertFalse(self.selected_levels(client, station["station_id"], constants["set_id"]))
+
+    def test_invalid_duplicate_is_filtered_before_equivalent_candidate_selection(self):
+        document, station, constants, candidate = self.retained_model()
+        invalid = copy.deepcopy(candidate)
+        invalid["input_binding"]["constant_set_sha256"] = "0" * 64
+        invalid["values"]["mhw"] = 10.0
+        station["source_records"][0]["retained_datums"].append(invalid)
+        with tempfile.TemporaryDirectory() as directory:
+            with otc.OpenTideConstants(file=write_release(directory, document, "eager")) as client:
+                level = self.selected_levels(client, station["station_id"], constants["set_id"])[0]
+                self.assertEqual(level.value_m, 0.4)
+
+    def ticon_msl_model(self):
+        document, station, constants, candidate = self.retained_model()
+        constants["source"] = "ticon-4"
+        constants["time_base"] = {"published": "utc_instant"}
+        candidate.update(kind="observed", method="first_reduction", units="m",
+                         frame={"kind": "gauge_zero", "name": "Zero of Tide Height", "tie_status": "unknown"},
+                         window={"start": "2001-01-01", "end": "2001-12-31"},
+                         values={"msl": 2.0, "mhhw": 2.5, "mllw": 1.4},
+                         input_binding={"station_id": station["station_id"], "set_id": constants["set_id"],
+                                        "source_record_id": constants["source_record_id"],
+                                        "member_sha256": "1" * 64, "fit_sha256": "2" * 64,
+                                        "time_base": copy.deepcopy(constants.get("time_base")),
+                                        "fit_segment": constants.get("fit_segment"),
+                                        "original_zero": {"zero": None, "zero_name": None, "msl_offset_m": None}})
+        station["source_records"] = [retained_source(constants, [candidate])]
+        station["source_records"][0]["source"] = "ticon"
+        return document, station, constants, candidate
+
+    def test_ticon_same_table_msl_fallback_is_low_labelled_and_never_default(self):
+        document, station, constants, candidate = self.ticon_msl_model()
+        label = "assumes model mean = observed MSL (TICON same-frame), not an exact tie"
+        for mode in ("eager", "stream"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                with otc.OpenTideConstants(file=write_release(directory, document, mode), mode=mode) as client:
+                    sid, set_id = station["station_id"], constants["set_id"]
+                    times = [dt.datetime(2026, 10, 11, tzinfo=dt.timezone.utc)]
+                    mean = client.heights_at(sid, times, datum="mean_level", set_id=set_id)
+                    self.assertEqual(client.heights_at(sid, times, set_id=set_id).items, mean.items)
+                    for key in ("mhhw", "mllw"):
+                        named = client.heights_at(sid, times, datum=key, set_id=set_id)
+                        expected = mean.items[0].height_m + candidate["values"]["msl"] - candidate["values"][key]
+                        self.assertAlmostEqual(named.items[0].height_m, expected)
+                        feet = client.heights_at(sid, times, datum=key, set_id=set_id, units="feet")
+                        self.assertAlmostEqual(feet.items[0].height, expected / 0.3048)
+                        self.assertIn(label, named.source_note or "")
+                        self.assertIn("low", named.source_note or "")
+                        self.assertIsNone(named.datum_uncertainty_m)
+                        level = next(level for level in self.selected_levels(client, sid, set_id) if level.key == key)
+                        self.assertEqual(level.value_m, candidate["values"][key] - candidate["values"]["msl"])
+                        self.assertIn(label, level.flags)
+                        self.assertIsNone(level.uncertainty_m)
+                    self.assertEqual(json.loads(json.dumps(client.require_station(sid).raw, default=dict)), station)
+
+    def test_ticon_assumption_requires_same_own_source_table_clock_and_unknown_zero(self):
+        for fault in ("source", "set_id", "clock", "msl", "frame", "units", "zero"):
+            document, station, constants, candidate = self.ticon_msl_model()
+            if fault == "source":
+                station["source_records"][0]["source_record_id"] = "another source"
+            elif fault == "set_id":
+                candidate["input_binding"]["set_id"] = "another/model"
+            elif fault == "clock":
+                candidate["input_binding"]["time_base"] = {"published": "different"}
+            elif fault == "msl":
+                candidate["values"].pop("msl")
+            elif fault == "frame":
+                candidate["frame"]["kind"] = "unknown"
+            elif fault == "units":
+                candidate["units"] = "ft"
+            else:
+                candidate["input_binding"]["original_zero"]["msl_offset_m"] = 1.0
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as directory:
+                with otc.OpenTideConstants(file=write_release(directory, document, "eager")) as client:
+                    self.assertFalse(self.selected_levels(client, station["station_id"], constants["set_id"]))
+
+    def test_ticon_assumption_preserves_exact_computed_and_existing_named_precedence(self):
+        for existing in (False, True):
+            document, station, constants, candidate = self.ticon_msl_model()
+            if existing:
+                constants["datum"] = {"zero": "harmonic_mean", "named": {"mhhw": 0.8}}
+            computed = copy.deepcopy(candidate)
+            computed.update(kind="computed", method="sdk_harmonic_extremes_event_means_v1",
+                            frame={"kind": "harmonic_mean"}, values={"mhhw": 0.2},
+                            input_binding={"set_id": constants["set_id"], "constant_set_sha256":
+                                hashlib.sha256(json.dumps(constants, sort_keys=True, separators=(",", ":"),
+                                                          ensure_ascii=False).encode()).hexdigest()})
+            station["source_records"][0]["retained_datums"].append(computed)
+            with self.subTest(existing=existing), tempfile.TemporaryDirectory() as directory:
+                with otc.OpenTideConstants(file=write_release(directory, document, "eager")) as client:
+                    level = next(level for level in self.selected_levels(client, station["station_id"], constants["set_id"])
+                                 if level.key == "mhhw")
+                    self.assertEqual(level.value_m, 0.8 if existing else 0.2)
+                    self.assertNotIn("assumes model mean", "; ".join(level.flags))
 
     def test_existing_named_datum_takes_precedence(self):
         document, station, constants, candidate = self.retained_model()
